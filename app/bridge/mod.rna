@@ -1,0 +1,63 @@
+use std.{MaybeStr, Result, Str}
+use std.text.decode_c_string
+
+pub enum TextDecodeError:
+    NullPointer
+    InvalidUtf8
+    InvalidScalar
+    OutOfRange
+    EmbeddedNul
+
+pub(package) fn cint_is_true(value: CInt) -> Bool:
+    return value != 0
+
+pub(package) fn bool_to_cint(value: Bool) -> CInt:
+    select:
+        when value => return 1
+        else => return 0
+
+pub(package) fn cint_to_index(value: CInt) -> Result[Index, TextDecodeError]:
+    let Result.Ok(index) = value as Maybe[Index] else => return Result.Err :: TextDecodeError.OutOfRange :: call
+    return Result.Ok :: index :: call
+
+pub(package) fn cuint_to_index(value: CUInt) -> Result[Index, TextDecodeError]:
+    let Result.Ok(index) = value as Maybe[Index] else => return Result.Err :: TextDecodeError.OutOfRange :: call
+    return Result.Ok :: index :: call
+
+pub(package) fn cint_to_offset(value: CInt) -> Result[ISize, TextDecodeError]:
+    let Result.Ok(offset) = value as Maybe[ISize] else => return Result.Err :: TextDecodeError.OutOfRange :: call
+    return Result.Ok :: offset :: call
+
+pub(package) fn cuint_to_offset(value: CUInt) -> Result[ISize, TextDecodeError]:
+    let Result.Ok(offset) = value as Maybe[ISize] else => return Result.Err :: TextDecodeError.OutOfRange :: call
+    return Result.Ok :: offset :: call
+
+pub(package) fn index_to_cint(value: Index) -> Result[CInt, TextDecodeError]:
+    let Result.Ok(raw) = value as Maybe[CInt] else => return Result.Err :: TextDecodeError.OutOfRange :: call
+    return Result.Ok :: raw :: call
+
+pub(package) fn maybe_c_string(text: Str) -> Result[MaybeStr, TextDecodeError]:
+    let Result.Ok(value) = text as Maybe[MaybeStr] else => return Result.Err :: TextDecodeError.EmbeddedNul :: call
+    return Result.Ok :: value :: call
+
+pub(package) fn copy_c_string(pointer: *read CChar) -> Result[Str, TextDecodeError]:
+    select:
+        when pointer.is_null :: :: method => return Result.Err :: TextDecodeError.NullPointer :: call
+        else =>
+            select #unsafe decode_c_string :: pointer :: call:
+                when Result.Ok(text) =>
+                    let value = text.to_str :: :: method
+                    return Result.Ok :: value :: call
+                when Result.Err(_) => return Result.Err :: TextDecodeError.InvalidUtf8 :: call
+
+pub(package) fn copy_edit_c_string(pointer: *edit CChar) -> Result[Str, TextDecodeError]:
+    select:
+        when pointer.is_null :: :: method => return Result.Err :: TextDecodeError.NullPointer :: call
+        else =>
+            let address = #unsafe raw_pointer_address_edit :: pointer :: call
+            let read_pointer = #unsafe raw_pointer_from_address_read[CChar] :: address :: call
+            select #unsafe decode_c_string :: read_pointer :: call:
+                when Result.Ok(text) =>
+                    let value = text.to_str :: :: method
+                    return Result.Ok :: value :: call
+                when Result.Err(_) => return Result.Err :: TextDecodeError.InvalidUtf8 :: call

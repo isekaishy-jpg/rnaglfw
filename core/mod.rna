@@ -1,0 +1,305 @@
+use std.{Option, Result}
+
+pub opaque type GlfwMonitorRaw
+pub opaque type GlfwWindowRaw
+pub opaque type GlfwCursorRaw
+
+pub struct GlfwMonitor:
+    pub(package) raw: *edit GlfwMonitorRaw
+
+pub struct GlfwWindow:
+    pub(package) raw: *edit GlfwWindowRaw
+
+pub struct GlfwCursor:
+    pub(package) raw: *edit GlfwCursorRaw
+
+pub struct GlfwVersion:
+    pub major: CInt
+    pub minor: CInt
+    pub revision: CInt
+
+pub struct GlfwErrorReport:
+    pub code: CInt
+    pub description: *read CChar
+
+pub struct GlfwCStringList:
+    pub(package) base: *read *read CChar
+    pub(package) count_value: CUInt
+
+const POINTER_OFFSET_STEP: ISize = 1
+
+impl GlfwVersion:
+    fn major_number(read self) -> CInt:
+        return self.major
+
+    fn minor_number(read self) -> CInt:
+        return self.minor
+
+    fn revision_number(read self) -> CInt:
+        return self.revision
+
+impl GlfwErrorReport:
+    fn code_value(read self) -> CInt:
+        return self.code
+
+    fn description_ptr(read self) -> *read CChar:
+        return self.description
+
+pub fn glfw_version_major(read version: GlfwVersion) -> CInt:
+    return version.major
+
+pub fn glfw_version_minor(read version: GlfwVersion) -> CInt:
+    return version.minor
+
+pub fn glfw_version_revision(read version: GlfwVersion) -> CInt:
+    return version.revision
+
+pub fn glfw_error_code(read report: GlfwErrorReport) -> CInt:
+    return report.code
+
+pub fn glfw_error_description(read report: GlfwErrorReport) -> *read CChar:
+    return report.description
+
+pub type GlfwGlProc = extern["c"] fn() -> CVoid
+pub type GlfwVkProc = extern["c"] fn() -> CVoid
+pub type GlfwAllocateCallback = extern["c"] fn(CSize, *edit CVoid) -> *edit CVoid
+pub type GlfwReallocateCallback = extern["c"] fn(*edit CVoid, CSize, *edit CVoid) -> *edit CVoid
+pub type GlfwDeallocateCallback = extern["c"] fn(*edit CVoid, *edit CVoid) -> CVoid
+pub type GlfwErrorCallback = extern["c"] fn(CInt, *read CChar) -> CVoid
+
+#repr[c]
+pub struct GlfwAllocator:
+    pub allocate: GlfwAllocateCallback
+    pub reallocate: GlfwReallocateCallback
+    pub deallocate: GlfwDeallocateCallback
+    pub user: *edit CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwInit() -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwTerminate() -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwInitHint(hint: CInt, value: CInt) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwInitAllocator(allocator: *read GlfwAllocator) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetVersion(major: *edit CInt, minor: *edit CInt, revision: *edit CInt) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetVersionString() -> *read CChar
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetError(description: *edit *read CChar) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetErrorCallback(take callback: Option[GlfwErrorCallback]) -> Option[GlfwErrorCallback]
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetPlatform() -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwPlatformSupported(platform: CInt) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwPollEvents() -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwWaitEvents() -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwWaitEventsTimeout(timeout: F64) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwPostEmptyEvent() -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetTime() -> F64
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetTime(time_value: F64) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetTimerValue() -> U64
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetTimerFrequency() -> U64
+
+pub(package) fn glfw_cint_is_true(flag: CInt) -> Bool:
+    return flag != 0
+
+pub(package) fn glfw_bool_to_cint(value: Bool) -> CInt:
+    select:
+        when value => return 1
+        else => return 0
+
+pub(package) fn glfw_cint_to_index(value: CInt) -> Option[Index]:
+    let Result.Ok(index) = value as Maybe[Index] else => return Option.None
+    return Option.Some :: index :: call
+
+fn c_string_slot_at(base: *read *read CChar, index: CUInt) -> *read *read CChar:
+    let slot: *read *read CChar = base
+    let scan: CUInt = 0
+    repeat while scan < index:
+        slot = #unsafe slot.offset :: POINTER_OFFSET_STEP :: method
+        scan = scan + 1
+    return slot
+
+pub fn glfw_monitor_none() -> GlfwMonitor:
+    let raw: *edit GlfwMonitorRaw = null
+    return GlfwMonitor :: raw :: call
+
+pub fn glfw_window_none() -> GlfwWindow:
+    let raw: *edit GlfwWindowRaw = null
+    return GlfwWindow :: raw :: call
+
+pub fn glfw_cursor_none() -> GlfwCursor:
+    let raw: *edit GlfwCursorRaw = null
+    return GlfwCursor :: raw :: call
+
+pub fn glfw_monitor_raw_handle(read monitor: GlfwMonitor) -> *edit GlfwMonitorRaw:
+    return monitor.raw
+
+pub fn glfw_window_raw_handle(read window: GlfwWindow) -> *edit GlfwWindowRaw:
+    return window.raw
+
+pub fn glfw_cursor_raw_handle(read cursor: GlfwCursor) -> *edit GlfwCursorRaw:
+    return cursor.raw
+
+pub fn glfw_init() -> Bool:
+    let value: CInt = #unsafe glfwInit :: :: call
+    return glfw_cint_is_true :: value :: call
+
+pub fn glfw_terminate() -> Unit:
+    #unsafe glfwTerminate :: :: call
+    return
+
+pub fn glfw_init_hint(hint: CInt, value: CInt) -> Unit:
+    #unsafe glfwInitHint :: hint, value :: call
+    return
+
+pub fn glfw_init_hint_bool(hint: CInt, value: Bool) -> Unit:
+    let raw_value: CInt = glfw_bool_to_cint :: value :: call
+    glfw_init_hint :: hint, raw_value :: call
+    return
+
+pub fn glfw_init_allocator(read allocator: GlfwAllocator) -> Unit:
+    let allocator_ptr: *read GlfwAllocator = #unsafe &raw read allocator
+    #unsafe glfwInitAllocator :: allocator_ptr :: call
+    return
+
+pub fn glfw_version() -> GlfwVersion:
+    let major: CInt = 0
+    let minor: CInt = 0
+    let revision: CInt = 0
+    let major_ptr: *edit CInt = #unsafe &raw edit major
+    let minor_ptr: *edit CInt = #unsafe &raw edit minor
+    let revision_ptr: *edit CInt = #unsafe &raw edit revision
+    #unsafe glfwGetVersion :: major_ptr, minor_ptr, revision_ptr :: call
+    return GlfwVersion :: major, minor, revision :: call
+
+pub fn glfw_version_string() -> *read CChar:
+    return #unsafe glfwGetVersionString :: :: call
+
+pub fn glfw_get_error() -> GlfwErrorReport:
+    let description: *read CChar = null
+    let description_ptr: *edit *read CChar = #unsafe &raw edit description
+    let code: CInt = #unsafe glfwGetError :: description_ptr :: call
+    return GlfwErrorReport :: code, description :: call
+
+pub fn glfw_set_error_callback(take callback: Option[GlfwErrorCallback]) -> Option[GlfwErrorCallback]:
+    return #unsafe glfwSetErrorCallback :: callback :: call
+
+pub fn glfw_platform() -> CInt:
+    return #unsafe glfwGetPlatform :: :: call
+
+pub fn glfw_platform_supported(platform: CInt) -> Bool:
+    let value: CInt = #unsafe glfwPlatformSupported :: platform :: call
+    return glfw_cint_is_true :: value :: call
+
+pub fn glfw_poll_events() -> Unit:
+    #unsafe glfwPollEvents :: :: call
+    return
+
+pub fn glfw_wait_events() -> Unit:
+    #unsafe glfwWaitEvents :: :: call
+    return
+
+pub fn glfw_wait_events_timeout(timeout: F64) -> Unit:
+    #unsafe glfwWaitEventsTimeout :: timeout :: call
+    return
+
+pub fn glfw_post_empty_event() -> Unit:
+    #unsafe glfwPostEmptyEvent :: :: call
+    return
+
+pub fn glfw_get_time() -> F64:
+    return #unsafe glfwGetTime :: :: call
+
+pub fn glfw_set_time(time_value: F64) -> Unit:
+    #unsafe glfwSetTime :: time_value :: call
+    return
+
+pub fn glfw_get_timer_value() -> U64:
+    return #unsafe glfwGetTimerValue :: :: call
+
+pub fn glfw_get_timer_frequency() -> U64:
+    return #unsafe glfwGetTimerFrequency :: :: call
+
+impl GlfwMonitor:
+    fn is_null(read self) -> Bool:
+        return self.raw.is_null :: :: method
+
+    fn raw_handle(read self) -> *edit GlfwMonitorRaw:
+        return self.raw
+
+impl GlfwWindow:
+    fn is_null(read self) -> Bool:
+        return self.raw.is_null :: :: method
+
+    fn raw_handle(read self) -> *edit GlfwWindowRaw:
+        return self.raw
+
+impl GlfwCursor:
+    fn is_null(read self) -> Bool:
+        return self.raw.is_null :: :: method
+
+    fn raw_handle(read self) -> *edit GlfwCursorRaw:
+        return self.raw
+
+impl GlfwCStringList:
+    fn count(read self) -> CUInt:
+        return self.count_value
+
+    fn base_ptr(read self) -> *read *read CChar:
+        return self.base
+
+    fn at(read self, index: CUInt) -> Option[*read CChar]:
+        select:
+            when self.base.is_null :: :: method => return Option.None
+            when index >= self.count_value => return Option.None
+            else =>
+                let slot: *read *read CChar = c_string_slot_at :: self.base, index :: call
+                let value: *read CChar = #unsafe slot.load :: :: method
+                return Option.Some :: value :: call

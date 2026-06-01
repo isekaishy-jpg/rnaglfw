@@ -1,0 +1,442 @@
+use std.{ByteBuffer, Option, Result}
+
+use present.{VkBuffer, VkBufferCreateInfo, VkDeviceMemory, VkMemoryAllocateInfo, VkMemoryRequirements, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_SHARING_MODE_EXCLUSIVE, VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, VK_SUCCESS, VulkanBuffer, VulkanBufferPlan, VulkanMemoryAllocationPlan, VulkanPresentApp, VulkanPresentContext, VulkanPresentError}
+
+const ZERO_USIZE: USize = 0USize
+
+pub(package) fn copy_vulkan_buffer_bytes_from_memory(read context: VulkanPresentContext, memory: VkDeviceMemory, byte_count: Index) -> Result[ByteBuffer, VulkanPresentError]:
+    let copied = ByteBuffer :: :: call
+    copied.reserve :: byte_count :: method
+    select:
+        when byte_count == 0 => return Result.Ok :: copied :: call
+        else => ()
+    let Result.Ok(byte_count_u64) = byte_count as Maybe[U64] else =>
+        let error = VulkanPresentError.BufferSizeOutOfRange :: byte_count :: call
+        return Result.Err :: error :: call
+    let mapped_memory: *edit CVoid = null
+    let mapped_memory_ptr: *edit *edit CVoid = #unsafe &raw edit mapped_memory
+    let map_result = #unsafe context.map_memory :: context.device, memory, 0U64, byte_count_u64, 0, mapped_memory_ptr :: call
+    select:
+        when map_result != 0 =>
+            let error = VulkanPresentError.BufferMemoryMapFailed :: map_result :: call
+            return Result.Err :: error :: call
+        when mapped_memory.is_null :: :: method =>
+            let error = VulkanPresentError.BufferMemoryMapFailed :: map_result :: call
+            return Result.Err :: error :: call
+        else => ()
+    let mapped_address = #unsafe raw_pointer_address_edit :: mapped_memory :: call
+    let mapped_bytes = #unsafe raw_pointer_from_address_edit[U8] :: mapped_address :: call
+    let Result.Ok(scan_limit) = byte_count as Maybe[USize] else =>
+        #unsafe context.unmap_memory :: context.device, memory :: call
+        let error = VulkanPresentError.BufferSizeOutOfRange :: byte_count :: call
+        return Result.Err :: error :: call
+    let scan: USize = ZERO_USIZE
+    repeat while scan < scan_limit:
+        let Result.Ok(offset) = scan as Maybe[ISize] else =>
+            #unsafe context.unmap_memory :: context.device, memory :: call
+            let error = VulkanPresentError.BufferSizeOutOfRange :: byte_count :: call
+            return Result.Err :: error :: call
+        let slot = #unsafe mapped_bytes.offset :: offset :: method
+        let raw: U8 = #unsafe slot.load :: :: method
+        copied.push :: raw :: method
+        scan = scan + 1USize
+    #unsafe context.unmap_memory :: context.device, memory :: call
+    return Result.Ok :: copied :: call
+
+pub(package) fn write_vulkan_buffer_bytes_to_memory(read context: VulkanPresentContext, memory: VkDeviceMemory, required_byte_count: Index, take bytes: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+    let actual_byte_count = bytes.byte_count :: :: method
+    select:
+        when actual_byte_count != required_byte_count =>
+            let error = VulkanPresentError.BufferByteCountMismatch :: actual_byte_count, required_byte_count :: call
+            return Result.Err :: error :: call
+        when required_byte_count == 0 => return Result.Ok :: :: call
+        else => ()
+    let Result.Ok(byte_count_u64) = required_byte_count as Maybe[U64] else =>
+        let error = VulkanPresentError.BufferSizeOutOfRange :: required_byte_count :: call
+        return Result.Err :: error :: call
+    let mapped_memory: *edit CVoid = null
+    let mapped_memory_ptr: *edit *edit CVoid = #unsafe &raw edit mapped_memory
+    let map_result = #unsafe context.map_memory :: context.device, memory, 0U64, byte_count_u64, 0, mapped_memory_ptr :: call
+    select:
+        when map_result != 0 =>
+            let error = VulkanPresentError.BufferMemoryMapFailed :: map_result :: call
+            return Result.Err :: error :: call
+        when mapped_memory.is_null :: :: method =>
+            let error = VulkanPresentError.BufferMemoryMapFailed :: map_result :: call
+            return Result.Err :: error :: call
+        else => ()
+    let mapped_address = #unsafe raw_pointer_address_edit :: mapped_memory :: call
+    let mapped_bytes = #unsafe raw_pointer_from_address_edit[U8] :: mapped_address :: call
+    let source_ptr: *read U8 = #unsafe &raw read bytes[0]
+    let Result.Ok(scan_limit) = required_byte_count as Maybe[USize] else =>
+        #unsafe context.unmap_memory :: context.device, memory :: call
+        let error = VulkanPresentError.BufferSizeOutOfRange :: required_byte_count :: call
+        return Result.Err :: error :: call
+    let scan: USize = ZERO_USIZE
+    repeat while scan < scan_limit:
+        let Result.Ok(offset) = scan as Maybe[ISize] else =>
+            #unsafe context.unmap_memory :: context.device, memory :: call
+            let error = VulkanPresentError.BufferSizeOutOfRange :: required_byte_count :: call
+            return Result.Err :: error :: call
+        let source_slot = #unsafe source_ptr.offset :: offset :: method
+        let raw: U8 = #unsafe source_slot.load :: :: method
+        let dest_slot = #unsafe mapped_bytes.offset :: offset :: method
+        #unsafe dest_slot.store :: raw :: method
+        scan = scan + 1USize
+    #unsafe context.unmap_memory :: context.device, memory :: call
+    return Result.Ok :: :: call
+
+pub(package) fn vulkan_buffer_from_plan_internal(read context: VulkanPresentContext, read plan: VulkanBufferPlan) -> Result[VulkanBuffer, VulkanPresentError]:
+    let buffer: VkBuffer = 0U64
+    let memory: VkDeviceMemory = 0U64
+    let buffer_info = VkBufferCreateInfo :: :: call
+        stype = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO
+        pnext = null
+        flags = 0
+        size = plan.size :: :: method
+        usage = plan.usage
+        sharing_mode = VK_SHARING_MODE_EXCLUSIVE
+        queuefamily_index_count = 0
+        queuefamily_indices = null
+    let buffer_info_ptr: *read VkBufferCreateInfo = #unsafe &raw read buffer_info
+    let buffer_ptr: *edit VkBuffer = #unsafe &raw edit buffer
+    let buffer_result = #unsafe context.create_buffer :: context.device, buffer_info_ptr, null, buffer_ptr :: call
+    select:
+        when buffer_result != VK_SUCCESS =>
+            let error = VulkanPresentError.BufferCreateFailed :: buffer_result :: call
+            return Result.Err :: error :: call
+        when buffer == 0U64 =>
+            let error = VulkanPresentError.BufferCreateFailed :: buffer_result :: call
+            return Result.Err :: error :: call
+        else => ()
+    let allocation_info = VkMemoryAllocateInfo :: :: call
+        stype = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO
+        pnext = null
+        allocation_size = plan.allocation_size :: :: method
+        memory_type_index = plan.memory_type_index :: :: method
+    let allocation_info_ptr: *read VkMemoryAllocateInfo = #unsafe &raw read allocation_info
+    let memory_ptr: *edit VkDeviceMemory = #unsafe &raw edit memory
+    let allocate_result = #unsafe context.allocate_memory :: context.device, allocation_info_ptr, null, memory_ptr :: call
+    select:
+        when allocate_result != VK_SUCCESS =>
+            select:
+                when buffer != 0U64 => #unsafe context.destroy_buffer :: context.device, buffer, null :: call
+                else => ()
+            let error = VulkanPresentError.BufferMemoryAllocateFailed :: allocate_result :: call
+            return Result.Err :: error :: call
+        when memory == 0U64 =>
+            select:
+                when buffer != 0U64 => #unsafe context.destroy_buffer :: context.device, buffer, null :: call
+                else => ()
+            let error = VulkanPresentError.BufferMemoryAllocateFailed :: allocate_result :: call
+            return Result.Err :: error :: call
+        else => ()
+    let bind_result = #unsafe context.bind_buffer_memory :: context.device, buffer, memory, 0U64 :: call
+    select:
+        when bind_result != VK_SUCCESS =>
+            select:
+                when buffer != 0U64 => #unsafe context.destroy_buffer :: context.device, buffer, null :: call
+                else => ()
+            select:
+                when memory != 0U64 => #unsafe context.free_memory :: context.device, memory, null :: call
+                else => ()
+            let error = VulkanPresentError.BufferBindFailed :: bind_result :: call
+            return Result.Err :: error :: call
+        else => ()
+    let resource = VulkanBuffer :: :: call
+        buffer = buffer
+        memory = memory
+        byte_count = plan.byte_count
+        usage = plan.usage
+        plan = plan
+    return Result.Ok :: resource :: call
+
+impl VulkanBufferPlan:
+    fn requirements(read self) -> VkMemoryRequirements:
+        return self.requirements
+
+    fn allocation_plan(read self) -> VulkanMemoryAllocationPlan:
+        return self.allocation_plan
+
+    fn size(read self) -> U64:
+        return self.requirements.size
+
+    fn alignment(read self) -> U64:
+        return self.requirements.alignment
+
+    fn memory_type_bits(read self) -> CUInt:
+        return self.requirements.memory_type_bits
+
+    fn memory_type_index(read self) -> CUInt:
+        return self.allocation_plan.memory_type_index
+
+    fn allocation_size(read self) -> U64:
+        return self.allocation_plan.size :: :: method
+
+    fn heap_index(read self) -> CUInt:
+        return self.allocation_plan.heap_index :: :: method
+
+    fn device_local(read self) -> Bool:
+        return self.allocation_plan.device_local :: :: method
+
+    fn host_visible(read self) -> Bool:
+        return self.allocation_plan.host_visible :: :: method
+
+    fn host_coherent(read self) -> Bool:
+        return self.allocation_plan.host_coherent :: :: method
+
+    fn staging_compatible(read self) -> Bool:
+        return self.allocation_plan.staging_compatible :: :: method
+
+impl VulkanBuffer:
+    fn buffer_handle(read self) -> VkBuffer:
+        return self.buffer
+
+    fn memory_handle(read self) -> VkDeviceMemory:
+        return self.memory
+
+    fn valid(read self) -> Bool:
+        return self.buffer != 0U64 && self.memory != 0U64
+
+    fn byte_count(read self) -> Index:
+        return self.byte_count
+
+    fn usage(read self) -> CUInt:
+        return self.usage
+
+    fn plan(read self) -> VulkanBufferPlan:
+        return self.plan
+
+    fn requirements(read self) -> VkMemoryRequirements:
+        return self.plan.requirements :: :: method
+
+    fn allocation_plan(read self) -> VulkanMemoryAllocationPlan:
+        return self.plan.allocation_plan :: :: method
+
+    fn size(read self) -> U64:
+        return self.plan.size :: :: method
+
+    fn alignment(read self) -> U64:
+        return self.plan.alignment :: :: method
+
+    fn memory_type_bits(read self) -> CUInt:
+        return self.plan.memory_type_bits :: :: method
+
+    fn memory_type_index(read self) -> CUInt:
+        return self.plan.memory_type_index :: :: method
+
+    fn allocation_size(read self) -> U64:
+        return self.plan.allocation_size :: :: method
+
+    fn heap_index(read self) -> CUInt:
+        return self.plan.heap_index :: :: method
+
+    fn device_local(read self) -> Bool:
+        return self.plan.device_local :: :: method
+
+    fn host_visible(read self) -> Bool:
+        return self.plan.host_visible :: :: method
+
+    fn host_coherent(read self) -> Bool:
+        return self.plan.host_coherent :: :: method
+
+    fn staging_compatible(read self) -> Bool:
+        return self.plan.staging_compatible :: :: method
+
+impl VulkanPresentContext:
+    fn buffer_requirements(read self, byte_count: Index, usage: CUInt) -> Result[VkMemoryRequirements, VulkanPresentError]:
+        select:
+            when byte_count == 0 =>
+                let error = VulkanPresentError.BufferSizeOutOfRange :: byte_count :: call
+                return Result.Err :: error :: call
+            else => ()
+        let Result.Ok(byte_count_u64) = byte_count as Maybe[U64] else =>
+            let error = VulkanPresentError.BufferSizeOutOfRange :: byte_count :: call
+            return Result.Err :: error :: call
+        let buffer: VkBuffer = 0U64
+        let buffer_info = VkBufferCreateInfo :: :: call
+            stype = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO
+            pnext = null
+            flags = 0
+            size = byte_count_u64
+            usage = usage
+            sharing_mode = VK_SHARING_MODE_EXCLUSIVE
+            queuefamily_index_count = 0
+            queuefamily_indices = null
+        let buffer_ptr: *edit VkBuffer = #unsafe &raw edit buffer
+        let buffer_info_ptr: *read VkBufferCreateInfo = #unsafe &raw read buffer_info
+        let buffer_result = #unsafe self.create_buffer :: self.device, buffer_info_ptr, null, buffer_ptr :: call
+        select:
+            when buffer_result != VK_SUCCESS =>
+                let error = VulkanPresentError.BufferCreateFailed :: buffer_result :: call
+                return Result.Err :: error :: call
+            when buffer == 0U64 =>
+                let error = VulkanPresentError.BufferCreateFailed :: buffer_result :: call
+                return Result.Err :: error :: call
+            else => ()
+        let requirements = VkMemoryRequirements :: :: call
+            size = 0U64
+            alignment = 0U64
+            memory_type_bits = 0
+        let requirements_ptr: *edit VkMemoryRequirements = #unsafe &raw edit requirements
+        #unsafe self.get_buffer_memory_requirements :: self.device, buffer, requirements_ptr :: call
+        #unsafe self.destroy_buffer :: self.device, buffer, null :: call
+        return Result.Ok :: requirements :: call
+
+    fn buffer_plan(read self, byte_count: Index, usage: CUInt, memory_type_index: CUInt) -> Result[VulkanBufferPlan, VulkanPresentError]:
+        select self.buffer_requirements :: byte_count, usage :: method:
+            when Result.Ok(requirements) =>
+                let memory_properties = self.memory_properties :: :: method
+                select memory_properties.allocation_plan :: requirements, memory_type_index :: method:
+                    when Option.Some(allocation_plan) =>
+                        let plan = VulkanBufferPlan :: :: call
+                            byte_count = byte_count
+                            usage = usage
+                            requirements = requirements
+                            allocation_plan = allocation_plan
+                        return Result.Ok :: plan :: call
+                    when Option.None =>
+                        let error = VulkanPresentError.BufferMemoryTypeUnavailable :: requirements.memory_type_bits :: call
+                        return Result.Err :: error :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn host_visible_buffer_plan(read self, byte_count: Index, usage: CUInt) -> Result[VulkanBufferPlan, VulkanPresentError]:
+        select self.buffer_requirements :: byte_count, usage :: method:
+            when Result.Ok(requirements) =>
+                let memory_properties = self.memory_properties :: :: method
+                select memory_properties.host_visible_allocation_plan :: requirements :: method:
+                    when Option.Some(allocation_plan) =>
+                        let plan = VulkanBufferPlan :: :: call
+                            byte_count = byte_count
+                            usage = usage
+                            requirements = requirements
+                            allocation_plan = allocation_plan
+                        return Result.Ok :: plan :: call
+                    when Option.None =>
+                        let error = VulkanPresentError.BufferMemoryTypeUnavailable :: requirements.memory_type_bits :: call
+                        return Result.Err :: error :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn host_coherent_buffer_plan(read self, byte_count: Index, usage: CUInt) -> Result[VulkanBufferPlan, VulkanPresentError]:
+        select self.buffer_requirements :: byte_count, usage :: method:
+            when Result.Ok(requirements) =>
+                let memory_properties = self.memory_properties :: :: method
+                select memory_properties.host_coherent_allocation_plan :: requirements :: method:
+                    when Option.Some(allocation_plan) =>
+                        let plan = VulkanBufferPlan :: :: call
+                            byte_count = byte_count
+                            usage = usage
+                            requirements = requirements
+                            allocation_plan = allocation_plan
+                        return Result.Ok :: plan :: call
+                    when Option.None =>
+                        let error = VulkanPresentError.BufferMemoryTypeUnavailable :: requirements.memory_type_bits :: call
+                        return Result.Err :: error :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn device_local_buffer_plan(read self, byte_count: Index, usage: CUInt) -> Result[VulkanBufferPlan, VulkanPresentError]:
+        select self.buffer_requirements :: byte_count, usage :: method:
+            when Result.Ok(requirements) =>
+                let memory_properties = self.memory_properties :: :: method
+                select memory_properties.device_local_allocation_plan :: requirements :: method:
+                    when Option.Some(allocation_plan) =>
+                        let plan = VulkanBufferPlan :: :: call
+                            byte_count = byte_count
+                            usage = usage
+                            requirements = requirements
+                            allocation_plan = allocation_plan
+                        return Result.Ok :: plan :: call
+                    when Option.None =>
+                        let error = VulkanPresentError.BufferMemoryTypeUnavailable :: requirements.memory_type_bits :: call
+                        return Result.Err :: error :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn buffer_from_plan(read self, read plan: VulkanBufferPlan) -> Result[VulkanBuffer, VulkanPresentError]:
+        return vulkan_buffer_from_plan_internal :: self, plan :: call
+
+    fn buffer_empty(read self, byte_count: Index, usage: CUInt, memory_type_index: CUInt) -> Result[VulkanBuffer, VulkanPresentError]:
+        select self.buffer_plan :: byte_count, usage, memory_type_index :: method:
+            when Result.Ok(plan) => return self.buffer_from_plan :: plan :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn host_visible_buffer(read self, byte_count: Index, usage: CUInt) -> Result[VulkanBuffer, VulkanPresentError]:
+        select self.host_visible_buffer_plan :: byte_count, usage :: method:
+            when Result.Ok(plan) => return self.buffer_from_plan :: plan :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn host_coherent_buffer(read self, byte_count: Index, usage: CUInt) -> Result[VulkanBuffer, VulkanPresentError]:
+        select self.host_coherent_buffer_plan :: byte_count, usage :: method:
+            when Result.Ok(plan) => return self.buffer_from_plan :: plan :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn device_local_buffer(read self, byte_count: Index, usage: CUInt) -> Result[VulkanBuffer, VulkanPresentError]:
+        select self.device_local_buffer_plan :: byte_count, usage :: method:
+            when Result.Ok(plan) => return self.buffer_from_plan :: plan :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn buffer_bytes(read self, read buffer: VulkanBuffer) -> Result[ByteBuffer, VulkanPresentError]:
+        return copy_vulkan_buffer_bytes_from_memory :: self, buffer.memory, buffer.byte_count :: call
+
+    fn write_buffer(read self, read buffer: VulkanBuffer, take bytes: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+        return write_vulkan_buffer_bytes_to_memory :: self, buffer.memory, buffer.byte_count, bytes :: call
+
+    fn transfer_source_buffer_usage(read self) -> CUInt:
+        return VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+
+    fn transfer_destination_buffer_usage(read self) -> CUInt:
+        return VK_BUFFER_USAGE_TRANSFER_DST_BIT
+
+    fn destroy_buffer_resource(read self, take buffer: VulkanBuffer) -> Unit:
+        select:
+            when buffer.buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, buffer.buffer, null :: call
+            else => ()
+        select:
+            when buffer.memory != 0U64 => #unsafe self.free_memory :: self.device, buffer.memory, null :: call
+            else => ()
+        return
+
+impl VulkanPresentApp:
+    fn buffer_requirements(read self, byte_count: Index, usage: CUInt) -> Result[VkMemoryRequirements, VulkanPresentError]:
+        return self.context.buffer_requirements :: byte_count, usage :: method
+
+    fn buffer_plan(read self, byte_count: Index, usage: CUInt, memory_type_index: CUInt) -> Result[VulkanBufferPlan, VulkanPresentError]:
+        return self.context.buffer_plan :: byte_count, usage, memory_type_index :: method
+
+    fn host_visible_buffer_plan(read self, byte_count: Index, usage: CUInt) -> Result[VulkanBufferPlan, VulkanPresentError]:
+        return self.context.host_visible_buffer_plan :: byte_count, usage :: method
+
+    fn host_coherent_buffer_plan(read self, byte_count: Index, usage: CUInt) -> Result[VulkanBufferPlan, VulkanPresentError]:
+        return self.context.host_coherent_buffer_plan :: byte_count, usage :: method
+
+    fn device_local_buffer_plan(read self, byte_count: Index, usage: CUInt) -> Result[VulkanBufferPlan, VulkanPresentError]:
+        return self.context.device_local_buffer_plan :: byte_count, usage :: method
+
+    fn buffer_from_plan(read self, read plan: VulkanBufferPlan) -> Result[VulkanBuffer, VulkanPresentError]:
+        return self.context.buffer_from_plan :: plan :: method
+
+    fn buffer_empty(read self, byte_count: Index, usage: CUInt, memory_type_index: CUInt) -> Result[VulkanBuffer, VulkanPresentError]:
+        return self.context.buffer_empty :: byte_count, usage, memory_type_index :: method
+
+    fn host_visible_buffer(read self, byte_count: Index, usage: CUInt) -> Result[VulkanBuffer, VulkanPresentError]:
+        return self.context.host_visible_buffer :: byte_count, usage :: method
+
+    fn host_coherent_buffer(read self, byte_count: Index, usage: CUInt) -> Result[VulkanBuffer, VulkanPresentError]:
+        return self.context.host_coherent_buffer :: byte_count, usage :: method
+
+    fn device_local_buffer(read self, byte_count: Index, usage: CUInt) -> Result[VulkanBuffer, VulkanPresentError]:
+        return self.context.device_local_buffer :: byte_count, usage :: method
+
+    fn buffer_bytes(read self, read buffer: VulkanBuffer) -> Result[ByteBuffer, VulkanPresentError]:
+        return self.context.buffer_bytes :: buffer :: method
+
+    fn write_buffer(read self, read buffer: VulkanBuffer, take bytes: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+        return self.context.write_buffer :: buffer, bytes :: method
+
+    fn transfer_source_buffer_usage(read self) -> CUInt:
+        return self.context.transfer_source_buffer_usage :: :: method
+
+    fn transfer_destination_buffer_usage(read self) -> CUInt:
+        return self.context.transfer_destination_buffer_usage :: :: method
+
+    fn destroy_buffer(read self, take buffer: VulkanBuffer) -> Unit:
+        return self.context.destroy_buffer_resource :: buffer :: method

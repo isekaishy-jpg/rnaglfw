@@ -1,0 +1,24 @@
+use joystick.{GamepadAxis, GamepadButton}
+use runtime.JoystickSnapshot
+
+impl JoystickSnapshot:
+    fn gamepad_button_up(read self, button: GamepadButton) -> Bool:
+        return !self.gamepad_button_down :: button :: method
+
+    fn left_stick_x(read self) -> F32:
+        return self.gamepad_axis :: GamepadAxis.LeftX :: method
+
+    fn left_stick_y(read self) -> F32:
+        return self.gamepad_axis :: GamepadAxis.LeftY :: method
+
+    fn right_stick_x(read self) -> F32:
+        return self.gamepad_axis :: GamepadAxis.RightX :: method
+
+    fn right_stick_y(read self) -> F32:
+        return self.gamepad_axis :: GamepadAxis.RightY :: method
+
+    fn left_trigger(read self) -> F32:
+        return self.gamepad_axis :: GamepadAxis.LeftTrigger :: method
+
+    fn right_trigger(read self) -> F32:
+        return self.gamepad_axis :: GamepadAxis.RightTrigger :: method

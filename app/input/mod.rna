@@ -1,0 +1,496 @@
+use std.{Result, Str}
+use bridge.{TextDecodeError, copy_c_string}
+use glfw.{glfw_get_key_name, glfw_get_key_scancode, glfw_raw_mouse_motion_supported}
+
+pub type RawKeyCode = CInt
+pub type ScanCode = CInt
+
+pub enum KeyCode:
+    Unknown(CInt)
+    Space
+    Apostrophe
+    Comma
+    Minus
+    Period
+    Slash
+    Digit0
+    Digit1
+    Digit2
+    Digit3
+    Digit4
+    Digit5
+    Digit6
+    Digit7
+    Digit8
+    Digit9
+    Semicolon
+    Equal
+    A
+    B
+    C
+    D
+    E
+    F
+    G
+    H
+    I
+    J
+    K
+    L
+    M
+    N
+    O
+    P
+    Q
+    R
+    S
+    T
+    U
+    V
+    W
+    X
+    Y
+    Z
+    LeftBracket
+    Backslash
+    RightBracket
+    GraveAccent
+    World1
+    World2
+    Escape
+    Enter
+    Tab
+    Backspace
+    Insert
+    Delete
+    Right
+    Left
+    Down
+    Up
+    PageUp
+    PageDown
+    Home
+    End
+    CapsLock
+    ScrollLock
+    NumLock
+    PrintScreen
+    Pause
+    F1
+    F2
+    F3
+    F4
+    F5
+    F6
+    F7
+    F8
+    F9
+    F10
+    F11
+    F12
+    F13
+    F14
+    F15
+    F16
+    F17
+    F18
+    F19
+    F20
+    F21
+    F22
+    F23
+    F24
+    F25
+    Keypad0
+    Keypad1
+    Keypad2
+    Keypad3
+    Keypad4
+    Keypad5
+    Keypad6
+    Keypad7
+    Keypad8
+    Keypad9
+    KeypadDecimal
+    KeypadDivide
+    KeypadMultiply
+    KeypadSubtract
+    KeypadAdd
+    KeypadEnter
+    KeypadEqual
+    LeftShift
+    LeftControl
+    LeftAlt
+    LeftSuper
+    RightShift
+    RightControl
+    RightAlt
+    RightSuper
+    Menu
+
+pub enum InputAction:
+    Release
+    Press
+    Repeat
+    Unknown(CInt)
+
+pub enum MouseButton:
+    Left
+    Right
+    Middle
+    Button4
+    Button5
+    Button6
+    Button7
+    Button8
+    Other(CInt)
+
+pub struct Modifiers:
+    shift_down: Bool
+    control_down: Bool
+    alt_down: Bool
+    super_down: Bool
+    caps_lock_on: Bool
+    num_lock_on: Bool
+
+pub fn key_from_raw(raw: RawKeyCode) -> KeyCode:
+    select:
+        when raw == 32 => return KeyCode.Space
+        when raw == 39 => return KeyCode.Apostrophe
+        when raw == 44 => return KeyCode.Comma
+        when raw == 45 => return KeyCode.Minus
+        when raw == 46 => return KeyCode.Period
+        when raw == 47 => return KeyCode.Slash
+        when raw == 48 => return KeyCode.Digit0
+        when raw == 49 => return KeyCode.Digit1
+        when raw == 50 => return KeyCode.Digit2
+        when raw == 51 => return KeyCode.Digit3
+        when raw == 52 => return KeyCode.Digit4
+        when raw == 53 => return KeyCode.Digit5
+        when raw == 54 => return KeyCode.Digit6
+        when raw == 55 => return KeyCode.Digit7
+        when raw == 56 => return KeyCode.Digit8
+        when raw == 57 => return KeyCode.Digit9
+        when raw == 59 => return KeyCode.Semicolon
+        when raw == 61 => return KeyCode.Equal
+        when raw == 65 => return KeyCode.A
+        when raw == 66 => return KeyCode.B
+        when raw == 67 => return KeyCode.C
+        when raw == 68 => return KeyCode.D
+        when raw == 69 => return KeyCode.E
+        when raw == 70 => return KeyCode.F
+        when raw == 71 => return KeyCode.G
+        when raw == 72 => return KeyCode.H
+        when raw == 73 => return KeyCode.I
+        when raw == 74 => return KeyCode.J
+        when raw == 75 => return KeyCode.K
+        when raw == 76 => return KeyCode.L
+        when raw == 77 => return KeyCode.M
+        when raw == 78 => return KeyCode.N
+        when raw == 79 => return KeyCode.O
+        when raw == 80 => return KeyCode.P
+        when raw == 81 => return KeyCode.Q
+        when raw == 82 => return KeyCode.R
+        when raw == 83 => return KeyCode.S
+        when raw == 84 => return KeyCode.T
+        when raw == 85 => return KeyCode.U
+        when raw == 86 => return KeyCode.V
+        when raw == 87 => return KeyCode.W
+        when raw == 88 => return KeyCode.X
+        when raw == 89 => return KeyCode.Y
+        when raw == 90 => return KeyCode.Z
+        when raw == 91 => return KeyCode.LeftBracket
+        when raw == 92 => return KeyCode.Backslash
+        when raw == 93 => return KeyCode.RightBracket
+        when raw == 96 => return KeyCode.GraveAccent
+        when raw == 161 => return KeyCode.World1
+        when raw == 162 => return KeyCode.World2
+        when raw == 256 => return KeyCode.Escape
+        when raw == 257 => return KeyCode.Enter
+        when raw == 258 => return KeyCode.Tab
+        when raw == 259 => return KeyCode.Backspace
+        when raw == 260 => return KeyCode.Insert
+        when raw == 261 => return KeyCode.Delete
+        when raw == 262 => return KeyCode.Right
+        when raw == 263 => return KeyCode.Left
+        when raw == 264 => return KeyCode.Down
+        when raw == 265 => return KeyCode.Up
+        when raw == 266 => return KeyCode.PageUp
+        when raw == 267 => return KeyCode.PageDown
+        when raw == 268 => return KeyCode.Home
+        when raw == 269 => return KeyCode.End
+        when raw == 280 => return KeyCode.CapsLock
+        when raw == 281 => return KeyCode.ScrollLock
+        when raw == 282 => return KeyCode.NumLock
+        when raw == 283 => return KeyCode.PrintScreen
+        when raw == 284 => return KeyCode.Pause
+        when raw == 290 => return KeyCode.F1
+        when raw == 291 => return KeyCode.F2
+        when raw == 292 => return KeyCode.F3
+        when raw == 293 => return KeyCode.F4
+        when raw == 294 => return KeyCode.F5
+        when raw == 295 => return KeyCode.F6
+        when raw == 296 => return KeyCode.F7
+        when raw == 297 => return KeyCode.F8
+        when raw == 298 => return KeyCode.F9
+        when raw == 299 => return KeyCode.F10
+        when raw == 300 => return KeyCode.F11
+        when raw == 301 => return KeyCode.F12
+        when raw == 302 => return KeyCode.F13
+        when raw == 303 => return KeyCode.F14
+        when raw == 304 => return KeyCode.F15
+        when raw == 305 => return KeyCode.F16
+        when raw == 306 => return KeyCode.F17
+        when raw == 307 => return KeyCode.F18
+        when raw == 308 => return KeyCode.F19
+        when raw == 309 => return KeyCode.F20
+        when raw == 310 => return KeyCode.F21
+        when raw == 311 => return KeyCode.F22
+        when raw == 312 => return KeyCode.F23
+        when raw == 313 => return KeyCode.F24
+        when raw == 314 => return KeyCode.F25
+        when raw == 320 => return KeyCode.Keypad0
+        when raw == 321 => return KeyCode.Keypad1
+        when raw == 322 => return KeyCode.Keypad2
+        when raw == 323 => return KeyCode.Keypad3
+        when raw == 324 => return KeyCode.Keypad4
+        when raw == 325 => return KeyCode.Keypad5
+        when raw == 326 => return KeyCode.Keypad6
+        when raw == 327 => return KeyCode.Keypad7
+        when raw == 328 => return KeyCode.Keypad8
+        when raw == 329 => return KeyCode.Keypad9
+        when raw == 330 => return KeyCode.KeypadDecimal
+        when raw == 331 => return KeyCode.KeypadDivide
+        when raw == 332 => return KeyCode.KeypadMultiply
+        when raw == 333 => return KeyCode.KeypadSubtract
+        when raw == 334 => return KeyCode.KeypadAdd
+        when raw == 335 => return KeyCode.KeypadEnter
+        when raw == 336 => return KeyCode.KeypadEqual
+        when raw == 340 => return KeyCode.LeftShift
+        when raw == 341 => return KeyCode.LeftControl
+        when raw == 342 => return KeyCode.LeftAlt
+        when raw == 343 => return KeyCode.LeftSuper
+        when raw == 344 => return KeyCode.RightShift
+        when raw == 345 => return KeyCode.RightControl
+        when raw == 346 => return KeyCode.RightAlt
+        when raw == 347 => return KeyCode.RightSuper
+        when raw == 348 => return KeyCode.Menu
+        else => return KeyCode.Unknown :: raw :: call
+
+pub fn key_raw(read key: KeyCode) -> RawKeyCode:
+    select key:
+        when KeyCode.Unknown(raw) => return raw
+        when KeyCode.Space => return 32
+        when KeyCode.Apostrophe => return 39
+        when KeyCode.Comma => return 44
+        when KeyCode.Minus => return 45
+        when KeyCode.Period => return 46
+        when KeyCode.Slash => return 47
+        when KeyCode.Digit0 => return 48
+        when KeyCode.Digit1 => return 49
+        when KeyCode.Digit2 => return 50
+        when KeyCode.Digit3 => return 51
+        when KeyCode.Digit4 => return 52
+        when KeyCode.Digit5 => return 53
+        when KeyCode.Digit6 => return 54
+        when KeyCode.Digit7 => return 55
+        when KeyCode.Digit8 => return 56
+        when KeyCode.Digit9 => return 57
+        when KeyCode.Semicolon => return 59
+        when KeyCode.Equal => return 61
+        when KeyCode.A => return 65
+        when KeyCode.B => return 66
+        when KeyCode.C => return 67
+        when KeyCode.D => return 68
+        when KeyCode.E => return 69
+        when KeyCode.F => return 70
+        when KeyCode.G => return 71
+        when KeyCode.H => return 72
+        when KeyCode.I => return 73
+        when KeyCode.J => return 74
+        when KeyCode.K => return 75
+        when KeyCode.L => return 76
+        when KeyCode.M => return 77
+        when KeyCode.N => return 78
+        when KeyCode.O => return 79
+        when KeyCode.P => return 80
+        when KeyCode.Q => return 81
+        when KeyCode.R => return 82
+        when KeyCode.S => return 83
+        when KeyCode.T => return 84
+        when KeyCode.U => return 85
+        when KeyCode.V => return 86
+        when KeyCode.W => return 87
+        when KeyCode.X => return 88
+        when KeyCode.Y => return 89
+        when KeyCode.Z => return 90
+        when KeyCode.LeftBracket => return 91
+        when KeyCode.Backslash => return 92
+        when KeyCode.RightBracket => return 93
+        when KeyCode.GraveAccent => return 96
+        when KeyCode.World1 => return 161
+        when KeyCode.World2 => return 162
+        when KeyCode.Escape => return 256
+        when KeyCode.Enter => return 257
+        when KeyCode.Tab => return 258
+        when KeyCode.Backspace => return 259
+        when KeyCode.Insert => return 260
+        when KeyCode.Delete => return 261
+        when KeyCode.Right => return 262
+        when KeyCode.Left => return 263
+        when KeyCode.Down => return 264
+        when KeyCode.Up => return 265
+        when KeyCode.PageUp => return 266
+        when KeyCode.PageDown => return 267
+        when KeyCode.Home => return 268
+        when KeyCode.End => return 269
+        when KeyCode.CapsLock => return 280
+        when KeyCode.ScrollLock => return 281
+        when KeyCode.NumLock => return 282
+        when KeyCode.PrintScreen => return 283
+        when KeyCode.Pause => return 284
+        when KeyCode.F1 => return 290
+        when KeyCode.F2 => return 291
+        when KeyCode.F3 => return 292
+        when KeyCode.F4 => return 293
+        when KeyCode.F5 => return 294
+        when KeyCode.F6 => return 295
+        when KeyCode.F7 => return 296
+        when KeyCode.F8 => return 297
+        when KeyCode.F9 => return 298
+        when KeyCode.F10 => return 299
+        when KeyCode.F11 => return 300
+        when KeyCode.F12 => return 301
+        when KeyCode.F13 => return 302
+        when KeyCode.F14 => return 303
+        when KeyCode.F15 => return 304
+        when KeyCode.F16 => return 305
+        when KeyCode.F17 => return 306
+        when KeyCode.F18 => return 307
+        when KeyCode.F19 => return 308
+        when KeyCode.F20 => return 309
+        when KeyCode.F21 => return 310
+        when KeyCode.F22 => return 311
+        when KeyCode.F23 => return 312
+        when KeyCode.F24 => return 313
+        when KeyCode.F25 => return 314
+        when KeyCode.Keypad0 => return 320
+        when KeyCode.Keypad1 => return 321
+        when KeyCode.Keypad2 => return 322
+        when KeyCode.Keypad3 => return 323
+        when KeyCode.Keypad4 => return 324
+        when KeyCode.Keypad5 => return 325
+        when KeyCode.Keypad6 => return 326
+        when KeyCode.Keypad7 => return 327
+        when KeyCode.Keypad8 => return 328
+        when KeyCode.Keypad9 => return 329
+        when KeyCode.KeypadDecimal => return 330
+        when KeyCode.KeypadDivide => return 331
+        when KeyCode.KeypadMultiply => return 332
+        when KeyCode.KeypadSubtract => return 333
+        when KeyCode.KeypadAdd => return 334
+        when KeyCode.KeypadEnter => return 335
+        when KeyCode.KeypadEqual => return 336
+        when KeyCode.LeftShift => return 340
+        when KeyCode.LeftControl => return 341
+        when KeyCode.LeftAlt => return 342
+        when KeyCode.LeftSuper => return 343
+        when KeyCode.RightShift => return 344
+        when KeyCode.RightControl => return 345
+        when KeyCode.RightAlt => return 346
+        when KeyCode.RightSuper => return 347
+        when KeyCode.Menu => return 348
+    return 0 - 1
+
+pub fn input_action_from_raw(raw: CInt) -> InputAction:
+    select:
+        when raw == 0 => return InputAction.Release
+        when raw == 1 => return InputAction.Press
+        when raw == 2 => return InputAction.Repeat
+        else => return InputAction.Unknown :: raw :: call
+
+pub fn input_action_raw(read action: InputAction) -> CInt:
+    select action:
+        when InputAction.Release => return 0
+        when InputAction.Press => return 1
+        when InputAction.Repeat => return 2
+        when InputAction.Unknown(raw) => return raw
+    return 0
+
+pub fn mouse_button_from_raw(raw: CInt) -> MouseButton:
+    select:
+        when raw == 0 => return MouseButton.Left
+        when raw == 1 => return MouseButton.Right
+        when raw == 2 => return MouseButton.Middle
+        when raw == 3 => return MouseButton.Button4
+        when raw == 4 => return MouseButton.Button5
+        when raw == 5 => return MouseButton.Button6
+        when raw == 6 => return MouseButton.Button7
+        when raw == 7 => return MouseButton.Button8
+        else => return MouseButton.Other :: raw :: call
+
+pub fn mouse_button_raw(read button: MouseButton) -> CInt:
+    select button:
+        when MouseButton.Left => return 0
+        when MouseButton.Right => return 1
+        when MouseButton.Middle => return 2
+        when MouseButton.Button4 => return 3
+        when MouseButton.Button5 => return 4
+        when MouseButton.Button6 => return 5
+        when MouseButton.Button7 => return 6
+        when MouseButton.Button8 => return 7
+        when MouseButton.Other(raw) => return raw
+    return 0
+
+pub fn modifiers_from_raw(raw: CInt) -> Modifiers:
+    let shift_down = (raw & 0x0001) != 0
+    let control_down = (raw & 0x0002) != 0
+    let alt_down = (raw & 0x0004) != 0
+    let super_down = (raw & 0x0008) != 0
+    let caps_lock_on = (raw & 0x0010) != 0
+    let num_lock_on = (raw & 0x0020) != 0
+    return Modifiers :: :: call
+        shift_down = shift_down
+        control_down = control_down
+        alt_down = alt_down
+        super_down = super_down
+        caps_lock_on = caps_lock_on
+        num_lock_on = num_lock_on
+
+pub fn key_name(read key: KeyCode, scancode: ScanCode) -> Result[Str, TextDecodeError]:
+    let raw_key = key_raw :: key :: call
+    let raw_name = glfw_get_key_name :: raw_key, scancode :: call
+    return copy_c_string :: raw_name :: call
+
+pub fn key_name_from_key(read key: KeyCode) -> Result[Str, TextDecodeError]:
+    let scancode = key_scancode :: key :: call
+    return key_name :: key, scancode :: call
+
+pub fn key_scancode(read key: KeyCode) -> ScanCode:
+    let raw_key = key_raw :: key :: call
+    return glfw_get_key_scancode :: raw_key :: call
+
+pub fn raw_mouse_motion_supported() -> Bool:
+    return glfw_raw_mouse_motion_supported :: :: call
+
+impl Modifiers:
+    fn shift(read self) -> Bool:
+        return self.shift_down
+
+    fn control(read self) -> Bool:
+        return self.control_down
+
+    fn alt(read self) -> Bool:
+        return self.alt_down
+
+    fn super_key(read self) -> Bool:
+        return self.super_down
+
+    fn caps_lock(read self) -> Bool:
+        return self.caps_lock_on
+
+    fn num_lock(read self) -> Bool:
+        return self.num_lock_on
+
+    fn any(read self) -> Bool:
+        return self.shift_down || self.control_down || self.alt_down || self.super_down || self.caps_lock_on || self.num_lock_on

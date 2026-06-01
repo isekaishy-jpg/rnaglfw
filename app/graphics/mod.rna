@@ -1,0 +1,314 @@
+use std.{List, Option, Result, Str}
+use bridge.{TextDecodeError, copy_c_string, maybe_c_string}
+use glfw.{glfw_create_window_surface, glfw_extension_supported}
+use glfw.{glfw_get_current_context, glfw_get_egl_display, glfw_get_proc_address}
+use glfw.glfw_get_instance_proc_address
+use glfw.{glfw_init_vulkan_loader, glfw_physical_device_presentation_supported}
+use glfw.{glfw_required_instance_extensions, glfw_vulkan_supported}
+use window.{Monitor, Window}
+
+pub use glfw.{GlfwEglContext, GlfwEglDisplay, GlfwEglSurface, GlfwGlProc}
+pub use glfw.{GlfwOSMesaColorBuffer, GlfwOSMesaDepthBuffer, GlfwOsMesaContext}
+pub use glfw.{GlfwVkAllocationCallbacksRaw, GlfwVkGetInstanceProcAddr}
+pub use glfw.{GlfwVkInstance, GlfwVkPhysicalDevice, GlfwVkProc}
+pub use glfw.{GlfwVkResult, GlfwVkSurface, GlfwVkSurfaceCreateReport}
+pub use glfw.GlfwWglContext
+
+use glfw.{GlfwCStringList, GlfwMonitor}
+
+pub struct Win32MonitorNames:
+    pub adapter_name: Str
+    pub monitor_name: Str
+
+pub struct VulkanWindowSupportReport:
+    pub vulkan_supported: Bool
+    pub required_instance_extensions: List[Str]
+
+pub struct VulkanPresentReport:
+    pub window_support: VulkanWindowSupportReport
+    pub instance_provided: Bool
+    pub physical_device_provided: Bool
+    pub queuefamily: CUInt
+    pub presentation_supported: Option[Bool]
+    pub surface_create_report: Option[GlfwVkSurfaceCreateReport]
+    pub(package) present_support_known_value: Bool
+    pub(package) surface_creation_attempted_value: Bool
+    pub(package) surface_created_value: Bool
+
+fn copy_c_string_list(read values: GlfwCStringList) -> Result[List[Str], TextDecodeError]:
+    let copied = List[Str] :: :: call
+    let count = values.count :: :: method
+    let scan: CUInt = 0
+    repeat while scan < count:
+        select values.at :: scan :: method:
+            when Option.Some(value) =>
+                select copy_c_string :: value :: call:
+                    when Result.Ok(text) => copied.push :: text :: method
+                    when Result.Err(err) => return Result.Err :: err :: call
+            when Option.None => ()
+        scan = scan + 1
+    return Result.Ok :: copied :: call
+
+fn osmesa_pixel_count(width: CInt, height: CInt) -> Option[Index]:
+    let Result.Ok(raw_width) = width as Maybe[CUInt] else => return Option.None
+    let Result.Ok(raw_height) = height as Maybe[CUInt] else => return Option.None
+    let raw_pixel_count: CUInt = raw_width * raw_height
+    let Result.Ok(pixel_count) = raw_pixel_count as Maybe[Index] else => return Option.None
+    return Option.Some :: pixel_count :: call
+
+pub fn gl_extension_supported(extension: Str) -> Result[Bool, TextDecodeError]:
+    select maybe_c_string :: extension :: call:
+        when Result.Ok(text) =>
+            let pointer = text.as_ptr :: :: method
+            let supported = glfw_extension_supported :: pointer :: call
+            return Result.Ok :: supported :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+pub fn gl_proc_address(procname: Str) -> Result[Option[GlfwGlProc], TextDecodeError]:
+    select maybe_c_string :: procname :: call:
+        when Result.Ok(text) =>
+            let pointer = text.as_ptr :: :: method
+            let proc = glfw_get_proc_address :: pointer :: call
+            return Result.Ok :: proc :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+pub fn vulkan_instance_proc_address(instance: GlfwVkInstance, procname: Str) -> Result[Option[GlfwVkProc], TextDecodeError]:
+    select maybe_c_string :: procname :: call:
+        when Result.Ok(text) =>
+            let pointer = text.as_ptr :: :: method
+            let proc = glfw_get_instance_proc_address :: instance, pointer :: call
+            return Result.Ok :: proc :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+pub fn egl_display() -> GlfwEglDisplay:
+    return glfw_get_egl_display :: :: call
+
+pub fn init_vulkan_loader(take loader: Option[GlfwVkGetInstanceProcAddr]) -> Unit:
+    glfw_init_vulkan_loader :: loader :: call
+    return
+
+pub fn vulkan_supported() -> Bool:
+    return glfw_vulkan_supported :: :: call
+
+pub fn vulkan_required_instance_extensions() -> Result[List[Str], TextDecodeError]:
+    let raw = glfw_required_instance_extensions :: :: call
+    return copy_c_string_list :: raw :: call
+
+pub fn vulkan_physical_device_presentation_supported(instance: GlfwVkInstance, device: GlfwVkPhysicalDevice, queuefamily: CUInt) -> Bool:
+    return glfw_physical_device_presentation_supported :: instance, device, queuefamily :: call
+
+pub fn vulkan_window_support_report() -> Result[VulkanWindowSupportReport, TextDecodeError]:
+    let supported = vulkan_supported :: :: call
+    select vulkan_required_instance_extensions :: :: call:
+        when Result.Ok(required_instance_extensions) =>
+            let report = VulkanWindowSupportReport :: :: call
+                vulkan_supported = supported
+                required_instance_extensions = required_instance_extensions
+            return Result.Ok :: report :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+pub fn vulkan_present_report(read window: Window, instance: GlfwVkInstance, device: GlfwVkPhysicalDevice, queuefamily: CUInt, allocator: *read GlfwVkAllocationCallbacksRaw) -> Result[VulkanPresentReport, TextDecodeError]:
+    select vulkan_window_support_report :: :: call:
+        when Result.Ok(window_support) =>
+            let instance_provided = !instance.is_null :: :: method
+            let physical_device_provided = !device.is_null :: :: method
+            let presentation_supported: Option[Bool] = Option.None
+            let surface_create_report: Option[GlfwVkSurfaceCreateReport] = Option.None
+            let present_support_known_value = false
+            let surface_creation_attempted_value = false
+            let surface_created_value = false
+            select:
+                when instance_provided =>
+                    let surface_report = window.vulkan_surface :: instance, allocator :: method
+                    surface_create_report = Option.Some :: surface_report :: call
+                    surface_creation_attempted_value = true
+                    select:
+                        when surface_report.result == 0 && surface_report.surface != 0U64 => surface_created_value = true
+                        else => ()
+                    select:
+                        when physical_device_provided =>
+                            let supported = window.vulkan_present_supported :: instance, device, queuefamily :: method
+                            presentation_supported = Option.Some :: supported :: call
+                            present_support_known_value = true
+                        else => ()
+                else => ()
+            let report = VulkanPresentReport :: :: call
+                window_support = window_support
+                instance_provided = instance_provided
+                physical_device_provided = physical_device_provided
+                queuefamily = queuefamily
+                presentation_supported = presentation_supported
+                surface_create_report = surface_create_report
+                present_support_known_value = present_support_known_value
+                surface_creation_attempted_value = surface_creation_attempted_value
+                surface_created_value = surface_created_value
+            return Result.Ok :: report :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+impl VulkanWindowSupportReport:
+    fn has_required_instance_extensions(read self) -> Bool:
+        return !self.required_instance_extensions.is_empty :: :: method
+
+    fn required_extension_count(read self) -> Index:
+        return self.required_instance_extensions.count :: :: method
+
+    fn ready_for_surface_creation(read self) -> Bool:
+        select:
+            when !self.vulkan_supported => return false
+            when !self.has_required_instance_extensions :: :: method => return false
+            else => return true
+
+impl GlfwVkSurfaceCreateReport:
+    fn ok(read self) -> Bool:
+        return self.result == 0
+
+    fn has_surface(read self) -> Bool:
+        return self.surface != 0U64
+
+    fn created(read self) -> Bool:
+        return self.ok :: :: method && self.has_surface :: :: method
+
+impl VulkanPresentReport:
+    fn supports_presentation(read self) -> Bool:
+        select self.presentation_supported:
+            when Option.Some(supported) => return supported
+            when Option.None => return false
+
+    fn present_support_known(read self) -> Bool:
+        return self.present_support_known_value
+
+    fn surface_creation_attempted(read self) -> Bool:
+        return self.surface_creation_attempted_value
+
+    fn surface_create_report_available(read self) -> Bool:
+        select self.surface_create_report:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn surface_created(read self) -> Bool:
+        return self.surface_created_value
+
+    fn surface_create_succeeded(read self) -> Bool:
+        select self.surface_create_report:
+            when Option.Some(report) => return report.created :: :: method
+            when Option.None => return false
+
+    fn ready_for_presenting(read self) -> Bool:
+        select:
+            when !self.window_support.ready_for_surface_creation :: :: method => return false
+            when !self.surface_create_succeeded :: :: method => return false
+            else => ()
+        return self.supports_presentation :: :: method
+
+impl GlfwOSMesaColorBuffer:
+    fn width(read self) -> CInt:
+        return self.width_value :: :: method
+
+    fn height(read self) -> CInt:
+        return self.height_value :: :: method
+
+    fn has_data(read self) -> Bool:
+        let pointer = self.buffer_ptr :: :: method
+        return !pointer.is_null :: :: method
+
+    fn pixel_count(read self) -> Option[Index]:
+        return osmesa_pixel_count :: self.width, self.height :: call
+
+impl GlfwOSMesaDepthBuffer:
+    fn width(read self) -> CInt:
+        return self.width_value :: :: method
+
+    fn height(read self) -> CInt:
+        return self.height_value :: :: method
+
+    fn has_data(read self) -> Bool:
+        let pointer = self.buffer_ptr :: :: method
+        return !pointer.is_null :: :: method
+
+    fn pixel_count(read self) -> Option[Index]:
+        return osmesa_pixel_count :: self.width, self.height :: call
+
+    fn byte_count(read self) -> Option[Index]:
+        let Result.Ok(raw_bytes_per_value) = self.bytes_per_value as Maybe[CUInt] else => return Option.None
+        select self.pixel_count :: :: method:
+            when Option.Some(pixel_count) =>
+                let Result.Ok(raw_pixels) = pixel_count as Maybe[CUInt] else => return Option.None
+                let raw_byte_count: CUInt = raw_pixels * raw_bytes_per_value
+                let Result.Ok(byte_count) = raw_byte_count as Maybe[Index] else => return Option.None
+                return Option.Some :: byte_count :: call
+            when Option.None => return Option.None
+
+impl Window:
+    fn current_context(read self) -> Bool:
+        let current = glfw_get_current_context :: :: call
+        let left_raw = current.raw_handle :: :: method
+        let right_raw = self.raw.raw_handle :: :: method
+        return left_raw == right_raw
+
+    fn gl_extension_supported(read self, extension: Str) -> Result[Bool, TextDecodeError]:
+        let _ = self
+        return gl_extension_supported :: extension :: call
+
+    fn gl_proc_address(read self, procname: Str) -> Result[Option[GlfwGlProc], TextDecodeError]:
+        let _ = self
+        return gl_proc_address :: procname :: call
+
+    fn vulkan_surface(read self, instance: GlfwVkInstance, allocator: *read GlfwVkAllocationCallbacksRaw) -> GlfwVkSurfaceCreateReport:
+        return glfw_create_window_surface :: instance, self.raw, allocator :: call
+
+    fn vulkan_window_support_report(read self) -> Result[VulkanWindowSupportReport, TextDecodeError]:
+        let _ = self
+        return vulkan_window_support_report :: :: call
+
+    fn vulkan_present_report(read self, instance: GlfwVkInstance, device: GlfwVkPhysicalDevice, queuefamily: CUInt, allocator: *read GlfwVkAllocationCallbacksRaw) -> Result[VulkanPresentReport, TextDecodeError]:
+        return vulkan_present_report :: self, instance, device, queuefamily, allocator :: call
+
+    fn vulkan_present_supported(read self, instance: GlfwVkInstance, device: GlfwVkPhysicalDevice, queuefamily: CUInt) -> Bool:
+        let _ = self
+        return vulkan_physical_device_presentation_supported :: instance, device, queuefamily :: call
+
+    fn vulkan_ready_for_presenting(read self, instance: GlfwVkInstance, device: GlfwVkPhysicalDevice, queuefamily: CUInt, allocator: *read GlfwVkAllocationCallbacksRaw) -> Result[Bool, TextDecodeError]:
+        select vulkan_present_report :: self, instance, device, queuefamily, allocator :: call:
+            when Result.Ok(report) =>
+                let ready = report.ready_for_presenting :: :: method
+                return Result.Ok :: ready :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn wgl_context(read self) -> GlfwWglContext:
+        return self.raw.wgl_context :: :: method
+
+    fn egl_context(read self) -> GlfwEglContext:
+        return self.raw.egl_context :: :: method
+
+    fn egl_surface(read self) -> GlfwEglSurface:
+        return self.raw.egl_surface :: :: method
+
+    fn osmesa_context(read self) -> GlfwOsMesaContext:
+        return self.raw.osmesa_context :: :: method
+
+    fn osmesa_color_buffer(read self) -> Option[GlfwOSMesaColorBuffer]:
+        return self.raw.osmesa_color_buffer :: :: method
+
+    fn osmesa_depth_buffer(read self) -> Option[GlfwOSMesaDepthBuffer]:
+        return self.raw.osmesa_depth_buffer :: :: method
+
+impl GlfwMonitor:
+    fn win32_names(read self) -> Result[Win32MonitorNames, TextDecodeError]:
+        select self.win32_adapter_name_text :: :: method:
+            when Result.Ok(adapter_name) =>
+                select self.win32_monitor_name_text :: :: method:
+                    when Result.Ok(monitor_name) =>
+                        let names = Win32MonitorNames :: :: call
+                            adapter_name = adapter_name
+                            monitor_name = monitor_name
+                        return Result.Ok :: names :: call
+                    when Result.Err(err) => return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn win32_adapter_name_text(read self) -> Result[Str, TextDecodeError]:
+        let raw_name = self.win32_adapter_name :: :: method
+        return copy_c_string :: raw_name :: call
+
+    fn win32_monitor_name_text(read self) -> Result[Str, TextDecodeError]:
+        let raw_name = self.win32_monitor_name :: :: method
+        return copy_c_string :: raw_name :: call

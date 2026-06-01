@@ -1,0 +1,2731 @@
+use std.{List, Option, Result, Str}
+use event.{AppEvent, JoystickEvent, JoystickId, MonitorEvent, MonitorId}
+use event.{UserEvent, UserEventId, WindowCharacterData, WindowCharacterModsData}
+use event.{WindowCursorData, WindowEvent, WindowKeyData, WindowMouseButtonData}
+use event.{WindowMoveData, WindowScaleData, WindowScrollData, WindowSizeData}
+use runtime.{App, AppError}
+use window.WindowId
+
+fn pending_pop_window_event_for(edit pending: List[AppEvent], id: WindowId) -> Option[WindowEvent]:
+    let remaining = List[AppEvent] :: :: call
+    let found: Option[WindowEvent] = Option.None
+    let found_any = false
+    repeat while !pending.is_empty :: :: method:
+        let event = pending.remove :: 0 :: method
+        select event:
+            when AppEvent.Window(window_event) =>
+                select:
+                    when !found_any && window_event.window_id :: :: method == id =>
+                        found = Option.Some :: window_event :: call
+                        found_any = true
+                    else =>
+                        let wrapped = AppEvent.Window :: window_event :: call
+                        remaining.push :: wrapped :: method
+            when AppEvent.Monitor(monitor_event) =>
+                let wrapped = AppEvent.Monitor :: monitor_event :: call
+                remaining.push :: wrapped :: method
+            when AppEvent.Joystick(joystick_event) =>
+                let wrapped = AppEvent.Joystick :: joystick_event :: call
+                remaining.push :: wrapped :: method
+            when AppEvent.User(user_event) =>
+                let wrapped = AppEvent.User :: user_event :: call
+                remaining.push :: wrapped :: method
+    pending = remaining
+    return found
+
+fn pending_pop_monitor_event_for(edit pending: List[AppEvent], id: MonitorId) -> Option[MonitorEvent]:
+    let remaining = List[AppEvent] :: :: call
+    let found: Option[MonitorEvent] = Option.None
+    let found_any = false
+    repeat while !pending.is_empty :: :: method:
+        let event = pending.remove :: 0 :: method
+        select event:
+            when AppEvent.Window(window_event) =>
+                let wrapped = AppEvent.Window :: window_event :: call
+                remaining.push :: wrapped :: method
+            when AppEvent.Monitor(monitor_event) =>
+                select:
+                    when !found_any && monitor_event.monitor_id :: :: method == id =>
+                        found = Option.Some :: monitor_event :: call
+                        found_any = true
+                    else =>
+                        let wrapped = AppEvent.Monitor :: monitor_event :: call
+                        remaining.push :: wrapped :: method
+            when AppEvent.Joystick(joystick_event) =>
+                let wrapped = AppEvent.Joystick :: joystick_event :: call
+                remaining.push :: wrapped :: method
+            when AppEvent.User(user_event) =>
+                let wrapped = AppEvent.User :: user_event :: call
+                remaining.push :: wrapped :: method
+    pending = remaining
+    return found
+
+fn pending_pop_joystick_event_for(edit pending: List[AppEvent], id: JoystickId) -> Option[JoystickEvent]:
+    let remaining = List[AppEvent] :: :: call
+    let found: Option[JoystickEvent] = Option.None
+    let found_any = false
+    repeat while !pending.is_empty :: :: method:
+        let event = pending.remove :: 0 :: method
+        select event:
+            when AppEvent.Window(window_event) =>
+                let wrapped = AppEvent.Window :: window_event :: call
+                remaining.push :: wrapped :: method
+            when AppEvent.Monitor(monitor_event) =>
+                let wrapped = AppEvent.Monitor :: monitor_event :: call
+                remaining.push :: wrapped :: method
+            when AppEvent.Joystick(joystick_event) =>
+                select:
+                    when !found_any && joystick_event.joystick_id :: :: method == id =>
+                        found = Option.Some :: joystick_event :: call
+                        found_any = true
+                    else =>
+                        let wrapped = AppEvent.Joystick :: joystick_event :: call
+                        remaining.push :: wrapped :: method
+            when AppEvent.User(user_event) =>
+                let wrapped = AppEvent.User :: user_event :: call
+                remaining.push :: wrapped :: method
+    pending = remaining
+    return found
+
+fn pending_pop_user_event_for(edit pending: List[AppEvent], id: UserEventId) -> Option[UserEvent]:
+    let remaining = List[AppEvent] :: :: call
+    let found: Option[UserEvent] = Option.None
+    let found_any = false
+    repeat while !pending.is_empty :: :: method:
+        let event = pending.remove :: 0 :: method
+        select event:
+            when AppEvent.Window(window_event) =>
+                let wrapped = AppEvent.Window :: window_event :: call
+                remaining.push :: wrapped :: method
+            when AppEvent.Monitor(monitor_event) =>
+                let wrapped = AppEvent.Monitor :: monitor_event :: call
+                remaining.push :: wrapped :: method
+            when AppEvent.Joystick(joystick_event) =>
+                let wrapped = AppEvent.Joystick :: joystick_event :: call
+                remaining.push :: wrapped :: method
+            when AppEvent.User(user_event) =>
+                select:
+                    when !found_any && user_event.user_id :: :: method == id =>
+                        found = Option.Some :: user_event :: call
+                        found_any = true
+                    else =>
+                        let wrapped = AppEvent.User :: user_event :: call
+                        remaining.push :: wrapped :: method
+    pending = remaining
+    return found
+
+fn copy_monitor_event(read event: MonitorEvent) -> MonitorEvent:
+    select event:
+        when MonitorEvent.Connected(id = id) =>
+            return MonitorEvent.Connected :: :: call
+                id = id
+        when MonitorEvent.Disconnected(id = id) =>
+            return MonitorEvent.Disconnected :: :: call
+                id = id
+
+fn copy_joystick_event(read event: JoystickEvent) -> JoystickEvent:
+    select event:
+        when JoystickEvent.Connected(id = id, gamepad = gamepad) =>
+            return JoystickEvent.Connected :: :: call
+                id = id
+                gamepad = gamepad
+        when JoystickEvent.Disconnected(id = id) =>
+            return JoystickEvent.Disconnected :: :: call
+                id = id
+
+fn copy_user_event(read event: UserEvent) -> UserEvent:
+    select event:
+        when UserEvent.Signaled(id = id) =>
+            return UserEvent.Signaled :: :: call
+                id = id
+
+impl App:
+    fn pending_window_event_count(edit self) -> Index:
+        let batch = self.take_event_batch :: :: method
+        let count = batch.window_count :: :: method
+        self.pending = batch.events
+        return count
+
+    fn pending_monitor_event_count(edit self) -> Index:
+        let batch = self.take_event_batch :: :: method
+        let count = batch.monitor_count :: :: method
+        self.pending = batch.events
+        return count
+
+    fn pending_joystick_event_count(edit self) -> Index:
+        let batch = self.take_event_batch :: :: method
+        let count = batch.joystick_count :: :: method
+        self.pending = batch.events
+        return count
+
+    fn pending_user_event_count(edit self) -> Index:
+        let batch = self.take_event_batch :: :: method
+        let count = batch.user_count :: :: method
+        self.pending = batch.events
+        return count
+
+    fn has_pending_window_events(edit self) -> Bool:
+        return self.pending_window_event_count :: :: method != 0
+
+    fn has_pending_monitor_events(edit self) -> Bool:
+        return self.pending_monitor_event_count :: :: method != 0
+
+    fn has_pending_joystick_events(edit self) -> Bool:
+        return self.pending_joystick_event_count :: :: method != 0
+
+    fn has_pending_user_events(edit self) -> Bool:
+        return self.pending_user_event_count :: :: method != 0
+
+    fn pending_window_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.take_windows :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_monitor_events(edit self) -> List[MonitorEvent]:
+        let events = List[MonitorEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.pending.is_empty :: :: method:
+            let event = self.pending.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let wrapped = AppEvent.Window :: window_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Monitor(monitor_event) =>
+                    let copied = copy_monitor_event :: monitor_event :: call
+                    events.push :: copied :: method
+                    let wrapped = AppEvent.Monitor :: monitor_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Joystick(joystick_event) =>
+                    let wrapped = AppEvent.Joystick :: joystick_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.User(user_event) =>
+                    let wrapped = AppEvent.User :: user_event :: call
+                    remaining.push :: wrapped :: method
+        self.pending = remaining
+        return events
+
+    fn pending_joystick_events(edit self) -> List[JoystickEvent]:
+        let events = List[JoystickEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.pending.is_empty :: :: method:
+            let event = self.pending.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let wrapped = AppEvent.Window :: window_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Monitor(monitor_event) =>
+                    let wrapped = AppEvent.Monitor :: monitor_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Joystick(joystick_event) =>
+                    let copied = copy_joystick_event :: joystick_event :: call
+                    events.push :: copied :: method
+                    let wrapped = AppEvent.Joystick :: joystick_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.User(user_event) =>
+                    let wrapped = AppEvent.User :: user_event :: call
+                    remaining.push :: wrapped :: method
+        self.pending = remaining
+        return events
+
+    fn pending_user_events(edit self) -> List[UserEvent]:
+        let events = List[UserEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.pending.is_empty :: :: method:
+            let event = self.pending.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let wrapped = AppEvent.Window :: window_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Monitor(monitor_event) =>
+                    let wrapped = AppEvent.Monitor :: monitor_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Joystick(joystick_event) =>
+                    let wrapped = AppEvent.Joystick :: joystick_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.User(user_event) =>
+                    let copied = copy_user_event :: user_event :: call
+                    events.push :: copied :: method
+                    let wrapped = AppEvent.User :: user_event :: call
+                    remaining.push :: wrapped :: method
+        self.pending = remaining
+        return events
+
+    fn pending_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.take_window_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        let events = List[MonitorEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.pending.is_empty :: :: method:
+            let event = self.pending.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let wrapped = AppEvent.Window :: window_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Monitor(monitor_event) =>
+                    select:
+                        when monitor_event.monitor_id :: :: method == id =>
+                            let copied = copy_monitor_event :: monitor_event :: call
+                            events.push :: copied :: method
+                        else => ()
+                    let wrapped = AppEvent.Monitor :: monitor_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Joystick(joystick_event) =>
+                    let wrapped = AppEvent.Joystick :: joystick_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.User(user_event) =>
+                    let wrapped = AppEvent.User :: user_event :: call
+                    remaining.push :: wrapped :: method
+        self.pending = remaining
+        return events
+
+    fn pending_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        let events = List[JoystickEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.pending.is_empty :: :: method:
+            let event = self.pending.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let wrapped = AppEvent.Window :: window_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Monitor(monitor_event) =>
+                    let wrapped = AppEvent.Monitor :: monitor_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Joystick(joystick_event) =>
+                    select:
+                        when joystick_event.joystick_id :: :: method == id =>
+                            let copied = copy_joystick_event :: joystick_event :: call
+                            events.push :: copied :: method
+                        else => ()
+                    let wrapped = AppEvent.Joystick :: joystick_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.User(user_event) =>
+                    let wrapped = AppEvent.User :: user_event :: call
+                    remaining.push :: wrapped :: method
+        self.pending = remaining
+        return events
+
+    fn pending_user_events_for(edit self, id: UserEventId) -> List[UserEvent]:
+        let events = List[UserEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.pending.is_empty :: :: method:
+            let event = self.pending.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let wrapped = AppEvent.Window :: window_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Monitor(monitor_event) =>
+                    let wrapped = AppEvent.Monitor :: monitor_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Joystick(joystick_event) =>
+                    let wrapped = AppEvent.Joystick :: joystick_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.User(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method == id =>
+                            let copied = copy_user_event :: user_event :: call
+                            events.push :: copied :: method
+                        else => ()
+                    let wrapped = AppEvent.User :: user_event :: call
+                    remaining.push :: wrapped :: method
+        self.pending = remaining
+        return events
+
+    fn pending_created_window_ids(edit self) -> List[WindowId]:
+        let ids = List[WindowId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.pending.is_empty :: :: method:
+            let event = self.pending.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.Created(id = id) => ids.push :: id :: method
+                        when _ => ()
+                    let wrapped = AppEvent.Window :: window_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Monitor(monitor_event) =>
+                    let wrapped = AppEvent.Monitor :: monitor_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Joystick(joystick_event) =>
+                    let wrapped = AppEvent.Joystick :: joystick_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.User(user_event) =>
+                    let wrapped = AppEvent.User :: user_event :: call
+                    remaining.push :: wrapped :: method
+        self.pending = remaining
+        return ids
+
+    fn pending_created_window_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.created_window_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_destroyed_window_ids(edit self) -> List[WindowId]:
+        let ids = List[WindowId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.pending.is_empty :: :: method:
+            let event = self.pending.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.Destroyed(id = id) => ids.push :: id :: method
+                        when _ => ()
+                    let wrapped = AppEvent.Window :: window_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Monitor(monitor_event) =>
+                    let wrapped = AppEvent.Monitor :: monitor_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Joystick(joystick_event) =>
+                    let wrapped = AppEvent.Joystick :: joystick_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.User(user_event) =>
+                    let wrapped = AppEvent.User :: user_event :: call
+                    remaining.push :: wrapped :: method
+        self.pending = remaining
+        return ids
+
+    fn pending_destroyed_window_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.destroyed_window_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_close_requested_window_ids(edit self) -> List[WindowId]:
+        let ids = List[WindowId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.pending.is_empty :: :: method:
+            let event = self.pending.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CloseRequested(id = id) => ids.push :: id :: method
+                        when _ => ()
+                    let wrapped = AppEvent.Window :: window_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Monitor(monitor_event) =>
+                    let wrapped = AppEvent.Monitor :: monitor_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Joystick(joystick_event) =>
+                    let wrapped = AppEvent.Joystick :: joystick_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.User(user_event) =>
+                    let wrapped = AppEvent.User :: user_event :: call
+                    remaining.push :: wrapped :: method
+        self.pending = remaining
+        return ids
+
+    fn pending_close_requested_window_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.close_requested_window_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_connected_monitor_ids(edit self) -> List[MonitorId]:
+        let ids = List[MonitorId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.pending.is_empty :: :: method:
+            let event = self.pending.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let wrapped = AppEvent.Window :: window_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Monitor(monitor_event) =>
+                    select monitor_event:
+                        when MonitorEvent.Connected(id = id) => ids.push :: id :: method
+                        when _ => ()
+                    let wrapped = AppEvent.Monitor :: monitor_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Joystick(joystick_event) =>
+                    let wrapped = AppEvent.Joystick :: joystick_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.User(user_event) =>
+                    let wrapped = AppEvent.User :: user_event :: call
+                    remaining.push :: wrapped :: method
+        self.pending = remaining
+        return ids
+
+    fn pending_connected_monitor_events(edit self) -> List[MonitorEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.connected_monitor_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_disconnected_monitor_ids(edit self) -> List[MonitorId]:
+        let ids = List[MonitorId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.pending.is_empty :: :: method:
+            let event = self.pending.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let wrapped = AppEvent.Window :: window_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Monitor(monitor_event) =>
+                    select monitor_event:
+                        when MonitorEvent.Disconnected(id = id) => ids.push :: id :: method
+                        when _ => ()
+                    let wrapped = AppEvent.Monitor :: monitor_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Joystick(joystick_event) =>
+                    let wrapped = AppEvent.Joystick :: joystick_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.User(user_event) =>
+                    let wrapped = AppEvent.User :: user_event :: call
+                    remaining.push :: wrapped :: method
+        self.pending = remaining
+        return ids
+
+    fn pending_disconnected_monitor_events(edit self) -> List[MonitorEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.disconnected_monitor_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_connected_joystick_events(edit self) -> List[JoystickEvent]:
+        let events = List[JoystickEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.pending.is_empty :: :: method:
+            let event = self.pending.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let wrapped = AppEvent.Window :: window_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Monitor(monitor_event) =>
+                    let wrapped = AppEvent.Monitor :: monitor_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Joystick(joystick_event) =>
+                    select joystick_event:
+                        when JoystickEvent.Connected(id = _, gamepad = _) =>
+                            let copied = copy_joystick_event :: joystick_event :: call
+                            events.push :: copied :: method
+                        when _ => ()
+                    let wrapped = AppEvent.Joystick :: joystick_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.User(user_event) =>
+                    let wrapped = AppEvent.User :: user_event :: call
+                    remaining.push :: wrapped :: method
+        self.pending = remaining
+        return events
+
+    fn pending_connected_joystick_ids(edit self) -> List[JoystickId]:
+        let batch = self.take_event_batch :: :: method
+        let ids = batch.connected_joystick_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn pending_disconnected_joystick_ids(edit self) -> List[JoystickId]:
+        let ids = List[JoystickId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.pending.is_empty :: :: method:
+            let event = self.pending.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let wrapped = AppEvent.Window :: window_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Monitor(monitor_event) =>
+                    let wrapped = AppEvent.Monitor :: monitor_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Joystick(joystick_event) =>
+                    select joystick_event:
+                        when JoystickEvent.Disconnected(id = id) => ids.push :: id :: method
+                        when _ => ()
+                    let wrapped = AppEvent.Joystick :: joystick_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.User(user_event) =>
+                    let wrapped = AppEvent.User :: user_event :: call
+                    remaining.push :: wrapped :: method
+        self.pending = remaining
+        return ids
+
+    fn pending_disconnected_joystick_events(edit self) -> List[JoystickEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.disconnected_joystick_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_window_ids(edit self) -> List[WindowId]:
+        let batch = self.take_event_batch :: :: method
+        let ids = batch.window_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn pending_monitor_ids(edit self) -> List[MonitorId]:
+        let batch = self.take_event_batch :: :: method
+        let ids = batch.monitor_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn pending_joystick_ids(edit self) -> List[JoystickId]:
+        let batch = self.take_event_batch :: :: method
+        let ids = batch.joystick_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn pending_user_ids(edit self) -> List[UserEventId]:
+        let ids = List[UserEventId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.pending.is_empty :: :: method:
+            let event = self.pending.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let wrapped = AppEvent.Window :: window_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Monitor(monitor_event) =>
+                    let wrapped = AppEvent.Monitor :: monitor_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.Joystick(joystick_event) =>
+                    let wrapped = AppEvent.Joystick :: joystick_event :: call
+                    remaining.push :: wrapped :: method
+                when AppEvent.User(user_event) =>
+                    let id = user_event.user_id :: :: method
+                    ids.push :: id :: method
+                    let wrapped = AppEvent.User :: user_event :: call
+                    remaining.push :: wrapped :: method
+        self.pending = remaining
+        return ids
+
+    fn next_window_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return pending_pop_window_event_for :: self.pending, id :: call
+
+    fn next_monitor_event_for(edit self, id: MonitorId) -> Option[MonitorEvent]:
+        return pending_pop_monitor_event_for :: self.pending, id :: call
+
+    fn next_joystick_event_for(edit self, id: JoystickId) -> Option[JoystickEvent]:
+        return pending_pop_joystick_event_for :: self.pending, id :: call
+
+    fn next_user_event_for(edit self, id: UserEventId) -> Option[UserEvent]:
+        return pending_pop_user_event_for :: self.pending, id :: call
+
+    fn next_moved_data(edit self) -> Option[WindowMoveData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_moved_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn next_resized_data(edit self) -> Option[WindowSizeData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_resized_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn next_framebuffer_resized_data(edit self) -> Option[WindowSizeData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_framebuffer_resized_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn next_content_scale_data(edit self) -> Option[WindowScaleData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_content_scale_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn next_focus_state(edit self) -> Option[Bool]:
+        let batch = self.take_event_batch :: :: method
+        let state = batch.pop_focus_state :: :: method
+        self.pending = batch.events
+        return state
+
+    fn next_iconified_state(edit self) -> Option[Bool]:
+        let batch = self.take_event_batch :: :: method
+        let state = batch.pop_iconified_state :: :: method
+        self.pending = batch.events
+        return state
+
+    fn next_maximized_state(edit self) -> Option[Bool]:
+        let batch = self.take_event_batch :: :: method
+        let state = batch.pop_maximized_state :: :: method
+        self.pending = batch.events
+        return state
+
+    fn next_cursor_entered_state(edit self) -> Option[Bool]:
+        let batch = self.take_event_batch :: :: method
+        let state = batch.pop_cursor_entered_state :: :: method
+        self.pending = batch.events
+        return state
+
+    fn next_moved_data_for(edit self, id: WindowId) -> Option[WindowMoveData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_moved_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn next_resized_data_for(edit self, id: WindowId) -> Option[WindowSizeData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_resized_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn next_framebuffer_resized_data_for(edit self, id: WindowId) -> Option[WindowSizeData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_framebuffer_resized_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn next_content_scale_data_for(edit self, id: WindowId) -> Option[WindowScaleData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_content_scale_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn next_focus_state_for(edit self, id: WindowId) -> Option[Bool]:
+        let batch = self.take_event_batch :: :: method
+        let state = batch.pop_focus_state_for :: id :: method
+        self.pending = batch.events
+        return state
+
+    fn next_iconified_state_for(edit self, id: WindowId) -> Option[Bool]:
+        let batch = self.take_event_batch :: :: method
+        let state = batch.pop_iconified_state_for :: id :: method
+        self.pending = batch.events
+        return state
+
+    fn next_maximized_state_for(edit self, id: WindowId) -> Option[Bool]:
+        let batch = self.take_event_batch :: :: method
+        let state = batch.pop_maximized_state_for :: id :: method
+        self.pending = batch.events
+        return state
+
+    fn next_cursor_entered_state_for(edit self, id: WindowId) -> Option[Bool]:
+        let batch = self.take_event_batch :: :: method
+        let state = batch.pop_cursor_entered_state_for :: id :: method
+        self.pending = batch.events
+        return state
+
+    fn poll_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        let event = pending_pop_window_event_for :: self.pending, id :: call
+        return Result.Ok :: event :: call
+
+    fn poll_monitor_event_for(edit self, id: MonitorId) -> Result[Option[MonitorEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        let event = pending_pop_monitor_event_for :: self.pending, id :: call
+        return Result.Ok :: event :: call
+
+    fn poll_joystick_event_for(edit self, id: JoystickId) -> Result[Option[JoystickEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        let event = pending_pop_joystick_event_for :: self.pending, id :: call
+        return Result.Ok :: event :: call
+
+    fn poll_user_event_for(edit self, id: UserEventId) -> Result[Option[UserEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        let event = pending_pop_user_event_for :: self.pending, id :: call
+        return Result.Ok :: event :: call
+
+    fn poll_next_moved_data(edit self) -> Result[Option[WindowMoveData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_moved_data :: :: method :: call
+
+    fn poll_next_resized_data(edit self) -> Result[Option[WindowSizeData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_resized_data :: :: method :: call
+
+    fn poll_next_framebuffer_resized_data(edit self) -> Result[Option[WindowSizeData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_framebuffer_resized_data :: :: method :: call
+
+    fn poll_next_content_scale_data(edit self) -> Result[Option[WindowScaleData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_content_scale_data :: :: method :: call
+
+    fn poll_next_focus_state(edit self) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_focus_state :: :: method :: call
+
+    fn poll_next_iconified_state(edit self) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_iconified_state :: :: method :: call
+
+    fn poll_next_maximized_state(edit self) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_maximized_state :: :: method :: call
+
+    fn poll_next_cursor_entered_state(edit self) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_cursor_entered_state :: :: method :: call
+
+    fn poll_next_moved_data_for(edit self, id: WindowId) -> Result[Option[WindowMoveData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_moved_data_for :: id :: method :: call
+
+    fn poll_next_resized_data_for(edit self, id: WindowId) -> Result[Option[WindowSizeData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_resized_data_for :: id :: method :: call
+
+    fn poll_next_framebuffer_resized_data_for(edit self, id: WindowId) -> Result[Option[WindowSizeData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_framebuffer_resized_data_for :: id :: method :: call
+
+    fn poll_next_content_scale_data_for(edit self, id: WindowId) -> Result[Option[WindowScaleData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_content_scale_data_for :: id :: method :: call
+
+    fn poll_next_focus_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_focus_state_for :: id :: method :: call
+
+    fn poll_next_iconified_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_iconified_state_for :: id :: method :: call
+
+    fn poll_next_maximized_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_maximized_state_for :: id :: method :: call
+
+    fn poll_next_cursor_entered_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_cursor_entered_state_for :: id :: method :: call
+
+    fn poll_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_monitor_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_joystick_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_user_events_for(edit self, id: UserEventId) -> List[UserEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_user_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_connected_monitor_ids(edit self) -> List[MonitorId]:
+        let batch = self.poll_event_batch :: :: method
+        let ids = batch.take_connected_monitor_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn poll_connected_monitor_events(edit self) -> List[MonitorEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_connected_monitor_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_disconnected_monitor_ids(edit self) -> List[MonitorId]:
+        let batch = self.poll_event_batch :: :: method
+        let ids = batch.take_disconnected_monitor_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn poll_disconnected_monitor_events(edit self) -> List[MonitorEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_disconnected_monitor_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_connected_joystick_events(edit self) -> List[JoystickEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_connected_joystick_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_connected_joystick_ids(edit self) -> List[JoystickId]:
+        let batch = self.poll_event_batch :: :: method
+        let ids = batch.take_connected_joystick_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn poll_disconnected_joystick_ids(edit self) -> List[JoystickId]:
+        let batch = self.poll_event_batch :: :: method
+        let ids = batch.take_disconnected_joystick_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn poll_disconnected_joystick_events(edit self) -> List[JoystickEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_disconnected_joystick_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        let event = pending_pop_window_event_for :: self.pending, id :: call
+        return Result.Ok :: event :: call
+
+    fn wait_monitor_event_for(edit self, id: MonitorId) -> Result[Option[MonitorEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        let event = pending_pop_monitor_event_for :: self.pending, id :: call
+        return Result.Ok :: event :: call
+
+    fn wait_joystick_event_for(edit self, id: JoystickId) -> Result[Option[JoystickEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        let event = pending_pop_joystick_event_for :: self.pending, id :: call
+        return Result.Ok :: event :: call
+
+    fn wait_user_event_for(edit self, id: UserEventId) -> Result[Option[UserEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        let event = pending_pop_user_event_for :: self.pending, id :: call
+        return Result.Ok :: event :: call
+
+    fn wait_next_moved_data(edit self) -> Result[Option[WindowMoveData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_moved_data :: :: method :: call
+
+    fn wait_next_resized_data(edit self) -> Result[Option[WindowSizeData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_resized_data :: :: method :: call
+
+    fn wait_next_framebuffer_resized_data(edit self) -> Result[Option[WindowSizeData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_framebuffer_resized_data :: :: method :: call
+
+    fn wait_next_content_scale_data(edit self) -> Result[Option[WindowScaleData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_content_scale_data :: :: method :: call
+
+    fn wait_next_focus_state(edit self) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_focus_state :: :: method :: call
+
+    fn wait_next_iconified_state(edit self) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_iconified_state :: :: method :: call
+
+    fn wait_next_maximized_state(edit self) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_maximized_state :: :: method :: call
+
+    fn wait_next_cursor_entered_state(edit self) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_cursor_entered_state :: :: method :: call
+
+    fn wait_next_moved_data_for(edit self, id: WindowId) -> Result[Option[WindowMoveData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_moved_data_for :: id :: method :: call
+
+    fn wait_next_resized_data_for(edit self, id: WindowId) -> Result[Option[WindowSizeData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_resized_data_for :: id :: method :: call
+
+    fn wait_next_framebuffer_resized_data_for(edit self, id: WindowId) -> Result[Option[WindowSizeData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_framebuffer_resized_data_for :: id :: method :: call
+
+    fn wait_next_content_scale_data_for(edit self, id: WindowId) -> Result[Option[WindowScaleData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_content_scale_data_for :: id :: method :: call
+
+    fn wait_next_focus_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_focus_state_for :: id :: method :: call
+
+    fn wait_next_iconified_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_iconified_state_for :: id :: method :: call
+
+    fn wait_next_maximized_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_maximized_state_for :: id :: method :: call
+
+    fn wait_next_cursor_entered_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_cursor_entered_state_for :: id :: method :: call
+
+    fn wait_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_monitor_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_joystick_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_user_events_for(edit self, id: UserEventId) -> List[UserEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_user_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_connected_monitor_ids(edit self) -> List[MonitorId]:
+        let batch = self.wait_event_batch :: :: method
+        let ids = batch.take_connected_monitor_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn wait_connected_monitor_events(edit self) -> List[MonitorEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_connected_monitor_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_disconnected_monitor_ids(edit self) -> List[MonitorId]:
+        let batch = self.wait_event_batch :: :: method
+        let ids = batch.take_disconnected_monitor_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn wait_disconnected_monitor_events(edit self) -> List[MonitorEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_disconnected_monitor_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_connected_joystick_events(edit self) -> List[JoystickEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_connected_joystick_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_connected_joystick_ids(edit self) -> List[JoystickId]:
+        let batch = self.wait_event_batch :: :: method
+        let ids = batch.take_connected_joystick_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn wait_disconnected_joystick_ids(edit self) -> List[JoystickId]:
+        let batch = self.wait_event_batch :: :: method
+        let ids = batch.take_disconnected_joystick_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn wait_disconnected_joystick_events(edit self) -> List[JoystickEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_disconnected_joystick_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_window_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        let event = pending_pop_window_event_for :: self.pending, id :: call
+        return Result.Ok :: event :: call
+
+    fn wait_timeout_monitor_event_for(edit self, id: MonitorId, timeout: F64) -> Result[Option[MonitorEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        let event = pending_pop_monitor_event_for :: self.pending, id :: call
+        return Result.Ok :: event :: call
+
+    fn wait_timeout_joystick_event_for(edit self, id: JoystickId, timeout: F64) -> Result[Option[JoystickEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        let event = pending_pop_joystick_event_for :: self.pending, id :: call
+        return Result.Ok :: event :: call
+
+    fn wait_timeout_user_event_for(edit self, id: UserEventId, timeout: F64) -> Result[Option[UserEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        let event = pending_pop_user_event_for :: self.pending, id :: call
+        return Result.Ok :: event :: call
+
+    fn wait_timeout_next_moved_data(edit self, timeout: F64) -> Result[Option[WindowMoveData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_moved_data :: :: method :: call
+
+    fn wait_timeout_next_resized_data(edit self, timeout: F64) -> Result[Option[WindowSizeData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_resized_data :: :: method :: call
+
+    fn wait_timeout_next_framebuffer_resized_data(edit self, timeout: F64) -> Result[Option[WindowSizeData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_framebuffer_resized_data :: :: method :: call
+
+    fn wait_timeout_next_content_scale_data(edit self, timeout: F64) -> Result[Option[WindowScaleData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_content_scale_data :: :: method :: call
+
+    fn wait_timeout_next_focus_state(edit self, timeout: F64) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_focus_state :: :: method :: call
+
+    fn wait_timeout_next_iconified_state(edit self, timeout: F64) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_iconified_state :: :: method :: call
+
+    fn wait_timeout_next_maximized_state(edit self, timeout: F64) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_maximized_state :: :: method :: call
+
+    fn wait_timeout_next_cursor_entered_state(edit self, timeout: F64) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_cursor_entered_state :: :: method :: call
+
+    fn wait_timeout_next_moved_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowMoveData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_moved_data_for :: id :: method :: call
+
+    fn wait_timeout_next_resized_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowSizeData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_resized_data_for :: id :: method :: call
+
+    fn wait_timeout_next_framebuffer_resized_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowSizeData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_framebuffer_resized_data_for :: id :: method :: call
+
+    fn wait_timeout_next_content_scale_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowScaleData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_content_scale_data_for :: id :: method :: call
+
+    fn wait_timeout_next_focus_state_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_focus_state_for :: id :: method :: call
+
+    fn wait_timeout_next_iconified_state_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_iconified_state_for :: id :: method :: call
+
+    fn wait_timeout_next_maximized_state_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_maximized_state_for :: id :: method :: call
+
+    fn wait_timeout_next_cursor_entered_state_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Bool], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_cursor_entered_state_for :: id :: method :: call
+
+    fn wait_timeout_monitor_events_for(edit self, id: MonitorId, timeout: F64) -> List[MonitorEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_monitor_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_joystick_events_for(edit self, id: JoystickId, timeout: F64) -> List[JoystickEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_joystick_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_user_events_for(edit self, id: UserEventId, timeout: F64) -> List[UserEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_user_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_connected_monitor_ids(edit self, timeout: F64) -> List[MonitorId]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let ids = batch.take_connected_monitor_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn wait_timeout_connected_monitor_events(edit self, timeout: F64) -> List[MonitorEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_connected_monitor_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_disconnected_monitor_ids(edit self, timeout: F64) -> List[MonitorId]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let ids = batch.take_disconnected_monitor_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn wait_timeout_disconnected_monitor_events(edit self, timeout: F64) -> List[MonitorEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_disconnected_monitor_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_connected_joystick_events(edit self, timeout: F64) -> List[JoystickEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_connected_joystick_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_connected_joystick_ids(edit self, timeout: F64) -> List[JoystickId]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let ids = batch.take_connected_joystick_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn wait_timeout_disconnected_joystick_ids(edit self, timeout: F64) -> List[JoystickId]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let ids = batch.take_disconnected_joystick_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn wait_timeout_disconnected_joystick_events(edit self, timeout: F64) -> List[JoystickEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_disconnected_joystick_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_refreshed_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.refreshed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_moved_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.moved_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_resized_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.resized_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_framebuffer_resized_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.framebuffer_resized_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_content_scale_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.content_scale_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_focus_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.focus_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_iconified_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.iconified_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_maximized_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.maximized_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_cursor_entered_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.cursor_entered_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_refreshed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.refreshed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.moved_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_resized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.resized_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_framebuffer_resized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.framebuffer_resized_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_content_scale_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.content_scale_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_focus_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.focus_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_iconified_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.iconified_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_maximized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.maximized_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_cursor_entered_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.cursor_entered_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_moved_data(edit self) -> List[WindowMoveData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.moved_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_resized_data(edit self) -> List[WindowSizeData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.resized_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_framebuffer_resized_data(edit self) -> List[WindowSizeData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.framebuffer_resized_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_content_scale_data(edit self) -> List[WindowScaleData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.content_scale_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_focus_states(edit self) -> List[Bool]:
+        let batch = self.take_event_batch :: :: method
+        let states = batch.focus_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn pending_iconified_states(edit self) -> List[Bool]:
+        let batch = self.take_event_batch :: :: method
+        let states = batch.iconified_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn pending_maximized_states(edit self) -> List[Bool]:
+        let batch = self.take_event_batch :: :: method
+        let states = batch.maximized_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn pending_cursor_entered_states(edit self) -> List[Bool]:
+        let batch = self.take_event_batch :: :: method
+        let states = batch.cursor_entered_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn pending_moved_data_for(edit self, id: WindowId) -> List[WindowMoveData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.moved_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_resized_data_for(edit self, id: WindowId) -> List[WindowSizeData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.resized_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_framebuffer_resized_data_for(edit self, id: WindowId) -> List[WindowSizeData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.framebuffer_resized_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_content_scale_data_for(edit self, id: WindowId) -> List[WindowScaleData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.content_scale_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_focus_states_for(edit self, id: WindowId) -> List[Bool]:
+        let batch = self.take_event_batch :: :: method
+        let states = batch.focus_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn pending_iconified_states_for(edit self, id: WindowId) -> List[Bool]:
+        let batch = self.take_event_batch :: :: method
+        let states = batch.iconified_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn pending_maximized_states_for(edit self, id: WindowId) -> List[Bool]:
+        let batch = self.take_event_batch :: :: method
+        let states = batch.maximized_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn pending_cursor_entered_states_for(edit self, id: WindowId) -> List[Bool]:
+        let batch = self.take_event_batch :: :: method
+        let states = batch.cursor_entered_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn pending_key_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.key_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_character_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.character_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_character_mods_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.character_mods_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_mouse_button_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.mouse_button_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_cursor_moved_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.cursor_moved_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_scrolled_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.scrolled_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_key_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.key_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_character_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.character_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_character_mods_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.character_mods_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_mouse_button_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.mouse_button_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_cursor_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.cursor_moved_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_scrolled_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.scrolled_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_cursor_data(edit self) -> List[WindowCursorData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.cursor_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_scroll_data(edit self) -> List[WindowScrollData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.scroll_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_key_data(edit self) -> List[WindowKeyData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.key_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_character_data(edit self) -> List[WindowCharacterData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.character_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_character_mods_data(edit self) -> List[WindowCharacterModsData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.character_mods_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_mouse_button_data(edit self) -> List[WindowMouseButtonData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.mouse_button_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_cursor_data_for(edit self, id: WindowId) -> List[WindowCursorData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.cursor_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_scroll_data_for(edit self, id: WindowId) -> List[WindowScrollData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.scroll_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_key_data_for(edit self, id: WindowId) -> List[WindowKeyData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.key_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_character_data_for(edit self, id: WindowId) -> List[WindowCharacterData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.character_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_character_mods_data_for(edit self, id: WindowId) -> List[WindowCharacterModsData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.character_mods_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_mouse_button_data_for(edit self, id: WindowId) -> List[WindowMouseButtonData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.mouse_button_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_cursor_data(edit self) -> List[WindowCursorData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_cursor_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_scroll_data(edit self) -> List[WindowScrollData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_scroll_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_key_data(edit self) -> List[WindowKeyData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_key_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_character_data(edit self) -> List[WindowCharacterData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_character_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_character_mods_data(edit self) -> List[WindowCharacterModsData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_character_mods_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_mouse_button_data(edit self) -> List[WindowMouseButtonData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_mouse_button_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_dropped_paths_lists(edit self) -> List[List[Str]]:
+        let batch = self.poll_event_batch :: :: method
+        let lists = batch.take_dropped_paths_lists :: :: method
+        self.pending = batch.events
+        return lists
+
+    fn poll_cursor_data_for(edit self, id: WindowId) -> List[WindowCursorData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_cursor_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_scroll_data_for(edit self, id: WindowId) -> List[WindowScrollData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_scroll_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_key_data_for(edit self, id: WindowId) -> List[WindowKeyData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_key_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_character_data_for(edit self, id: WindowId) -> List[WindowCharacterData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_character_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_character_mods_data_for(edit self, id: WindowId) -> List[WindowCharacterModsData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_character_mods_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_mouse_button_data_for(edit self, id: WindowId) -> List[WindowMouseButtonData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_mouse_button_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_dropped_paths_lists_for(edit self, id: WindowId) -> List[List[Str]]:
+        let batch = self.poll_event_batch :: :: method
+        let lists = batch.take_dropped_paths_lists_for :: id :: method
+        self.pending = batch.events
+        return lists
+
+    fn poll_refreshed_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_refreshed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_moved_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_moved_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_resized_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_resized_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_framebuffer_resized_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_framebuffer_resized_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_content_scale_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_content_scale_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_focus_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_focus_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_iconified_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_iconified_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_maximized_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_maximized_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_cursor_entered_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_cursor_entered_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_refreshed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_refreshed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_moved_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_resized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_resized_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_framebuffer_resized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_framebuffer_resized_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_content_scale_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_content_scale_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_focus_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_focus_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_iconified_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_iconified_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_maximized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_maximized_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_cursor_entered_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_cursor_entered_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_moved_data(edit self) -> List[WindowMoveData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_moved_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_resized_data(edit self) -> List[WindowSizeData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_resized_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_framebuffer_resized_data(edit self) -> List[WindowSizeData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_framebuffer_resized_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_content_scale_data(edit self) -> List[WindowScaleData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_content_scale_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_focus_states(edit self) -> List[Bool]:
+        let batch = self.poll_event_batch :: :: method
+        let states = batch.take_focus_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn poll_iconified_states(edit self) -> List[Bool]:
+        let batch = self.poll_event_batch :: :: method
+        let states = batch.take_iconified_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn poll_maximized_states(edit self) -> List[Bool]:
+        let batch = self.poll_event_batch :: :: method
+        let states = batch.take_maximized_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn poll_cursor_entered_states(edit self) -> List[Bool]:
+        let batch = self.poll_event_batch :: :: method
+        let states = batch.take_cursor_entered_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn poll_moved_data_for(edit self, id: WindowId) -> List[WindowMoveData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_moved_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_resized_data_for(edit self, id: WindowId) -> List[WindowSizeData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_resized_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_framebuffer_resized_data_for(edit self, id: WindowId) -> List[WindowSizeData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_framebuffer_resized_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_content_scale_data_for(edit self, id: WindowId) -> List[WindowScaleData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_content_scale_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_focus_states_for(edit self, id: WindowId) -> List[Bool]:
+        let batch = self.poll_event_batch :: :: method
+        let states = batch.take_focus_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn poll_iconified_states_for(edit self, id: WindowId) -> List[Bool]:
+        let batch = self.poll_event_batch :: :: method
+        let states = batch.take_iconified_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn poll_maximized_states_for(edit self, id: WindowId) -> List[Bool]:
+        let batch = self.poll_event_batch :: :: method
+        let states = batch.take_maximized_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn poll_cursor_entered_states_for(edit self, id: WindowId) -> List[Bool]:
+        let batch = self.poll_event_batch :: :: method
+        let states = batch.take_cursor_entered_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn poll_key_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_key_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_character_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_character_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_character_mods_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_character_mods_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_mouse_button_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_mouse_button_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_cursor_moved_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_cursor_moved_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_scrolled_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_scrolled_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_dropped_path_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_dropped_path_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_key_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_key_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_character_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_character_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_character_mods_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_character_mods_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_mouse_button_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_mouse_button_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_cursor_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_cursor_moved_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_scrolled_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_scrolled_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_dropped_path_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_dropped_path_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_cursor_data(edit self) -> List[WindowCursorData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_cursor_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_scroll_data(edit self) -> List[WindowScrollData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_scroll_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_key_data(edit self) -> List[WindowKeyData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_key_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_character_data(edit self) -> List[WindowCharacterData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_character_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_character_mods_data(edit self) -> List[WindowCharacterModsData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_character_mods_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_mouse_button_data(edit self) -> List[WindowMouseButtonData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_mouse_button_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_dropped_paths_lists(edit self) -> List[List[Str]]:
+        let batch = self.wait_event_batch :: :: method
+        let lists = batch.take_dropped_paths_lists :: :: method
+        self.pending = batch.events
+        return lists
+
+    fn wait_cursor_data_for(edit self, id: WindowId) -> List[WindowCursorData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_cursor_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_scroll_data_for(edit self, id: WindowId) -> List[WindowScrollData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_scroll_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_key_data_for(edit self, id: WindowId) -> List[WindowKeyData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_key_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_character_data_for(edit self, id: WindowId) -> List[WindowCharacterData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_character_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_character_mods_data_for(edit self, id: WindowId) -> List[WindowCharacterModsData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_character_mods_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_mouse_button_data_for(edit self, id: WindowId) -> List[WindowMouseButtonData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_mouse_button_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_dropped_paths_lists_for(edit self, id: WindowId) -> List[List[Str]]:
+        let batch = self.wait_event_batch :: :: method
+        let lists = batch.take_dropped_paths_lists_for :: id :: method
+        self.pending = batch.events
+        return lists
+
+    fn wait_refreshed_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_refreshed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_moved_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_moved_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_resized_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_resized_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_framebuffer_resized_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_framebuffer_resized_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_content_scale_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_content_scale_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_focus_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_focus_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_iconified_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_iconified_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_maximized_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_maximized_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_cursor_entered_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_cursor_entered_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_refreshed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_refreshed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_moved_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_resized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_resized_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_framebuffer_resized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_framebuffer_resized_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_content_scale_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_content_scale_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_focus_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_focus_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_iconified_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_iconified_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_maximized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_maximized_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_cursor_entered_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_cursor_entered_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_moved_data(edit self) -> List[WindowMoveData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_moved_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_resized_data(edit self) -> List[WindowSizeData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_resized_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_framebuffer_resized_data(edit self) -> List[WindowSizeData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_framebuffer_resized_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_content_scale_data(edit self) -> List[WindowScaleData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_content_scale_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_focus_states(edit self) -> List[Bool]:
+        let batch = self.wait_event_batch :: :: method
+        let states = batch.take_focus_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_iconified_states(edit self) -> List[Bool]:
+        let batch = self.wait_event_batch :: :: method
+        let states = batch.take_iconified_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_maximized_states(edit self) -> List[Bool]:
+        let batch = self.wait_event_batch :: :: method
+        let states = batch.take_maximized_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_cursor_entered_states(edit self) -> List[Bool]:
+        let batch = self.wait_event_batch :: :: method
+        let states = batch.take_cursor_entered_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_moved_data_for(edit self, id: WindowId) -> List[WindowMoveData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_moved_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_resized_data_for(edit self, id: WindowId) -> List[WindowSizeData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_resized_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_framebuffer_resized_data_for(edit self, id: WindowId) -> List[WindowSizeData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_framebuffer_resized_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_content_scale_data_for(edit self, id: WindowId) -> List[WindowScaleData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_content_scale_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_focus_states_for(edit self, id: WindowId) -> List[Bool]:
+        let batch = self.wait_event_batch :: :: method
+        let states = batch.take_focus_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_iconified_states_for(edit self, id: WindowId) -> List[Bool]:
+        let batch = self.wait_event_batch :: :: method
+        let states = batch.take_iconified_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_maximized_states_for(edit self, id: WindowId) -> List[Bool]:
+        let batch = self.wait_event_batch :: :: method
+        let states = batch.take_maximized_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_cursor_entered_states_for(edit self, id: WindowId) -> List[Bool]:
+        let batch = self.wait_event_batch :: :: method
+        let states = batch.take_cursor_entered_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_key_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_key_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_character_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_character_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_character_mods_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_character_mods_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_mouse_button_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_mouse_button_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_cursor_moved_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_cursor_moved_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_scrolled_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_scrolled_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_dropped_path_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_dropped_path_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_key_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_key_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_character_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_character_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_character_mods_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_character_mods_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_mouse_button_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_mouse_button_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_cursor_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_cursor_moved_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_scrolled_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_scrolled_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_dropped_path_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_dropped_path_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_cursor_data(edit self, timeout: F64) -> List[WindowCursorData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_cursor_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_scroll_data(edit self, timeout: F64) -> List[WindowScrollData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_scroll_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_key_data(edit self, timeout: F64) -> List[WindowKeyData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_key_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_character_data(edit self, timeout: F64) -> List[WindowCharacterData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_character_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_character_mods_data(edit self, timeout: F64) -> List[WindowCharacterModsData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_character_mods_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_mouse_button_data(edit self, timeout: F64) -> List[WindowMouseButtonData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_mouse_button_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_dropped_paths_lists(edit self, timeout: F64) -> List[List[Str]]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let lists = batch.take_dropped_paths_lists :: :: method
+        self.pending = batch.events
+        return lists
+
+    fn wait_timeout_cursor_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowCursorData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_cursor_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_scroll_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowScrollData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_scroll_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_key_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowKeyData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_key_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_character_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowCharacterData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_character_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_character_mods_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowCharacterModsData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_character_mods_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_mouse_button_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowMouseButtonData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_mouse_button_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_dropped_paths_lists_for(edit self, id: WindowId, timeout: F64) -> List[List[Str]]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let lists = batch.take_dropped_paths_lists_for :: id :: method
+        self.pending = batch.events
+        return lists
+
+    fn wait_timeout_refreshed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_refreshed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_moved_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_moved_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_resized_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_resized_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_framebuffer_resized_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_framebuffer_resized_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_content_scale_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_content_scale_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_focus_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_focus_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_iconified_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_iconified_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_maximized_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_maximized_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_cursor_entered_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_cursor_entered_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_refreshed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_refreshed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_moved_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_moved_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_resized_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_resized_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_framebuffer_resized_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_framebuffer_resized_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_content_scale_changed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_content_scale_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_focus_changed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_focus_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_iconified_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_iconified_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_maximized_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_maximized_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_cursor_entered_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_cursor_entered_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_moved_data(edit self, timeout: F64) -> List[WindowMoveData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_moved_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_resized_data(edit self, timeout: F64) -> List[WindowSizeData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_resized_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_framebuffer_resized_data(edit self, timeout: F64) -> List[WindowSizeData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_framebuffer_resized_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_content_scale_data(edit self, timeout: F64) -> List[WindowScaleData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_content_scale_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_focus_states(edit self, timeout: F64) -> List[Bool]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let states = batch.take_focus_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_timeout_iconified_states(edit self, timeout: F64) -> List[Bool]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let states = batch.take_iconified_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_timeout_maximized_states(edit self, timeout: F64) -> List[Bool]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let states = batch.take_maximized_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_timeout_cursor_entered_states(edit self, timeout: F64) -> List[Bool]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let states = batch.take_cursor_entered_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_timeout_moved_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowMoveData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_moved_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_resized_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowSizeData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_resized_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_framebuffer_resized_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowSizeData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_framebuffer_resized_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_content_scale_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowScaleData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_content_scale_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_focus_states_for(edit self, id: WindowId, timeout: F64) -> List[Bool]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let states = batch.take_focus_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_timeout_iconified_states_for(edit self, id: WindowId, timeout: F64) -> List[Bool]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let states = batch.take_iconified_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_timeout_maximized_states_for(edit self, id: WindowId, timeout: F64) -> List[Bool]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let states = batch.take_maximized_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_timeout_cursor_entered_states_for(edit self, id: WindowId, timeout: F64) -> List[Bool]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let states = batch.take_cursor_entered_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_timeout_key_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_key_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_character_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_character_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_character_mods_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_character_mods_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_mouse_button_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_mouse_button_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_cursor_moved_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_cursor_moved_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_scrolled_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_scrolled_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_dropped_path_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_dropped_path_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_key_changed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_key_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_character_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_character_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_character_mods_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_character_mods_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_mouse_button_changed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_mouse_button_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_cursor_moved_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_cursor_moved_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_scrolled_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_scrolled_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_dropped_path_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_dropped_path_events_for :: id :: method
+        self.pending = batch.events
+        return events

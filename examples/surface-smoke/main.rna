@@ -1,0 +1,24 @@
+use std.{MaybeStr, Result}
+use glfw.{glfw_create_window, glfw_default_window_hints, glfw_init}
+use glfw.{glfw_monitor_none, glfw_terminate}
+use glfw.glfw_window_none
+
+fn main() -> I32:
+    let started = glfw_init :: :: call
+    select:
+        when started =>
+            let Result.Ok(title) = "rnaglfw" as Maybe[MaybeStr] else => return 3
+            let title_ptr = title.as_ptr :: :: method
+            let null_monitor = glfw_monitor_none :: :: call
+            let null_share = glfw_window_none :: :: call
+            glfw_default_window_hints :: :: call
+            let window = glfw_create_window :: 640, 480, title_ptr, null_monitor, null_share :: call
+            select:
+                when window.is_null :: :: method =>
+                    glfw_terminate :: :: call
+                    return 2
+                else =>
+                    window.destroy :: :: method
+                    glfw_terminate :: :: call
+                    return 0
+        else => return 1

@@ -1,0 +1,2961 @@
+use std.{List, Option, Result, Str}
+use bridge.{cint_to_index, copy_c_string, index_to_cint, maybe_c_string}
+use bridge.TextDecodeError
+use event.{AppEvent, AppEventBatch, JoystickEvent, MonitorEvent}
+use event.{MonitorId, WindowEvent, split_app_events}
+use event.{JoystickId, UserEvent, UserEventId}
+use input.{InputAction, KeyCode, MouseButton}
+use joystick.{GamepadAxis, GamepadButton, GamepadState, HatState, Joystick}
+use joystick.{hat_state_from_raw, hat_state_raw, joystick_from_id}
+use mailbox.{WindowMailbox, allocate_window_mailbox, attach_callbacks}
+use mailbox.{clear_user_pointer, drain_window_mailbox, free_window_mailbox}
+use runtime_snapshot_support.{copy_monitor_snapshot, copy_window_snapshot}
+use glfw.{GlfwCursorPos, GlfwMonitor, GlfwMonitorRaw, GlfwPoint, GlfwScale}
+use glfw.{GlfwSize, GlfwWindow, GlfwWindowRaw, glfw_create_window_raw}
+use glfw.glfw_default_window_hints
+use glfw.{glfw_get_current_context, glfw_get_time, glfw_primary_monitor}
+use glfw.{glfw_init_hint, glfw_init_hint_bool}
+use glfw.{glfw_get_timer_frequency, glfw_get_timer_value, glfw_set_time}
+use glfw.glfw_window_raw_handle
+use glfw.{glfw_init, glfw_joystick_is_gamepad, glfw_joystick_present}
+use glfw.{glfw_monitor_raw_handle, glfw_monitors, glfw_poll_events}
+use glfw.{glfw_post_empty_event, glfw_terminate, glfw_wait_events}
+use glfw.{glfw_wait_events_timeout, glfw_window_hint, glfw_window_hint_bool}
+use glfw.{glfw_window_hint_no_api, glfw_window_hint_string}
+use graphics.Win32MonitorNames
+use system.{Platform, RuntimeErrorInfo, VersionInfo, runtime_last_error}
+use system.{runtime_platform, runtime_platform_raw, runtime_platform_supported}
+use system.runtime_version
+use system.runtime_version_string
+use window.{ClientApi, ContextCreationApi, CursorMode, CursorPos, FrameSize, Monitor}
+use window.{MonitorGammaRamp, OpenGlProfile, Point, Rect, Scale, Size, VideoMode}
+use window.{Window, WindowId, Win32HWnd}
+use window.WindowInputSnapshot
+use window.{client_api_raw, context_creation_api_raw}
+use window.opengl_profile_raw
+use window.{WindowModeError, WindowMonitorSpec, window_monitor_spec}
+use window.{WindowSpec, fixed_size_window_spec, fullscreen_window_spec}
+use window.fullscreen_window_spec_with_video_mode
+use window.{floating_window_spec, hidden_window_spec, maximized_window_spec}
+use window.{mouse_passthrough_window_spec, no_api_window_spec, vulkan_window_spec}
+use window.{egl_opengl_es_window_spec, egl_opengl_window_spec}
+use window.{opengl_core_debug_srgb_window_spec, opengl_core_debug_window_spec}
+use window.{opengl_core_srgb_window_spec, opengl_core_window_spec}
+use window.{opengl_compat_debug_srgb_window_spec, opengl_compat_debug_window_spec}
+use window.{opengl_compat_srgb_window_spec, opengl_compat_window_spec}
+use window.{opengl_debug_srgb_window_spec, opengl_debug_window_spec}
+use window.{opengl_es_window_spec, osmesa_opengl_window_spec}
+use window.{opengl_srgb_window_spec, opengl_window_spec, positioned_window_spec}
+use window.{transparent_window_spec, undecorated_window_spec, unfocused_window_spec}
+use window.{win32_keyboard_menu_window_spec, win32_showdefault_window_spec}
+use window.window_from_glfw
+const JOYSTICK_SLOT_LIMIT: CInt = 16
+const WINDOW_ID_START: WindowId = 1
+const MONITOR_ID_START: MonitorId = 1
+const WINDOW_ID_STEP: WindowId = 1
+const MONITOR_ID_STEP: MonitorId = 1
+pub enum AppError:
+    InitFailed
+    InvalidWindowSpec
+    VideoModeNotFound
+    MailboxAllocFailed
+    WindowCreateFailed
+    WindowNotFound
+    TextDecode(TextDecodeError)
+    NoCurrentContext
+    CurrentContextWindowNotTracked
+    MonitorNotFound
+    PrimaryMonitorUnavailable
+
+pub enum AppClipboardError:
+    WindowUnavailable
+    TextDecode(TextDecodeError)
+pub enum ControlFlow:
+    Poll
+    Wait
+    WaitTimeout:
+        seconds: F64
+    Exit
+
+impl ControlFlow:
+    fn exits(read self) -> Bool:
+        select self:
+            when ControlFlow.Exit => return true
+            else => return false
+
+pub enum AnglePlatformType:
+    None
+    OpenGl
+    OpenGlEs
+    D3D9
+    D3D11
+    Vulkan
+    Metal
+    Unknown(CInt)
+
+pub enum WaylandLibdecorMode:
+    Prefer
+    Disable
+    Unknown(CInt)
+pub enum BoolOverride:
+    Default
+    Enabled
+    Disabled
+
+pub enum PlatformOverride:
+    Default
+    Selected(Platform)
+
+pub enum AnglePlatformTypeOverride:
+    Default
+    Selected(AnglePlatformType)
+
+pub enum WaylandLibdecorOverride:
+    Default
+    Selected(WaylandLibdecorMode)
+
+pub struct AppInitConfig:
+    pub joystick_hat_buttons: BoolOverride
+    pub platform: PlatformOverride
+    pub angle_platform_type: AnglePlatformTypeOverride
+    pub cocoa_chdir_resources: BoolOverride
+    pub cocoa_menubar: BoolOverride
+    pub x11_xcb_vulkan_surface: BoolOverride
+    pub wayland_libdecor: WaylandLibdecorOverride
+
+pub fn angle_platform_type_from_raw(raw: CInt) -> AnglePlatformType:
+    select:
+        when raw == 0x00037001 => return AnglePlatformType.None
+        when raw == 0x00037002 => return AnglePlatformType.OpenGl
+        when raw == 0x00037003 => return AnglePlatformType.OpenGlEs
+        when raw == 0x00037004 => return AnglePlatformType.D3D9
+        when raw == 0x00037005 => return AnglePlatformType.D3D11
+        when raw == 0x00037007 => return AnglePlatformType.Vulkan
+        when raw == 0x00037008 => return AnglePlatformType.Metal
+        else => return AnglePlatformType.Unknown :: raw :: call
+
+pub fn angle_platform_type_raw(read platform_type: AnglePlatformType) -> CInt:
+    select platform_type:
+        when AnglePlatformType.None => return 0x00037001
+        when AnglePlatformType.OpenGl => return 0x00037002
+        when AnglePlatformType.OpenGlEs => return 0x00037003
+        when AnglePlatformType.D3D9 => return 0x00037004
+        when AnglePlatformType.D3D11 => return 0x00037005
+        when AnglePlatformType.Vulkan => return 0x00037007
+        when AnglePlatformType.Metal => return 0x00037008
+        when AnglePlatformType.Unknown(raw) => return raw
+    return 0x00037001
+
+pub fn wayland_libdecor_mode_from_raw(raw: CInt) -> WaylandLibdecorMode:
+    select:
+        when raw == 0x00038001 => return WaylandLibdecorMode.Prefer
+        when raw == 0x00038002 => return WaylandLibdecorMode.Disable
+        else => return WaylandLibdecorMode.Unknown :: raw :: call
+
+pub fn wayland_libdecor_mode_raw(read mode: WaylandLibdecorMode) -> CInt:
+    select mode:
+        when WaylandLibdecorMode.Prefer => return 0x00038001
+        when WaylandLibdecorMode.Disable => return 0x00038002
+        when WaylandLibdecorMode.Unknown(raw) => return raw
+    return 0x00038001
+
+pub fn app_init_config() -> AppInitConfig:
+    let joystick_hat_buttons = BoolOverride.Default
+    let platform = PlatformOverride.Default
+    let angle_platform_type = AnglePlatformTypeOverride.Default
+    let cocoa_chdir_resources = BoolOverride.Default
+    let cocoa_menubar = BoolOverride.Default
+    let x11_xcb_vulkan_surface = BoolOverride.Default
+    let wayland_libdecor = WaylandLibdecorOverride.Default
+    return AppInitConfig :: :: call
+        joystick_hat_buttons = joystick_hat_buttons
+        platform = platform
+        angle_platform_type = angle_platform_type
+        cocoa_chdir_resources = cocoa_chdir_resources
+        cocoa_menubar = cocoa_menubar
+        x11_xcb_vulkan_surface = x11_xcb_vulkan_surface
+        wayland_libdecor = wayland_libdecor
+
+pub fn app_init_config_with_joystick_hat_buttons(take config: AppInitConfig, enabled: Bool) -> AppInitConfig:
+    config.set_joystick_hat_buttons :: enabled :: method
+    return config
+
+pub fn app_init_config_on_platform(take config: AppInitConfig, platform: Platform) -> AppInitConfig:
+    config.set_platform :: platform :: method
+    return config
+
+pub fn app_init_config_with_angle_platform_type(take config: AppInitConfig, platform_type: AnglePlatformType) -> AppInitConfig:
+    config.set_angle_platform_type :: platform_type :: method
+    return config
+
+pub fn app_init_config_with_cocoa_chdir_resources(take config: AppInitConfig, enabled: Bool) -> AppInitConfig:
+    config.set_cocoa_chdir_resources :: enabled :: method
+    return config
+
+pub fn app_init_config_with_cocoa_menubar(take config: AppInitConfig, enabled: Bool) -> AppInitConfig:
+    config.set_cocoa_menubar :: enabled :: method
+    return config
+
+pub fn app_init_config_with_x11_xcb_vulkan_surface(take config: AppInitConfig, enabled: Bool) -> AppInitConfig:
+    config.set_x11_xcb_vulkan_surface :: enabled :: method
+    return config
+
+pub fn app_init_config_with_wayland_libdecor(take config: AppInitConfig, mode: WaylandLibdecorMode) -> AppInitConfig:
+    config.set_wayland_libdecor :: mode :: method
+    return config
+
+pub fn win32_app_init_config() -> AppInitConfig:
+    let config = app_init_config :: :: call
+    return app_init_config_on_platform :: config, Platform.Win32 :: call
+
+impl AppInitConfig:
+    fn with_joystick_hat_buttons(take self, enabled: Bool) -> AppInitConfig:
+        self.set_joystick_hat_buttons :: enabled :: method
+        return self
+
+    fn on_platform(take self, platform: Platform) -> AppInitConfig:
+        self.set_platform :: platform :: method
+        return self
+
+    fn with_angle_platform_type(take self, platform_type: AnglePlatformType) -> AppInitConfig:
+        self.set_angle_platform_type :: platform_type :: method
+        return self
+
+    fn with_cocoa_chdir_resources(take self, enabled: Bool) -> AppInitConfig:
+        self.set_cocoa_chdir_resources :: enabled :: method
+        return self
+
+    fn with_cocoa_menubar(take self, enabled: Bool) -> AppInitConfig:
+        self.set_cocoa_menubar :: enabled :: method
+        return self
+
+    fn with_x11_xcb_vulkan_surface(take self, enabled: Bool) -> AppInitConfig:
+        self.set_x11_xcb_vulkan_surface :: enabled :: method
+        return self
+
+    fn with_wayland_libdecor(take self, mode: WaylandLibdecorMode) -> AppInitConfig:
+        self.set_wayland_libdecor :: mode :: method
+        return self
+
+    fn without_joystick_hat_buttons_override(take self) -> AppInitConfig:
+        self.clear_joystick_hat_buttons :: :: method
+        return self
+
+    fn without_platform_override(take self) -> AppInitConfig:
+        self.clear_platform :: :: method
+        return self
+
+    fn without_angle_platform_type_override(take self) -> AppInitConfig:
+        self.clear_angle_platform_type :: :: method
+        return self
+
+    fn without_cocoa_chdir_resources_override(take self) -> AppInitConfig:
+        self.clear_cocoa_chdir_resources :: :: method
+        return self
+
+    fn without_cocoa_menubar_override(take self) -> AppInitConfig:
+        self.clear_cocoa_menubar :: :: method
+        return self
+
+    fn without_x11_xcb_vulkan_surface_override(take self) -> AppInitConfig:
+        self.clear_x11_xcb_vulkan_surface :: :: method
+        return self
+
+    fn without_wayland_libdecor_override(take self) -> AppInitConfig:
+        self.clear_wayland_libdecor :: :: method
+        return self
+
+    fn set_joystick_hat_buttons(edit self, enabled: Bool) -> Unit:
+        select:
+            when enabled => self.joystick_hat_buttons = BoolOverride.Enabled
+            else => self.joystick_hat_buttons = BoolOverride.Disabled
+        return
+
+    fn clear_joystick_hat_buttons(edit self) -> Unit:
+        self.joystick_hat_buttons = BoolOverride.Default
+        return
+
+    fn set_platform(edit self, platform: Platform) -> Unit:
+        self.platform = PlatformOverride.Selected :: platform :: call
+        return
+
+    fn clear_platform(edit self) -> Unit:
+        self.platform = PlatformOverride.Default
+        return
+
+    fn set_angle_platform_type(edit self, platform_type: AnglePlatformType) -> Unit:
+        self.angle_platform_type = AnglePlatformTypeOverride.Selected :: platform_type :: call
+        return
+
+    fn clear_angle_platform_type(edit self) -> Unit:
+        self.angle_platform_type = AnglePlatformTypeOverride.Default
+        return
+
+    fn set_cocoa_chdir_resources(edit self, enabled: Bool) -> Unit:
+        select:
+            when enabled => self.cocoa_chdir_resources = BoolOverride.Enabled
+            else => self.cocoa_chdir_resources = BoolOverride.Disabled
+        return
+
+    fn clear_cocoa_chdir_resources(edit self) -> Unit:
+        self.cocoa_chdir_resources = BoolOverride.Default
+        return
+
+    fn set_cocoa_menubar(edit self, enabled: Bool) -> Unit:
+        select:
+            when enabled => self.cocoa_menubar = BoolOverride.Enabled
+            else => self.cocoa_menubar = BoolOverride.Disabled
+        return
+
+    fn clear_cocoa_menubar(edit self) -> Unit:
+        self.cocoa_menubar = BoolOverride.Default
+        return
+
+    fn set_x11_xcb_vulkan_surface(edit self, enabled: Bool) -> Unit:
+        select:
+            when enabled => self.x11_xcb_vulkan_surface = BoolOverride.Enabled
+            else => self.x11_xcb_vulkan_surface = BoolOverride.Disabled
+        return
+
+    fn clear_x11_xcb_vulkan_surface(edit self) -> Unit:
+        self.x11_xcb_vulkan_surface = BoolOverride.Default
+        return
+
+    fn set_wayland_libdecor(edit self, mode: WaylandLibdecorMode) -> Unit:
+        self.wayland_libdecor = WaylandLibdecorOverride.Selected :: mode :: call
+        return
+
+    fn clear_wayland_libdecor(edit self) -> Unit:
+        self.wayland_libdecor = WaylandLibdecorOverride.Default
+        return
+
+pub trait AppHandler:
+    fn started(edit self, edit app: App) -> Result[ControlFlow, AppError]:
+        let _ = app
+        return Result.Ok :: ControlFlow.Wait :: call
+
+    fn window_event(edit self, edit app: App, event: WindowEvent) -> Result[ControlFlow, AppError]:
+        let _ = app
+        let _ = event
+        return Result.Ok :: ControlFlow.Wait :: call
+
+    fn monitor_event(edit self, edit app: App, event: MonitorEvent) -> Result[ControlFlow, AppError]:
+        let _ = app
+        let _ = event
+        return Result.Ok :: ControlFlow.Wait :: call
+    fn joystick_event(edit self, edit app: App, event: JoystickEvent) -> Result[ControlFlow, AppError]:
+        let _ = app
+        let _ = event
+        return Result.Ok :: ControlFlow.Wait :: call
+    fn user_event(edit self, edit app: App, event: UserEvent) -> Result[ControlFlow, AppError]:
+        let _ = app
+        let _ = event
+        return Result.Ok :: ControlFlow.Wait :: call
+    fn idle(edit self, edit app: App) -> Result[ControlFlow, AppError]:
+        let _ = app
+        return Result.Ok :: ControlFlow.Wait :: call
+    fn exiting(edit self, edit app: App) -> Unit:
+        let _ = app
+        return
+struct WindowRecord:
+    pub(package) window: Window
+    pub(package) mailbox: *edit WindowMailbox
+    pub(package) should_close: Bool
+    pub(package) pos: Point
+    pub(package) size: Size
+    pub(package) framebuffer_size: Size
+    pub(package) content_scale: Scale
+    pub(package) focused: Bool
+    pub(package) iconified: Bool
+    pub(package) maximized: Bool
+    pub(package) cursor_pos: CursorPos
+struct MonitorRecord:
+    pub(package) raw: *edit GlfwMonitorRaw
+    pub(package) id: MonitorId
+struct JoystickPresenceState:
+    pub(package) bits: CUInt
+    pub(package) pad0: CUInt
+    pub(package) pad1: CUInt
+    pub(package) pad2: CUInt
+pub struct App:
+    pub(package) live: Bool
+    pub(package) next_window_id: WindowId
+    pub(package) next_monitor_id: MonitorId
+    pub(package) joystick_state: JoystickPresenceState
+    pub(package) windows: List[WindowRecord]
+    pub(package) monitors: List[MonitorRecord]
+    pub(package) pending: List[AppEvent]
+pub struct AppSnapshot:
+    pub live: Bool
+    pub has_pending_events: Bool
+    pub pending_event_count: Index
+    pub time: F64
+    pub timer_value: U64
+    pub timer_frequency: U64
+    pub window_count: Index
+    pub monitor_count: Index
+    pub connected_joystick_count: Index
+    pub version_info: VersionInfo
+    pub version_string: Result[Str, TextDecodeError]
+    pub platform: Platform
+    pub last_error: Result[Option[RuntimeErrorInfo], TextDecodeError]
+    pub current_context_window_id: Option[WindowId]
+    pub primary_monitor_id: Option[MonitorId]
+    pub windows: List[WindowSnapshot]
+    pub monitors: List[MonitorSnapshot]
+    pub joysticks: List[JoystickSnapshot]
+
+pub struct WindowSnapshot:
+    pub window: Window
+    pub title: Result[Str, TextDecodeError]
+    pub input: WindowInputSnapshot
+    pub hwnd: Win32HWnd
+    pub should_close: Bool
+    pub pos: Point
+    pub size: Size
+    pub frame_size: FrameSize
+    pub framebuffer_size: Size
+    pub content_scale: Scale
+    pub focused: Bool
+    pub iconified: Bool
+    pub maximized: Bool
+    pub cursor_pos: CursorPos
+    pub client_api: ClientApi
+    pub opengl_profile: OpenGlProfile
+    pub context_creation_api: ContextCreationApi
+    pub context_version_major: CInt
+    pub context_version_minor: CInt
+    pub current_context: Bool
+    pub opengl_forward_compat: Bool
+    pub opengl_debug_context: Bool
+    pub context_no_error: Bool
+    pub srgb_capable: Bool
+    pub doublebuffered: Bool
+    pub opacity: F32
+    pub cursor_mode: CursorMode
+    pub sticky_keys_enabled: Bool
+    pub sticky_mouse_buttons_enabled: Bool
+    pub lock_key_mods_enabled: Bool
+    pub raw_mouse_motion_enabled: Bool
+    pub visible: Bool
+    pub resizable: Bool
+    pub decorated: Bool
+    pub auto_iconify: Bool
+    pub focus_on_show: Bool
+    pub mouse_passthrough: Bool
+    pub hovered: Bool
+    pub floating: Bool
+    pub fullscreen: Bool
+
+pub struct MonitorSnapshot:
+    pub id: MonitorId
+    pub monitor: Monitor
+    pub name_text: Result[Str, TextDecodeError]
+    pub win32_names: Result[Win32MonitorNames, TextDecodeError]
+    pub available: Bool
+    pub primary: Bool
+    pub screen_pos: Point
+    pub work_rect: Rect
+    pub physical_size_mm: Size
+    pub desktop_scale: Scale
+    pub current_video_mode: Option[VideoMode]
+    pub video_mode_count: CInt
+    pub video_modes: List[VideoMode]
+    pub gamma_ramp: Option[MonitorGammaRamp]
+
+pub struct JoystickSnapshot:
+    pub joystick: Joystick
+    pub name_text: Result[Option[Str], TextDecodeError]
+    pub guid_text: Result[Option[Str], TextDecodeError]
+    pub gamepad_name_text: Result[Option[Str], TextDecodeError]
+    pub present: Bool
+    pub gamepad: Bool
+    pub axis_count: CInt
+    pub button_count: CInt
+    pub hat_count: CInt
+    pub axes: List[F32]
+    pub buttons: List[Bool]
+    pub hats: List[HatState]
+    pub gamepad_state: Option[GamepadState]
+
+impl AppSnapshot:
+    fn window_ids(read self) -> List[WindowId]:
+        let ids = List[WindowId] :: :: call
+        let count = self.windows.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return ids
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return ids
+            ids.push :: self.windows[index].window.id :: method
+            scan = scan + 1
+        return ids
+
+    fn monitor_ids(read self) -> List[MonitorId]:
+        let ids = List[MonitorId] :: :: call
+        let count = self.monitors.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return ids
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return ids
+            ids.push :: self.monitors[index].id :: method
+            scan = scan + 1
+        return ids
+
+    fn joystick_ids(read self) -> List[JoystickId]:
+        let ids = List[JoystickId] :: :: call
+        let count = self.joysticks.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return ids
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return ids
+            ids.push :: self.joysticks[index].joystick.id :: method
+            scan = scan + 1
+        return ids
+
+    fn window_index(read self, id: WindowId) -> Option[Index]:
+        let count = self.windows.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return Option.None
+            select:
+                when self.windows[index].window.id == id => return Option.Some :: index :: call
+                else => ()
+            scan = scan + 1
+        return Option.None
+
+    fn monitor_index(read self, id: MonitorId) -> Option[Index]:
+        let count = self.monitors.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return Option.None
+            select:
+                when self.monitors[index].id == id => return Option.Some :: index :: call
+                else => ()
+            scan = scan + 1
+        return Option.None
+
+    fn joystick_index(read self, id: JoystickId) -> Option[Index]:
+        let count = self.joysticks.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return Option.None
+            select:
+                when self.joysticks[index].joystick.id == id => return Option.Some :: index :: call
+                else => ()
+            scan = scan + 1
+        return Option.None
+
+    fn gamepad_index(read self, id: JoystickId) -> Option[Index]:
+        select self.joystick_index :: id :: method:
+            when Option.Some(index) =>
+                select:
+                    when self.joysticks[index].gamepad => return Option.Some :: index :: call
+                    else => return Option.None
+            when Option.None => return Option.None
+
+    fn has_window(read self, id: WindowId) -> Bool:
+        select self.window_index :: id :: method:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn has_monitor(read self, id: MonitorId) -> Bool:
+        select self.monitor_index :: id :: method:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn has_joystick(read self, id: JoystickId) -> Bool:
+        select self.joystick_index :: id :: method:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn has_gamepad(read self, id: JoystickId) -> Bool:
+        select self.gamepad_index :: id :: method:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn gamepad_count(read self) -> Index:
+        let total: CInt = 0
+        let count = self.joysticks.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return 0
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return 0
+            select:
+                when self.joysticks[index].gamepad => total = total + 1
+                else => ()
+            scan = scan + 1
+        let Result.Ok(result) = cint_to_index :: total :: call else => return 0
+        return result
+
+    fn has_gamepads(read self) -> Bool:
+        return self.gamepad_count :: :: method != 0
+
+    fn gamepad_ids(read self) -> List[JoystickId]:
+        let ids = List[JoystickId] :: :: call
+        let count = self.joysticks.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return ids
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return ids
+            select:
+                when self.joysticks[index].gamepad => ids.push :: self.joysticks[index].joystick.id :: method
+                else => ()
+            scan = scan + 1
+        return ids
+
+    fn close_requested_window_count(read self) -> Index:
+        let total: CInt = 0
+        let count = self.windows.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return 0
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return 0
+            select:
+                when self.windows[index].should_close => total = total + 1
+                else => ()
+            scan = scan + 1
+        let Result.Ok(result) = cint_to_index :: total :: call else => return 0
+        return result
+
+    fn has_close_requested_windows(read self) -> Bool:
+        return self.close_requested_window_count :: :: method != 0
+
+    fn close_requested_window_ids(read self) -> List[WindowId]:
+        let ids = List[WindowId] :: :: call
+        let count = self.windows.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return ids
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return ids
+            select:
+                when self.windows[index].should_close => ids.push :: self.windows[index].window.id :: method
+                else => ()
+            scan = scan + 1
+        return ids
+
+    fn window_close_requested(read self, id: WindowId) -> Bool:
+        select self.window_index :: id :: method:
+            when Option.Some(index) => return self.windows[index].should_close
+            when Option.None => return false
+
+    fn close_requested_windows(read self) -> List[WindowSnapshot]:
+        let snapshots = List[WindowSnapshot] :: :: call
+        let count = self.windows.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return snapshots
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return snapshots
+            select:
+                when self.windows[index].should_close =>
+                    let snapshot = copy_window_snapshot :: self.windows[index] :: call
+                    snapshots.push :: snapshot :: method
+                else => ()
+            scan = scan + 1
+        return snapshots
+
+    fn close_requested_window(read self, id: WindowId) -> Option[WindowSnapshot]:
+        select self.window_index :: id :: method:
+            when Option.Some(index) =>
+                select:
+                    when self.windows[index].should_close =>
+                        let snapshot = copy_window_snapshot :: self.windows[index] :: call
+                        return Option.Some :: snapshot :: call
+                    else => return Option.None
+            when Option.None => return Option.None
+
+    fn window(read self, id: WindowId) -> Option[WindowSnapshot]:
+        select self.window_index :: id :: method:
+            when Option.Some(index) =>
+                let snapshot = copy_window_snapshot :: self.windows[index] :: call
+                return Option.Some :: snapshot :: call
+            when Option.None => return Option.None
+
+    fn monitor(read self, id: MonitorId) -> Option[MonitorSnapshot]:
+        select self.monitor_index :: id :: method:
+            when Option.Some(index) =>
+                let snapshot = copy_monitor_snapshot :: self.monitors[index] :: call
+                return Option.Some :: snapshot :: call
+            when Option.None => return Option.None
+
+    fn take_window(edit self, id: WindowId) -> Option[WindowSnapshot]:
+        select self.window_index :: id :: method:
+            when Option.Some(index) =>
+                let snapshot = self.windows.remove :: index :: method
+                return Option.Some :: snapshot :: call
+            when Option.None => return Option.None
+
+    fn take_monitor(edit self, id: MonitorId) -> Option[MonitorSnapshot]:
+        select self.monitor_index :: id :: method:
+            when Option.Some(index) =>
+                let snapshot = self.monitors.remove :: index :: method
+                return Option.Some :: snapshot :: call
+            when Option.None => return Option.None
+
+    fn take_joystick(edit self, id: JoystickId) -> Option[JoystickSnapshot]:
+        select self.joystick_index :: id :: method:
+            when Option.Some(index) =>
+                let snapshot = self.joysticks.remove :: index :: method
+                return Option.Some :: snapshot :: call
+            when Option.None => return Option.None
+
+    fn take_gamepad(edit self, id: JoystickId) -> Option[JoystickSnapshot]:
+        select self.joystick_index :: id :: method:
+            when Option.Some(index) =>
+                select:
+                    when self.joysticks[index].gamepad =>
+                        let snapshot = self.joysticks.remove :: index :: method
+                        return Option.Some :: snapshot :: call
+                    else => return Option.None
+            when Option.None => return Option.None
+
+    fn current_context_window_index(read self) -> Option[Index]:
+        select self.current_context_window_id:
+            when Option.Some(id) => return self.window_index :: id :: method
+            when Option.None => return Option.None
+
+    fn current_context_window(read self) -> Option[WindowSnapshot]:
+        select self.current_context_window_id:
+            when Option.Some(id) => return self.window :: id :: method
+            when Option.None => return Option.None
+
+    fn primary_monitor_index(read self) -> Option[Index]:
+        select self.primary_monitor_id:
+            when Option.Some(id) => return self.monitor_index :: id :: method
+            when Option.None => return Option.None
+
+    fn primary_monitor(read self) -> Option[MonitorSnapshot]:
+        select self.primary_monitor_id:
+            when Option.Some(id) => return self.monitor :: id :: method
+            when Option.None => return Option.None
+
+    fn take_current_context_window(edit self) -> Option[WindowSnapshot]:
+        select self.current_context_window_id:
+            when Option.Some(id) => return self.take_window :: id :: method
+            when Option.None => return Option.None
+
+    fn take_primary_monitor(edit self) -> Option[MonitorSnapshot]:
+        select self.primary_monitor_id:
+            when Option.Some(id) => return self.take_monitor :: id :: method
+            when Option.None => return Option.None
+
+impl WindowSnapshot:
+    fn key_state(read self, read key: KeyCode) -> InputAction:
+        return self.input.key_state :: key :: method
+
+    fn key_pressed(read self, read key: KeyCode) -> Bool:
+        return self.input.key_pressed :: key :: method
+
+    fn key_down(read self, read key: KeyCode) -> Bool:
+        return self.input.key_down :: key :: method
+
+    fn key_repeating(read self, read key: KeyCode) -> Bool:
+        return self.input.key_repeating :: key :: method
+
+    fn mouse_button_state(read self, read button: MouseButton) -> InputAction:
+        return self.input.mouse_button_state :: button :: method
+
+    fn mouse_button_pressed(read self, read button: MouseButton) -> Bool:
+        return self.input.mouse_button_pressed :: button :: method
+
+    fn mouse_button_down(read self, read button: MouseButton) -> Bool:
+        return self.input.mouse_button_down :: button :: method
+
+impl MonitorSnapshot:
+    fn available(read self) -> Bool:
+        return self.available
+
+    fn primary(read self) -> Bool:
+        return self.primary
+
+    fn fullscreen_spec(read self) -> Result[WindowMonitorSpec, WindowModeError]:
+        select self.current_video_mode:
+            when Option.Some(mode) =>
+                let size = Size :: mode.width, mode.height :: call
+                let spec = window_monitor_spec :: self.monitor, self.screen_pos, size, mode.refresh_rate :: call
+                return Result.Ok :: spec :: call
+            when Option.None => return Result.Err :: WindowModeError.MissingVideoMode :: call
+
+    fn fullscreen_spec_with_video_mode(read self, read mode: VideoMode) -> Result[WindowMonitorSpec, WindowModeError]:
+        let size = Size :: mode.width, mode.height :: call
+        let spec = window_monitor_spec :: self.monitor, self.screen_pos, size, mode.refresh_rate :: call
+        return Result.Ok :: spec :: call
+
+    fn first_video_mode(read self) -> Option[VideoMode]:
+        select:
+            when self.video_modes.is_empty :: :: method => return Option.None
+            else =>
+                let mode = copy_video_mode :: self.video_modes[0] :: call
+                return Option.Some :: mode :: call
+
+    fn video_mode_at(read self, index: CInt) -> Option[VideoMode]:
+        let Result.Ok(idx) = cint_to_index :: index :: call else => return Option.None
+        select:
+            when idx >= self.video_modes.count :: :: method => return Option.None
+            else =>
+                let mode = copy_video_mode :: self.video_modes[idx] :: call
+                return Option.Some :: mode :: call
+
+    fn video_mode_matching(read self, width: CInt, height: CInt, refresh_rate: CInt) -> Option[VideoMode]:
+        let Result.Ok(count) = index_to_cint :: self.video_modes.count :: :: method :: call else => return Option.None
+        let scan: CInt = 0
+        repeat while scan < count:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return Option.None
+            let mode = copy_video_mode :: self.video_modes[index] :: call
+            select:
+                when mode.width == width && mode.height == height && mode.refresh_rate == refresh_rate =>
+                    let copy = copy_video_mode :: mode :: call
+                    return Option.Some :: copy :: call
+                else => ()
+            scan = scan + 1
+        return Option.None
+
+    fn video_mode_with_max_refresh(read self, width: CInt, height: CInt) -> Option[VideoMode]:
+        let Result.Ok(count) = index_to_cint :: self.video_modes.count :: :: method :: call else => return Option.None
+        let best_index: CInt = -1
+        let best_refresh_rate: CInt = -1
+        let scan: CInt = 0
+        repeat while scan < count:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return Option.None
+            let mode = copy_video_mode :: self.video_modes[index] :: call
+            select:
+                when mode.width == width && mode.height == height =>
+                    select:
+                        when best_index < 0 || mode.refresh_rate > best_refresh_rate =>
+                            best_index = scan
+                            best_refresh_rate = mode.refresh_rate
+                        else => ()
+                else => ()
+            scan = scan + 1
+        select:
+            when best_index >= 0 =>
+                let Result.Ok(index) = cint_to_index :: best_index :: call else => return Option.None
+                let mode = copy_video_mode :: self.video_modes[index] :: call
+                return Option.Some :: mode :: call
+            else => return Option.None
+
+    fn supports_video_mode(read self, read mode: VideoMode) -> Bool:
+        select self.video_mode_matching :: mode.width, mode.height, mode.refresh_rate :: method:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn has_gamma_ramp(read self) -> Bool:
+        select self.gamma_ramp:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+impl JoystickSnapshot:
+    fn available(read self) -> Bool:
+        return self.present
+
+    fn axis_count(read self) -> Index:
+        return self.axes.count :: :: method
+
+    fn axis_at(read self, index: CInt) -> Option[F32]:
+        let Result.Ok(idx) = cint_to_index :: index :: call else => return Option.None
+        select:
+            when idx >= self.axes.count :: :: method => return Option.None
+            else => return Option.Some :: self.axes[idx] :: call
+
+    fn button_count(read self) -> Index:
+        return self.buttons.count :: :: method
+
+    fn button_at(read self, index: CInt) -> Option[Bool]:
+        let Result.Ok(idx) = cint_to_index :: index :: call else => return Option.None
+        select:
+            when idx >= self.buttons.count :: :: method => return Option.None
+            else => return Option.Some :: self.buttons[idx] :: call
+
+    fn hat_count(read self) -> Index:
+        return self.hats.count :: :: method
+
+    fn hat_at(read self, index: CInt) -> Option[HatState]:
+        let Result.Ok(idx) = cint_to_index :: index :: call else => return Option.None
+        select:
+            when idx >= self.hats.count :: :: method => return Option.None
+            else =>
+                let hat = copy_hat_state :: self.hats[idx] :: call
+                return Option.Some :: hat :: call
+
+    fn has_gamepad_state(read self) -> Bool:
+        select self.gamepad_state:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn gamepad_button_down(read self, button: GamepadButton) -> Bool:
+        select self.gamepad_state:
+            when Option.Some(state) => return state.button_down :: button :: method
+            when Option.None => return false
+
+    fn gamepad_axis(read self, axis: GamepadAxis) -> F32:
+        select self.gamepad_state:
+            when Option.Some(state) => return state.axis :: axis :: method
+            when Option.None => return 0.0F32
+
+fn apply_window_hint_string(hint: CInt, text: Str) -> Result[Unit, AppError]:
+    select maybe_c_string :: text :: call:
+        when Result.Ok(value) =>
+            let pointer = value.as_ptr :: :: method
+            glfw_window_hint_string :: hint, pointer :: call
+            return Result.Ok :: () :: call
+        when Result.Err(_) => return Result.Err :: AppError.InvalidWindowSpec :: call
+
+fn same_point(read left: Point, read right: Point) -> Bool:
+    return left.x == right.x && left.y == right.y
+
+fn same_size(read left: Size, read right: Size) -> Bool:
+    return left.width == right.width && left.height == right.height
+
+fn same_scale(read left: Scale, read right: Scale) -> Bool:
+    return left.x == right.x && left.y == right.y
+
+fn same_cursor_pos(read left: CursorPos, read right: CursorPos) -> Bool:
+    return left.x == right.x && left.y == right.y
+
+fn copy_video_mode(read mode: VideoMode) -> VideoMode:
+    return VideoMode :: :: call
+        width = mode.width
+        height = mode.height
+        red_bits = mode.red_bits
+        green_bits = mode.green_bits
+        blue_bits = mode.blue_bits
+        refresh_rate = mode.refresh_rate
+
+fn copy_hat_state(read state: HatState) -> HatState:
+    let raw = hat_state_raw :: state :: call
+    let Result.Ok(value) = raw as Maybe[CUnsignedChar] else => return hat_state_from_raw :: 0 :: call
+    return hat_state_from_raw :: value :: call
+
+fn push_window_event(edit pending: List[AppEvent], event: WindowEvent) -> Unit:
+    let wrapped = AppEvent.Window :: event :: call
+    pending.push :: wrapped :: method
+    return
+
+fn push_monitor_event(edit pending: List[AppEvent], event: MonitorEvent) -> Unit:
+    let wrapped = AppEvent.Monitor :: event :: call
+    pending.push :: wrapped :: method
+    return
+
+fn push_joystick_event(edit pending: List[AppEvent], event: JoystickEvent) -> Unit:
+    let wrapped = AppEvent.Joystick :: event :: call
+    pending.push :: wrapped :: method
+    return
+
+fn push_user_event(edit pending: List[AppEvent], event: UserEvent) -> Unit:
+    let wrapped = AppEvent.User :: event :: call
+    pending.push :: wrapped :: method
+    return
+
+fn pending_pop_front(edit pending: List[AppEvent]) -> Option[AppEvent]:
+    select:
+        when pending.is_empty :: :: method => return Option.None
+        else =>
+            let event = pending.remove :: 0 :: method
+            return Option.Some :: event :: call
+
+fn drain_pending_events(edit pending: List[AppEvent]) -> List[AppEvent]:
+    let events = List[AppEvent] :: :: call
+    repeat:
+        select pending_pop_front :: pending :: call:
+            when Option.Some(event) => events.push :: event :: method
+            when Option.None => break
+    return events
+
+fn snapshot_optional_text(present: Bool, text: Result[Str, TextDecodeError]) -> Result[Option[Str], TextDecodeError]:
+    select:
+        when !present => return Result.Ok :: Option.None :: call
+        else =>
+            select text:
+                when Result.Ok(value) =>
+                    let wrapped = Option.Some :: value :: call
+                    return Result.Ok :: wrapped :: call
+                when Result.Err(err) => return Result.Err :: err :: call
+
+fn snapshot_optional_gamepad_text(present: Bool, gamepad: Bool, text: Result[Str, TextDecodeError]) -> Result[Option[Str], TextDecodeError]:
+    select:
+        when !present => return Result.Ok :: Option.None :: call
+        when !gamepad => return Result.Ok :: Option.None :: call
+        else =>
+            select text:
+                when Result.Ok(value) =>
+                    let wrapped = Option.Some :: value :: call
+                    return Result.Ok :: wrapped :: call
+                when Result.Err(err) => return Result.Err :: err :: call
+
+fn snapshot_axes(read joystick: Joystick, present: Bool) -> List[F32]:
+    select:
+        when present => return joystick.axes :: :: method
+        else => return List[F32] :: :: call
+
+fn snapshot_buttons(read joystick: Joystick, present: Bool) -> List[Bool]:
+    select:
+        when present => return joystick.buttons :: :: method
+        else => return List[Bool] :: :: call
+
+fn snapshot_hats(read joystick: Joystick, present: Bool) -> List[HatState]:
+    select:
+        when present => return joystick.hats :: :: method
+        else => return List[HatState] :: :: call
+
+fn snapshot_gamepad_state(read joystick: Joystick, present: Bool, gamepad: Bool) -> Option[GamepadState]:
+    select:
+        when present && gamepad => return joystick.gamepad_state :: :: method
+        else => return Option.None
+
+fn snapshot_current_context_window_id(read app: App) -> Option[WindowId]:
+    select app.current_context_window :: :: method:
+        when Result.Ok(window) => return Option.Some :: window.id :: call
+        when Result.Err(_) => return Option.None
+
+fn snapshot_primary_monitor_id(read app: App) -> Option[MonitorId]:
+    select app.primary_monitor_id :: :: method:
+        when Result.Ok(id) => return Option.Some :: id :: call
+        when Result.Err(_) => return Option.None
+
+fn clipboard_anchor_window(read app: App) -> Option[Window]:
+    select app.current_context_window :: :: method:
+        when Result.Ok(window) => return Option.Some :: window :: call
+        when Result.Err(_) => ()
+    let windows = app.windows_snapshot :: :: method
+    select:
+        when windows.is_empty :: :: method => return Option.None
+        else =>
+            let window = windows.remove :: 0 :: method
+            return Option.Some :: window :: call
+
+pub(package) fn joystick_snapshot_from_id(id: JoystickId) -> JoystickSnapshot:
+    let joystick = joystick_from_id :: id :: call
+    let present = joystick.present :: :: method
+    let gamepad = joystick.gamepad :: :: method
+    let raw_name_text = joystick.name_text :: :: method
+    let raw_guid_text = joystick.guid_text :: :: method
+    let raw_gamepad_name_text = joystick.gamepad_name_text :: :: method
+    let name_text = snapshot_optional_text :: present, raw_name_text :: call
+    let guid_text = snapshot_optional_text :: present, raw_guid_text :: call
+    let gamepad_name_text = snapshot_optional_gamepad_text :: present, gamepad, raw_gamepad_name_text :: call
+    let axis_count = joystick.axis_count :: :: method
+    let button_count = joystick.button_count :: :: method
+    let hat_count = joystick.hat_count :: :: method
+    let axes = snapshot_axes :: joystick, present :: call
+    let buttons = snapshot_buttons :: joystick, present :: call
+    let hats = snapshot_hats :: joystick, present :: call
+    let gamepad_state = snapshot_gamepad_state :: joystick, present, gamepad :: call
+    return JoystickSnapshot :: :: call
+        joystick = joystick
+        name_text = name_text
+        guid_text = guid_text
+        gamepad_name_text = gamepad_name_text
+        present = present
+        gamepad = gamepad
+        axis_count = axis_count
+        button_count = button_count
+        hat_count = hat_count
+        axes = axes
+        buttons = buttons
+        hats = hats
+        gamepad_state = gamepad_state
+
+fn window_record(take window: Window, mailbox: *edit WindowMailbox) -> WindowRecord:
+    let raw_handle = glfw_window_raw_handle :: window.raw :: call
+    let stored_raw = GlfwWindow :: raw_handle :: call
+    let stored_id = window.id
+    let stored_window = Window :: stored_raw, stored_id :: call
+    let should_close = window.should_close :: :: method
+    let pos = window.pos :: :: method
+    let size = window.size :: :: method
+    let framebuffer_size = window.framebuffer_size :: :: method
+    let content_scale = window.content_scale :: :: method
+    let focused = window.focused :: :: method
+    let iconified = window.iconified :: :: method
+    let maximized = window.maximized :: :: method
+    let cursor_pos = window.cursor_pos :: :: method
+    return WindowRecord :: :: call
+        window = stored_window
+        mailbox = mailbox
+        should_close = should_close
+        pos = pos
+        size = size
+        framebuffer_size = framebuffer_size
+        content_scale = content_scale
+        focused = focused
+        iconified = iconified
+        maximized = maximized
+        cursor_pos = cursor_pos
+
+fn live_window_from_record(read record: WindowRecord) -> Window:
+    let raw_handle = glfw_window_raw_handle :: record.window.raw :: call
+    let raw_window = GlfwWindow :: raw_handle :: call
+    let id = record.window.id
+    return Window :: raw_window, id :: call
+fn live_window_from_raw_handle(raw_handle: *edit GlfwWindowRaw, id: WindowId) -> Window:
+    let raw_window = GlfwWindow :: raw_handle :: call
+    return Window :: raw_window, id :: call
+fn copy_point(read point: Point) -> Point:
+    return GlfwPoint :: point.x, point.y :: call
+fn copy_size(read size: Size) -> Size:
+    return GlfwSize :: size.width, size.height :: call
+fn copy_scale(read scale: Scale) -> Scale:
+    return GlfwScale :: scale.x, scale.y :: call
+fn copy_cursor_pos(read pos: CursorPos) -> CursorPos:
+    return GlfwCursorPos :: pos.x, pos.y :: call
+fn destroy_window_record(edit pending: List[AppEvent], take record: WindowRecord) -> Unit:
+    let _ = pending
+    clear_user_pointer :: record.window.raw :: call
+    free_window_mailbox :: record.mailbox :: call
+    record.window.destroy :: :: method
+    return
+
+fn destroy_window_record_at(edit app: App, index: Index) -> WindowId:
+    let record = app.windows.remove :: index :: method
+    let id = record.window.id
+    drain_window_mailbox :: id, record.mailbox, app.pending :: call
+    destroy_window_record :: app.pending, record :: call
+    let event = WindowEvent.Destroyed :: :: call
+        id = id
+    push_window_event :: app.pending, event :: call
+    return id
+
+fn create_raw_window_from_spec(take spec: WindowSpec) -> Result[GlfwWindow, AppError]:
+    glfw_default_window_hints :: :: call
+    glfw_window_hint_bool :: 0x00020004, spec.visible :: call
+    glfw_window_hint_bool :: 0x00020003, spec.resizable :: call
+    glfw_window_hint_bool :: 0x00020005, spec.decorated :: call
+    glfw_window_hint_bool :: 0x00020001, spec.focused :: call
+    glfw_window_hint_bool :: 0x00020006, spec.auto_iconify :: call
+    glfw_window_hint_bool :: 0x00020007, spec.floating :: call
+    glfw_window_hint_bool :: 0x00020008, spec.maximized :: call
+    glfw_window_hint_bool :: 0x00020009, spec.center_cursor :: call
+    glfw_window_hint_bool :: 0x0002000A, spec.transparent_framebuffer :: call
+    glfw_window_hint_bool :: 0x0002000C, spec.focus_on_show :: call
+    glfw_window_hint_bool :: 0x0002000D, spec.mouse_passthrough :: call
+    glfw_window_hint_bool :: 0x0002200C, spec.scale_to_monitor :: call
+    glfw_window_hint_bool :: 0x00025001, spec.win32_keyboard_menu :: call
+    glfw_window_hint_bool :: 0x00025002, spec.win32_showdefault :: call
+    glfw_window_hint :: 0x0002000E, spec.x :: call
+    glfw_window_hint :: 0x0002000F, spec.y :: call
+    glfw_window_hint :: 0x00021001, spec.red_bits :: call
+    glfw_window_hint :: 0x00021002, spec.green_bits :: call
+    glfw_window_hint :: 0x00021003, spec.blue_bits :: call
+    glfw_window_hint :: 0x00021004, spec.alpha_bits :: call
+    glfw_window_hint :: 0x00021005, spec.depth_bits :: call
+    glfw_window_hint :: 0x00021006, spec.stencil_bits :: call
+    glfw_window_hint :: 0x0002100D, spec.samples :: call
+    glfw_window_hint :: 0x0002100F, spec.refresh_rate :: call
+    glfw_window_hint :: 0x00022002, spec.context_version_major :: call
+    glfw_window_hint :: 0x00022003, spec.context_version_minor :: call
+    let raw_opengl_profile = opengl_profile_raw :: spec.opengl_profile :: call
+    let raw_context_creation_api = context_creation_api_raw :: spec.context_creation_api :: call
+    glfw_window_hint :: 0x00022008, raw_opengl_profile :: call
+    glfw_window_hint :: 0x0002200B, raw_context_creation_api :: call
+    glfw_window_hint_bool :: 0x00022006, spec.opengl_forward_compat :: call
+    glfw_window_hint_bool :: 0x00022007, spec.opengl_debug_context :: call
+    glfw_window_hint_bool :: 0x0002200A, spec.context_no_error :: call
+    glfw_window_hint_bool :: 0x0002100E, spec.srgb_capable :: call
+    glfw_window_hint_bool :: 0x00021010, spec.doublebuffer :: call
+    let raw_client_api = client_api_raw :: spec.client_api :: call
+    select:
+        when raw_client_api == 0 => glfw_window_hint_no_api :: :: call
+        else => glfw_window_hint :: 0x00022001, raw_client_api :: call
+    select spec.cocoa_frame_name:
+        when Option.Some(name) =>
+            select apply_window_hint_string :: 0x00023002, name :: call:
+                when Result.Ok(_) => ()
+                when Result.Err(err) => return Result.Err :: err :: call
+        when Option.None => ()
+    select spec.x11_class_name:
+        when Option.Some(name) =>
+            select apply_window_hint_string :: 0x00024001, name :: call:
+                when Result.Ok(_) => ()
+                when Result.Err(err) => return Result.Err :: err :: call
+        when Option.None => ()
+    select spec.x11_instance_name:
+        when Option.Some(name) =>
+            select apply_window_hint_string :: 0x00024002, name :: call:
+                when Result.Ok(_) => ()
+                when Result.Err(err) => return Result.Err :: err :: call
+        when Option.None => ()
+    select spec.wayland_app_id:
+        when Option.Some(name) =>
+            select apply_window_hint_string :: 0x00026001, name :: call:
+                when Result.Ok(_) => ()
+                when Result.Err(err) => return Result.Err :: err :: call
+        when Option.None => ()
+    let Result.Ok(width) = index_to_cint :: spec.width :: call else => return Result.Err :: AppError.InvalidWindowSpec :: call
+    let Result.Ok(height) = index_to_cint :: spec.height :: call else => return Result.Err :: AppError.InvalidWindowSpec :: call
+    select maybe_c_string :: spec.title :: call:
+        when Result.Ok(title) =>
+            let title_ptr = title.as_ptr :: :: method
+            let raw_window = glfw_create_window_raw :: width, height, title_ptr, spec.monitor, spec.share :: call
+            select:
+                when raw_window.is_null :: :: method => return Result.Err :: AppError.WindowCreateFailed :: call
+                else => return Result.Ok :: raw_window :: call
+        when Result.Err(_) => return Result.Err :: AppError.InvalidWindowSpec :: call
+
+fn register_created_window(edit app: App, take window: Window, mailbox: *edit WindowMailbox) -> Unit:
+    let id = window.id
+    let record = window_record :: window, mailbox :: call
+    app.windows.push :: record :: method
+    let event = WindowEvent.Created :: :: call
+        id = id
+    push_window_event :: app.pending, event :: call
+    return
+
+pub fn app_create_window(edit app: App, take spec: WindowSpec) -> Result[Window, AppError]:
+    select create_raw_window_from_spec :: spec :: call:
+        when Result.Ok(raw_window) =>
+            let id = next_window_id :: app :: call
+            let raw_handle = glfw_window_raw_handle :: raw_window :: call
+            let stored_raw = GlfwWindow :: raw_handle :: call
+            let window = window_from_glfw :: stored_raw, id :: call
+            select allocate_window_mailbox :: :: call:
+                when Option.Some(mailbox) =>
+                    attach_callbacks :: raw_window, mailbox :: call
+                    register_created_window :: app, window, mailbox :: call
+                    let return_window = live_window_from_raw_handle :: raw_handle, id :: call
+                    return Result.Ok :: return_window :: call
+                when Option.None =>
+                    window.destroy :: :: method
+                    return Result.Err :: AppError.MailboxAllocFailed :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+pub fn app_create_centered_window_on(edit app: App, take spec: WindowSpec, read monitor: Monitor) -> Result[Window, AppError]:
+    select app_create_window :: app, spec :: call:
+        when Result.Ok(window) =>
+            select:
+                when !window.fullscreen :: :: method => window.center_on :: monitor :: method
+                else => ()
+            return Result.Ok :: window :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+pub fn app_create_primary_centered_window(edit app: App, take spec: WindowSpec) -> Result[Window, AppError]:
+    select app.primary_monitor :: :: method:
+        when Result.Ok(monitor) => return app_create_centered_window_on :: app, spec, monitor :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+pub fn app_destroy_window_by_id(edit app: App, id: WindowId) -> Result[Unit, AppError]:
+    let Option.Some(index) = find_window_index :: app, id :: call else => return Result.Err :: AppError.WindowNotFound :: call
+    let _ = destroy_window_record_at :: app, index :: call
+    return Result.Ok :: () :: call
+
+fn next_window_id(edit app: App) -> WindowId:
+    let id = app.next_window_id
+    app.next_window_id = app.next_window_id + WINDOW_ID_STEP
+    return id
+
+fn next_monitor_id(edit app: App) -> MonitorId:
+    let id = app.next_monitor_id
+    app.next_monitor_id = app.next_monitor_id + MONITOR_ID_STEP
+    return id
+
+fn find_window_index(read app: App, id: WindowId) -> Option[Index]:
+    let count = app.windows.count :: :: method
+    let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = cint_to_index :: scan :: call else => return Option.None
+        select:
+            when app.windows[index].window.id == id => return Option.Some :: index :: call
+            else => scan = scan + 1
+    return Option.None
+
+fn find_monitor_index(read app: App, take monitor: Monitor) -> Option[Index]:
+    let target_raw = glfw_monitor_raw_handle :: monitor :: call
+    let count = app.monitors.count :: :: method
+    let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = cint_to_index :: scan :: call else => return Option.None
+        select:
+            when app.monitors[index].raw == target_raw => return Option.Some :: index :: call
+            else => scan = scan + 1
+    return Option.None
+
+fn find_monitor_record_index(read app: App, id: MonitorId) -> Option[Index]:
+    let count = app.monitors.count :: :: method
+    let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = cint_to_index :: scan :: call else => return Option.None
+        select:
+            when app.monitors[index].id == id => return Option.Some :: index :: call
+            else => scan = scan + 1
+    return Option.None
+
+fn joystick_presence_bit(jid: JoystickId) -> CUInt:
+    let bit: CUInt = 1
+    let scan: CInt = 0
+    repeat while scan < jid:
+        bit = bit * 2
+        scan = scan + 1
+    return bit
+
+fn joystick_present_in_bits(bits: CUInt, jid: JoystickId) -> Bool:
+    let bit = joystick_presence_bit :: jid :: call
+    return (bits & bit) != 0
+
+fn joystick_presence_state() -> JoystickPresenceState:
+    return JoystickPresenceState :: :: call
+        bits = 0
+        pad0 = 0
+        pad1 = 0
+        pad2 = 0
+
+fn joystick_presence_state_with_bits(bits: CUInt) -> JoystickPresenceState:
+    return JoystickPresenceState :: :: call
+        bits = bits
+        pad0 = 0
+        pad1 = 0
+        pad2 = 0
+
+impl JoystickPresenceState:
+    fn bits_value(read self) -> CUInt:
+        return self.bits
+
+    fn set_bits(edit self, bits: CUInt) -> Unit:
+        self.bits = bits
+        return
+
+fn collect_joystick_bits(previous_bits: CUInt, emit_events: Bool, edit pending: List[AppEvent]) -> CUInt:
+    let next_bits: CUInt = 0
+    let jid: CInt = 0
+    repeat while jid < JOYSTICK_SLOT_LIMIT:
+        let present = glfw_joystick_present :: jid :: call
+        let was_present = joystick_present_in_bits :: previous_bits, jid :: call
+        select:
+            when present =>
+                let bit = joystick_presence_bit :: jid :: call
+                next_bits = next_bits | bit
+            else => ()
+        select:
+            when emit_events && present && !was_present =>
+                let gamepad = glfw_joystick_is_gamepad :: jid :: call
+                let event = JoystickEvent.Connected :: :: call
+                    id = jid
+                    gamepad = gamepad
+                push_joystick_event :: pending, event :: call
+            when emit_events && !present && was_present =>
+                let event = JoystickEvent.Disconnected :: :: call
+                    id = jid
+                push_joystick_event :: pending, event :: call
+            else => ()
+        jid = jid + 1
+    return next_bits
+
+fn collect_window_events(edit app: App) -> Unit:
+    let count = app.windows.count :: :: method
+    let Result.Ok(limit) = index_to_cint :: count :: call else => return
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = cint_to_index :: scan :: call else => return
+        let previous = app.windows.remove :: index :: method
+        let previous_window = previous.window
+        let previous_mailbox = previous.mailbox
+        let previous_should_close = previous.should_close
+        drain_window_mailbox :: previous_window.id, previous_mailbox, app.pending :: call
+        let current = window_record :: previous_window, previous_mailbox :: call
+        select:
+            when current.should_close && !previous_should_close =>
+                let event = WindowEvent.CloseRequested :: :: call
+                    id = current.window.id
+                push_window_event :: app.pending, event :: call
+            else => ()
+        app.windows.insert :: index, current :: method
+        scan = scan + 1
+    return
+
+fn refresh_monitor_snapshot(edit app: App, emit_events: Bool) -> Unit:
+    let next_records = List[MonitorRecord] :: :: call
+    let current = glfw_monitors :: :: call
+    let total: CInt = current.count :: :: method
+    let scan: CInt = 0
+    repeat while scan < total:
+        let monitor = current.raw_at :: scan :: method
+        select:
+            when monitor.is_null :: :: method =>
+                scan = scan + 1
+                continue
+            else => ()
+        let monitor_raw = glfw_monitor_raw_handle :: monitor :: call
+        let lookup_monitor = GlfwMonitor :: monitor_raw :: call
+        let record = MonitorRecord :: monitor_raw, MONITOR_ID_START :: call
+        select find_monitor_index :: app, lookup_monitor :: call:
+            when Option.Some(existing) =>
+                let existing_raw = app.monitors[existing].raw
+                let existing_id = app.monitors[existing].id
+                record = MonitorRecord :: existing_raw, existing_id :: call
+            when Option.None =>
+                let id = next_monitor_id :: app :: call
+                record = MonitorRecord :: monitor_raw, id :: call
+                select:
+                    when emit_events =>
+                        let event = MonitorEvent.Connected :: :: call
+                            id = id
+                        push_monitor_event :: app.pending, event :: call
+                    else => ()
+        next_records.push :: record :: method
+        scan = scan + 1
+    let previous_count = app.monitors.count :: :: method
+    let Result.Ok(previous_limit) = index_to_cint :: previous_count :: call else => return
+    let previous_scan: CInt = 0
+    repeat while previous_scan < previous_limit:
+        let Result.Ok(previous_index) = cint_to_index :: previous_scan :: call else => return
+        let still_present = false
+        let previous_raw = app.monitors[previous_index].raw
+        let previous_id = app.monitors[previous_index].id
+        let previous_monitor = GlfwMonitor :: previous_raw :: call
+        select find_monitor_index_in_list :: next_records, previous_monitor :: call:
+            when Option.Some(_) => still_present = true
+            when Option.None => still_present = false
+        select:
+            when emit_events && !still_present =>
+                let event = MonitorEvent.Disconnected :: :: call
+                    id = previous_id
+                push_monitor_event :: app.pending, event :: call
+            else => ()
+        previous_scan = previous_scan + 1
+    app.monitors = next_records
+    return
+
+fn find_monitor_index_in_list(read records: List[MonitorRecord], take monitor: Monitor) -> Option[Index]:
+    let target_raw = glfw_monitor_raw_handle :: monitor :: call
+    let count = records.count :: :: method
+    let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = cint_to_index :: scan :: call else => return Option.None
+        select:
+            when records[index].raw == target_raw => return Option.Some :: index :: call
+            else => scan = scan + 1
+    return Option.None
+
+fn apply_app_init_config(config: AppInitConfig) -> Unit:
+    select config.joystick_hat_buttons:
+        when BoolOverride.Enabled => glfw_init_hint_bool :: 0x00050001, true :: call
+        when BoolOverride.Disabled => glfw_init_hint_bool :: 0x00050001, false :: call
+        when BoolOverride.Default => ()
+    select config.platform:
+        when PlatformOverride.Selected(platform) =>
+            let raw = runtime_platform_raw :: platform :: call
+            glfw_init_hint :: 0x00050003, raw :: call
+        when PlatformOverride.Default => ()
+    select config.angle_platform_type:
+        when AnglePlatformTypeOverride.Selected(platform_type) =>
+            let raw = angle_platform_type_raw :: platform_type :: call
+            glfw_init_hint :: 0x00050002, raw :: call
+        when AnglePlatformTypeOverride.Default => ()
+    select config.cocoa_chdir_resources:
+        when BoolOverride.Enabled => glfw_init_hint_bool :: 0x00051001, true :: call
+        when BoolOverride.Disabled => glfw_init_hint_bool :: 0x00051001, false :: call
+        when BoolOverride.Default => ()
+    select config.cocoa_menubar:
+        when BoolOverride.Enabled => glfw_init_hint_bool :: 0x00051002, true :: call
+        when BoolOverride.Disabled => glfw_init_hint_bool :: 0x00051002, false :: call
+        when BoolOverride.Default => ()
+    select config.x11_xcb_vulkan_surface:
+        when BoolOverride.Enabled => glfw_init_hint_bool :: 0x00052001, true :: call
+        when BoolOverride.Disabled => glfw_init_hint_bool :: 0x00052001, false :: call
+        when BoolOverride.Default => ()
+    select config.wayland_libdecor:
+        when WaylandLibdecorOverride.Selected(mode) =>
+            let raw = wayland_libdecor_mode_raw :: mode :: call
+            glfw_init_hint :: 0x00053001, raw :: call
+        when WaylandLibdecorOverride.Default => ()
+    return
+
+pub fn app_init() -> Result[App, AppError]:
+    let config = app_init_config :: :: call
+    return app_init_with :: config :: call
+
+pub fn app_init_with(config: AppInitConfig) -> Result[App, AppError]:
+    apply_app_init_config :: config :: call
+    select:
+        when glfw_init :: :: call =>
+            let windows = List[WindowRecord] :: :: call
+            let monitors = List[MonitorRecord] :: :: call
+            let pending = List[AppEvent] :: :: call
+            let joystick_bits = collect_joystick_bits :: 0, false, pending :: call
+            let joystick_state = joystick_presence_state_with_bits :: joystick_bits :: call
+            let app = App :: :: call
+                live = true
+                next_window_id = WINDOW_ID_START
+                next_monitor_id = MONITOR_ID_START
+                joystick_state = joystick_state
+                windows = windows
+                monitors = monitors
+                pending = pending
+            refresh_monitor_snapshot :: app, false :: call
+            return Result.Ok :: app :: call
+        else => return Result.Err :: AppError.InitFailed :: call
+
+impl App:
+    fn is_live(read self) -> Bool:
+        return self.live
+
+    fn has_windows(read self) -> Bool:
+        return !self.windows.is_empty :: :: method
+
+    fn joystick(read self, id: JoystickId) -> Joystick:
+        let _ = self
+        return joystick_from_id :: id :: call
+
+    fn joystick_snapshot(read self, id: JoystickId) -> JoystickSnapshot:
+        let _ = self
+        return joystick_snapshot_from_id :: id :: call
+
+    fn gamepad(read self, id: JoystickId) -> Option[Joystick]:
+        let joystick = self.joystick :: id :: method
+        select:
+            when joystick.present :: :: method && joystick.gamepad :: :: method =>
+                return Option.Some :: joystick :: call
+            else => return Option.None
+
+    fn gamepad_snapshot(read self, id: JoystickId) -> Option[JoystickSnapshot]:
+        let snapshot = self.joystick_snapshot :: id :: method
+        select:
+            when snapshot.present && snapshot.gamepad =>
+                return Option.Some :: snapshot :: call
+            else => return Option.None
+
+    fn gamepad_index(read self, id: JoystickId) -> Option[Index]:
+        let ids = self.gamepad_ids :: :: method
+        let count = ids.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return Option.None
+            select:
+                when ids[index] == id => return Option.Some :: index :: call
+                else => ()
+            scan = scan + 1
+        return Option.None
+
+    fn has_gamepad(read self, id: JoystickId) -> Bool:
+        select self.gamepad :: id :: method:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn gamepad_count(read self) -> Index:
+        let ids = self.gamepad_ids :: :: method
+        return ids.count :: :: method
+
+    fn has_gamepads(read self) -> Bool:
+        return self.gamepad_count :: :: method != 0
+
+    fn gamepad_ids(read self) -> List[JoystickId]:
+        let ids = List[JoystickId] :: :: call
+        let joystick_ids = self.connected_joystick_ids :: :: method
+        repeat while !joystick_ids.is_empty :: :: method:
+            let id = joystick_ids.remove :: 0 :: method
+            select self.gamepad :: id :: method:
+                when Option.Some(_) => ids.push :: id :: method
+                when Option.None => ()
+        return ids
+
+    fn connected_joystick_count(read self) -> Index:
+        let ids = self.connected_joystick_ids :: :: method
+        return ids.count :: :: method
+
+    fn connected_joystick_ids(read self) -> List[JoystickId]:
+        let ids = List[JoystickId] :: :: call
+        let bits = self.joystick_state.bits_value :: :: method
+        let jid: CInt = 0
+        repeat while jid < JOYSTICK_SLOT_LIMIT:
+            select:
+                when joystick_present_in_bits :: bits, jid :: call =>
+                    ids.push :: jid :: method
+                else => ()
+            jid = jid + 1
+        return ids
+
+    fn connected_joysticks(read self) -> List[Joystick]:
+        let joysticks = List[Joystick] :: :: call
+        let ids = self.connected_joystick_ids :: :: method
+        repeat while !ids.is_empty :: :: method:
+            let id = ids.remove :: 0 :: method
+            let joystick = joystick_from_id :: id :: call
+            joysticks.push :: joystick :: method
+        return joysticks
+
+    fn joystick_snapshots(read self) -> List[JoystickSnapshot]:
+        let snapshots = List[JoystickSnapshot] :: :: call
+        let ids = self.connected_joystick_ids :: :: method
+        repeat while !ids.is_empty :: :: method:
+            let id = ids.remove :: 0 :: method
+            let snapshot = joystick_snapshot_from_id :: id :: call
+            snapshots.push :: snapshot :: method
+        return snapshots
+
+    fn gamepads(read self) -> List[Joystick]:
+        let joysticks = List[Joystick] :: :: call
+        let ids = self.connected_joystick_ids :: :: method
+        repeat while !ids.is_empty :: :: method:
+            let id = ids.remove :: 0 :: method
+            let joystick = joystick_from_id :: id :: call
+            select:
+                when joystick.gamepad :: :: method => joysticks.push :: joystick :: method
+                else => ()
+        return joysticks
+
+    fn gamepad_snapshots(read self) -> List[JoystickSnapshot]:
+        let snapshots = List[JoystickSnapshot] :: :: call
+        let ids = self.connected_joystick_ids :: :: method
+        repeat while !ids.is_empty :: :: method:
+            let id = ids.remove :: 0 :: method
+            let joystick = joystick_from_id :: id :: call
+            select:
+                when joystick.gamepad :: :: method =>
+                    let snapshot = joystick_snapshot_from_id :: id :: call
+                    snapshots.push :: snapshot :: method
+                else => ()
+        return snapshots
+
+    fn window_count(read self) -> Index:
+        return self.windows.count :: :: method
+
+    fn window_exists(read self, id: WindowId) -> Bool:
+        select find_window_index :: self, id :: call:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn close_requested_window_count(read self) -> Index:
+        let ids = self.window_ids :: :: method
+        let total: CInt = 0
+        repeat while !ids.is_empty :: :: method:
+            let id = ids.remove :: 0 :: method
+            select self.window :: id :: method:
+                when Result.Ok(window) =>
+                    select:
+                        when window.should_close :: :: method => total = total + 1
+                        else => ()
+                when Result.Err(_) => ()
+        let Result.Ok(result) = total as Maybe[Index] else => return 0
+        return result
+
+    fn has_close_requested_windows(read self) -> Bool:
+        return self.close_requested_window_count :: :: method != 0
+
+    fn close_requested_window_ids(read self) -> List[WindowId]:
+        let ids = List[WindowId] :: :: call
+        let window_ids = self.window_ids :: :: method
+        repeat while !window_ids.is_empty :: :: method:
+            let id = window_ids.remove :: 0 :: method
+            select self.window :: id :: method:
+                when Result.Ok(window) =>
+                    select:
+                        when window.should_close :: :: method => ids.push :: id :: method
+                        else => ()
+                when Result.Err(_) => ()
+        return ids
+
+    fn window_close_requested(read self, id: WindowId) -> Bool:
+        select self.window :: id :: method:
+            when Result.Ok(window) => return window.should_close :: :: method
+            when Result.Err(_) => return false
+
+    fn close_requested_window(read self, id: WindowId) -> Option[Window]:
+        select self.window :: id :: method:
+            when Result.Ok(window) =>
+                select:
+                    when window.should_close :: :: method => return Option.Some :: window :: call
+                    else => return Option.None
+            when Result.Err(_) => return Option.None
+
+    fn close_requested_windows(read self) -> List[Window]:
+        let windows = List[Window] :: :: call
+        let ids = self.window_ids :: :: method
+        repeat while !ids.is_empty :: :: method:
+            let id = ids.remove :: 0 :: method
+            select self.window :: id :: method:
+                when Result.Ok(window) =>
+                    select:
+                        when window.should_close :: :: method => windows.push :: window :: method
+                        else => ()
+                when Result.Err(_) => ()
+        return windows
+
+    fn close_requested_window_snapshot(read self, id: WindowId) -> Option[WindowSnapshot]:
+        select self.window_snapshot :: id :: method:
+            when Result.Ok(snapshot) =>
+                select:
+                    when snapshot.should_close => return Option.Some :: snapshot :: call
+                    else => return Option.None
+            when Result.Err(_) => return Option.None
+
+    fn close_requested_window_snapshots(read self) -> List[WindowSnapshot]:
+        let snapshots = List[WindowSnapshot] :: :: call
+        let count = self.windows.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return snapshots
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return snapshots
+            let raw_handle = glfw_window_raw_handle :: self.windows[index].window.raw :: call
+            let window = live_window_from_raw_handle :: raw_handle, self.windows[index].window.id :: call
+            let title = window.title :: :: method
+            let input = window.input_snapshot :: :: method
+            let hwnd = window.hwnd :: :: method
+            let should_close = window.should_close :: :: method
+            let frame_size = window.frame_size :: :: method
+            let client_api = window.client_api :: :: method
+            let opengl_profile = window.opengl_profile :: :: method
+            let context_creation_api = window.context_creation_api :: :: method
+            let context_version_major = window.context_version_major :: :: method
+            let context_version_minor = window.context_version_minor :: :: method
+            let current_context = window.current_context :: :: method
+            let opengl_forward_compat = window.opengl_forward_compat :: :: method
+            let opengl_debug_context = window.opengl_debug_context :: :: method
+            let context_no_error = window.context_no_error :: :: method
+            let srgb_capable = window.srgb_capable :: :: method
+            let doublebuffered = window.doublebuffered :: :: method
+            let opacity = window.opacity :: :: method
+            let cursor_mode = window.cursor_mode :: :: method
+            let sticky_keys_enabled = window.sticky_keys_enabled :: :: method
+            let sticky_mouse_buttons_enabled = window.sticky_mouse_buttons_enabled :: :: method
+            let lock_key_mods_enabled = window.lock_key_mods_enabled :: :: method
+            let raw_mouse_motion_enabled = window.raw_mouse_motion_enabled :: :: method
+            let visible = window.visible :: :: method
+            let resizable = window.resizable :: :: method
+            let decorated = window.decorated :: :: method
+            let auto_iconify = window.auto_iconify :: :: method
+            let focus_on_show = window.focus_on_show :: :: method
+            let mouse_passthrough = window.mouse_passthrough :: :: method
+            let hovered = window.hovered :: :: method
+            let floating = window.floating :: :: method
+            let fullscreen = window.fullscreen :: :: method
+            let snapshot = WindowSnapshot :: :: call
+                window = window
+                title = title
+                input = input
+                hwnd = hwnd
+                should_close = should_close
+                pos = window.pos :: :: method
+                size = window.size :: :: method
+                frame_size = frame_size
+                framebuffer_size = window.framebuffer_size :: :: method
+                content_scale = window.content_scale :: :: method
+                focused = window.focused :: :: method
+                iconified = window.iconified :: :: method
+                maximized = window.maximized :: :: method
+                cursor_pos = window.cursor_pos :: :: method
+                client_api = client_api
+                opengl_profile = opengl_profile
+                context_creation_api = context_creation_api
+                context_version_major = context_version_major
+                context_version_minor = context_version_minor
+                current_context = current_context
+                opengl_forward_compat = opengl_forward_compat
+                opengl_debug_context = opengl_debug_context
+                context_no_error = context_no_error
+                srgb_capable = srgb_capable
+                doublebuffered = doublebuffered
+                opacity = opacity
+                cursor_mode = cursor_mode
+                sticky_keys_enabled = sticky_keys_enabled
+                sticky_mouse_buttons_enabled = sticky_mouse_buttons_enabled
+                lock_key_mods_enabled = lock_key_mods_enabled
+                raw_mouse_motion_enabled = raw_mouse_motion_enabled
+                visible = visible
+                resizable = resizable
+                decorated = decorated
+                auto_iconify = auto_iconify
+                focus_on_show = focus_on_show
+                mouse_passthrough = mouse_passthrough
+                hovered = hovered
+                floating = floating
+                fullscreen = fullscreen
+            select:
+                when snapshot.should_close => snapshots.push :: snapshot :: method
+                else => ()
+            scan = scan + 1
+        return snapshots
+
+    fn window_ids(read self) -> List[WindowId]:
+        let ids = List[WindowId] :: :: call
+        let count = self.windows.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return ids
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return ids
+            ids.push :: self.windows[index].window.id :: method
+            scan = scan + 1
+        return ids
+
+    fn windows_snapshot(read self) -> List[Window]:
+        let windows = List[Window] :: :: call
+        let count = self.windows.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return windows
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return windows
+            let raw_handle = glfw_window_raw_handle :: self.windows[index].window.raw :: call
+            let window = live_window_from_raw_handle :: raw_handle, self.windows[index].window.id :: call
+            windows.push :: window :: method
+            scan = scan + 1
+        return windows
+
+    fn window_snapshots(read self) -> List[WindowSnapshot]:
+        let snapshots = List[WindowSnapshot] :: :: call
+        let count = self.windows.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return snapshots
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return snapshots
+            let raw_handle = glfw_window_raw_handle :: self.windows[index].window.raw :: call
+            let window = live_window_from_raw_handle :: raw_handle, self.windows[index].window.id :: call
+            let title = window.title :: :: method
+            let input = window.input_snapshot :: :: method
+            let hwnd = window.hwnd :: :: method
+            let should_close = window.should_close :: :: method
+            let frame_size = window.frame_size :: :: method
+            let client_api = window.client_api :: :: method
+            let opengl_profile = window.opengl_profile :: :: method
+            let context_creation_api = window.context_creation_api :: :: method
+            let context_version_major = window.context_version_major :: :: method
+            let context_version_minor = window.context_version_minor :: :: method
+            let current_context = window.current_context :: :: method
+            let opengl_forward_compat = window.opengl_forward_compat :: :: method
+            let opengl_debug_context = window.opengl_debug_context :: :: method
+            let context_no_error = window.context_no_error :: :: method
+            let srgb_capable = window.srgb_capable :: :: method
+            let doublebuffered = window.doublebuffered :: :: method
+            let opacity = window.opacity :: :: method
+            let cursor_mode = window.cursor_mode :: :: method
+            let sticky_keys_enabled = window.sticky_keys_enabled :: :: method
+            let sticky_mouse_buttons_enabled = window.sticky_mouse_buttons_enabled :: :: method
+            let lock_key_mods_enabled = window.lock_key_mods_enabled :: :: method
+            let raw_mouse_motion_enabled = window.raw_mouse_motion_enabled :: :: method
+            let visible = window.visible :: :: method
+            let resizable = window.resizable :: :: method
+            let decorated = window.decorated :: :: method
+            let auto_iconify = window.auto_iconify :: :: method
+            let focus_on_show = window.focus_on_show :: :: method
+            let mouse_passthrough = window.mouse_passthrough :: :: method
+            let hovered = window.hovered :: :: method
+            let floating = window.floating :: :: method
+            let fullscreen = window.fullscreen :: :: method
+            let snapshot = WindowSnapshot :: :: call
+                window = window
+                title = title
+                input = input
+                hwnd = hwnd
+                should_close = should_close
+                pos = window.pos :: :: method
+                size = window.size :: :: method
+                frame_size = frame_size
+                framebuffer_size = window.framebuffer_size :: :: method
+                content_scale = window.content_scale :: :: method
+                focused = window.focused :: :: method
+                iconified = window.iconified :: :: method
+                maximized = window.maximized :: :: method
+                cursor_pos = window.cursor_pos :: :: method
+                client_api = client_api
+                opengl_profile = opengl_profile
+                context_creation_api = context_creation_api
+                context_version_major = context_version_major
+                context_version_minor = context_version_minor
+                current_context = current_context
+                opengl_forward_compat = opengl_forward_compat
+                opengl_debug_context = opengl_debug_context
+                context_no_error = context_no_error
+                srgb_capable = srgb_capable
+                doublebuffered = doublebuffered
+                opacity = opacity
+                cursor_mode = cursor_mode
+                sticky_keys_enabled = sticky_keys_enabled
+                sticky_mouse_buttons_enabled = sticky_mouse_buttons_enabled
+                lock_key_mods_enabled = lock_key_mods_enabled
+                raw_mouse_motion_enabled = raw_mouse_motion_enabled
+                visible = visible
+                resizable = resizable
+                decorated = decorated
+                auto_iconify = auto_iconify
+                focus_on_show = focus_on_show
+                mouse_passthrough = mouse_passthrough
+                hovered = hovered
+                floating = floating
+                fullscreen = fullscreen
+            snapshots.push :: snapshot :: method
+            scan = scan + 1
+        return snapshots
+
+    fn window_snapshot(read self, id: WindowId) -> Result[WindowSnapshot, AppError]:
+        let Option.Some(index) = find_window_index :: self, id :: call else => return Result.Err :: AppError.WindowNotFound :: call
+        let raw_handle = glfw_window_raw_handle :: self.windows[index].window.raw :: call
+        let window = live_window_from_raw_handle :: raw_handle, self.windows[index].window.id :: call
+        let title = window.title :: :: method
+        let input = window.input_snapshot :: :: method
+        let hwnd = window.hwnd :: :: method
+        let should_close = window.should_close :: :: method
+        let frame_size = window.frame_size :: :: method
+        let client_api = window.client_api :: :: method
+        let opengl_profile = window.opengl_profile :: :: method
+        let context_creation_api = window.context_creation_api :: :: method
+        let context_version_major = window.context_version_major :: :: method
+        let context_version_minor = window.context_version_minor :: :: method
+        let current_context = window.current_context :: :: method
+        let opengl_forward_compat = window.opengl_forward_compat :: :: method
+        let opengl_debug_context = window.opengl_debug_context :: :: method
+        let context_no_error = window.context_no_error :: :: method
+        let srgb_capable = window.srgb_capable :: :: method
+        let doublebuffered = window.doublebuffered :: :: method
+        let opacity = window.opacity :: :: method
+        let cursor_mode = window.cursor_mode :: :: method
+        let sticky_keys_enabled = window.sticky_keys_enabled :: :: method
+        let sticky_mouse_buttons_enabled = window.sticky_mouse_buttons_enabled :: :: method
+        let lock_key_mods_enabled = window.lock_key_mods_enabled :: :: method
+        let raw_mouse_motion_enabled = window.raw_mouse_motion_enabled :: :: method
+        let visible = window.visible :: :: method
+        let resizable = window.resizable :: :: method
+        let decorated = window.decorated :: :: method
+        let auto_iconify = window.auto_iconify :: :: method
+        let focus_on_show = window.focus_on_show :: :: method
+        let mouse_passthrough = window.mouse_passthrough :: :: method
+        let hovered = window.hovered :: :: method
+        let floating = window.floating :: :: method
+        let fullscreen = window.fullscreen :: :: method
+        let snapshot = WindowSnapshot :: :: call
+            window = window
+            title = title
+            input = input
+            hwnd = hwnd
+            should_close = should_close
+            pos = window.pos :: :: method
+            size = window.size :: :: method
+            frame_size = frame_size
+            framebuffer_size = window.framebuffer_size :: :: method
+            content_scale = window.content_scale :: :: method
+            focused = window.focused :: :: method
+            iconified = window.iconified :: :: method
+            maximized = window.maximized :: :: method
+            cursor_pos = window.cursor_pos :: :: method
+            client_api = client_api
+            opengl_profile = opengl_profile
+            context_creation_api = context_creation_api
+            context_version_major = context_version_major
+            context_version_minor = context_version_minor
+            current_context = current_context
+            opengl_forward_compat = opengl_forward_compat
+            opengl_debug_context = opengl_debug_context
+            context_no_error = context_no_error
+            srgb_capable = srgb_capable
+            doublebuffered = doublebuffered
+            opacity = opacity
+            cursor_mode = cursor_mode
+            sticky_keys_enabled = sticky_keys_enabled
+            sticky_mouse_buttons_enabled = sticky_mouse_buttons_enabled
+            lock_key_mods_enabled = lock_key_mods_enabled
+            raw_mouse_motion_enabled = raw_mouse_motion_enabled
+            visible = visible
+            resizable = resizable
+            decorated = decorated
+            auto_iconify = auto_iconify
+            focus_on_show = focus_on_show
+            mouse_passthrough = mouse_passthrough
+            hovered = hovered
+            floating = floating
+            fullscreen = fullscreen
+        return Result.Ok :: snapshot :: call
+
+    fn monitor_count(read self) -> Index:
+        return self.monitors.count :: :: method
+
+    fn monitor_ids(read self) -> List[MonitorId]:
+        let ids = List[MonitorId] :: :: call
+        let count = self.monitors.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return ids
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return ids
+            ids.push :: self.monitors[index].id :: method
+            scan = scan + 1
+        return ids
+
+    fn monitors_snapshot(read self) -> List[Monitor]:
+        let monitors = List[Monitor] :: :: call
+        let count = self.monitors.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return monitors
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return monitors
+            let raw_handle = self.monitors[index].raw
+            let monitor = GlfwMonitor :: raw_handle :: call
+            monitors.push :: monitor :: method
+            scan = scan + 1
+        return monitors
+
+    fn monitor_snapshots(read self) -> List[MonitorSnapshot]:
+        let snapshots = List[MonitorSnapshot] :: :: call
+        let count = self.monitors.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return snapshots
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return snapshots
+            let monitor = GlfwMonitor :: self.monitors[index].raw :: call
+            let name_text = monitor.name_text :: :: method
+            let win32_names = monitor.win32_names :: :: method
+            let available = monitor.available :: :: method
+            let primary = monitor.primary :: :: method
+            let screen_pos = monitor.screen_pos :: :: method
+            let work_rect = monitor.work_rect :: :: method
+            let physical_size_mm = monitor.physical_size_mm :: :: method
+            let desktop_scale = monitor.desktop_scale :: :: method
+            let current_video_mode = monitor.current_video_mode :: :: method
+            let video_mode_count = monitor.video_mode_count :: :: method
+            let video_modes = monitor.video_modes_snapshot :: :: method
+            let gamma_ramp = monitor.gamma_ramp_snapshot :: :: method
+            let snapshot = MonitorSnapshot :: :: call
+                id = self.monitors[index].id
+                monitor = monitor
+                name_text = name_text
+                win32_names = win32_names
+                available = available
+                primary = primary
+                screen_pos = screen_pos
+                work_rect = work_rect
+                physical_size_mm = physical_size_mm
+                desktop_scale = desktop_scale
+                current_video_mode = current_video_mode
+                video_mode_count = video_mode_count
+                video_modes = video_modes
+                gamma_ramp = gamma_ramp
+            snapshots.push :: snapshot :: method
+            scan = scan + 1
+        return snapshots
+
+    fn monitor_snapshot(read self, id: MonitorId) -> Result[MonitorSnapshot, AppError]:
+        let Option.Some(index) = find_monitor_record_index :: self, id :: call else => return Result.Err :: AppError.MonitorNotFound :: call
+        let monitor = GlfwMonitor :: self.monitors[index].raw :: call
+        let name_text = monitor.name_text :: :: method
+        let win32_names = monitor.win32_names :: :: method
+        let available = monitor.available :: :: method
+        let primary = monitor.primary :: :: method
+        let screen_pos = monitor.screen_pos :: :: method
+        let work_rect = monitor.work_rect :: :: method
+        let physical_size_mm = monitor.physical_size_mm :: :: method
+        let desktop_scale = monitor.desktop_scale :: :: method
+        let current_video_mode = monitor.current_video_mode :: :: method
+        let video_mode_count = monitor.video_mode_count :: :: method
+        let video_modes = monitor.video_modes_snapshot :: :: method
+        let gamma_ramp = monitor.gamma_ramp_snapshot :: :: method
+        let snapshot = MonitorSnapshot :: :: call
+            id = self.monitors[index].id
+            monitor = monitor
+            name_text = name_text
+            win32_names = win32_names
+            available = available
+            primary = primary
+            screen_pos = screen_pos
+            work_rect = work_rect
+            physical_size_mm = physical_size_mm
+            desktop_scale = desktop_scale
+            current_video_mode = current_video_mode
+            video_mode_count = video_mode_count
+            video_modes = video_modes
+            gamma_ramp = gamma_ramp
+        return Result.Ok :: snapshot :: call
+
+    fn monitor(read self, id: MonitorId) -> Result[Monitor, AppError]:
+        let Option.Some(index) = find_monitor_record_index :: self, id :: call else => return Result.Err :: AppError.MonitorNotFound :: call
+        let raw_handle = self.monitors[index].raw
+        let monitor = GlfwMonitor :: raw_handle :: call
+        return Result.Ok :: monitor :: call
+
+    fn primary_monitor(read self) -> Result[Monitor, AppError]:
+        let primary = glfw_primary_monitor :: :: call
+        select:
+            when primary.is_null :: :: method => return Result.Err :: AppError.PrimaryMonitorUnavailable :: call
+            else => return Result.Ok :: primary :: call
+
+    fn primary_monitor_id(read self) -> Result[MonitorId, AppError]:
+        let Result.Ok(primary) = self.primary_monitor :: :: method else => return Result.Err :: AppError.PrimaryMonitorUnavailable :: call
+        let Option.Some(index) = find_monitor_index :: self, primary :: call else => return Result.Err :: AppError.MonitorNotFound :: call
+        let id = self.monitors[index].id
+        return Result.Ok :: id :: call
+
+    fn primary_monitor_snapshot(read self) -> Result[MonitorSnapshot, AppError]:
+        let Result.Ok(id) = self.primary_monitor_id :: :: method else => return Result.Err :: AppError.PrimaryMonitorUnavailable :: call
+        return self.monitor_snapshot :: id :: method
+
+    fn has_pending_events(read self) -> Bool:
+        return !self.pending.is_empty :: :: method
+
+    fn pending_event_count(read self) -> Index:
+        return self.pending.count :: :: method
+
+    fn clipboard_string(read self) -> Result[Str, AppClipboardError]:
+        select clipboard_anchor_window :: self :: call:
+            when Option.Some(window) =>
+                select window.clipboard_string :: :: method:
+                    when Result.Ok(text) => return Result.Ok :: text :: call
+                    when Result.Err(err) =>
+                        let value = AppClipboardError.TextDecode :: err :: call
+                        return Result.Err :: value :: call
+            when Option.None => return Result.Err :: AppClipboardError.WindowUnavailable :: call
+
+    fn set_clipboard_string(read self, text: Str) -> Result[Unit, AppClipboardError]:
+        select clipboard_anchor_window :: self :: call:
+            when Option.Some(window) =>
+                select window.set_clipboard_string :: text :: method:
+                    when Result.Ok(_) => return Result.Ok :: () :: call
+                    when Result.Err(err) =>
+                        let value = AppClipboardError.TextDecode :: err :: call
+                        return Result.Err :: value :: call
+            when Option.None => return Result.Err :: AppClipboardError.WindowUnavailable :: call
+
+    fn snapshot(read self) -> AppSnapshot:
+        let live = self.is_live :: :: method
+        let has_pending_events = self.has_pending_events :: :: method
+        let pending_event_count = self.pending_event_count :: :: method
+        let time = self.time :: :: method
+        let timer_value = self.timer_value :: :: method
+        let timer_frequency = self.timer_frequency :: :: method
+        let windows = self.window_snapshots :: :: method
+        let monitors = self.monitor_snapshots :: :: method
+        let joysticks = self.joystick_snapshots :: :: method
+        let window_count = windows.count :: :: method
+        let monitor_count = monitors.count :: :: method
+        let connected_joystick_count = joysticks.count :: :: method
+        let version_info = self.version_info :: :: method
+        let version_string = self.version_string :: :: method
+        let platform = self.current_platform :: :: method
+        let last_error = self.last_error :: :: method
+        let current_context_window_id = snapshot_current_context_window_id :: self :: call
+        let primary_monitor_id = snapshot_primary_monitor_id :: self :: call
+        return AppSnapshot :: :: call
+            live = live
+            has_pending_events = has_pending_events
+            pending_event_count = pending_event_count
+            time = time
+            timer_value = timer_value
+            timer_frequency = timer_frequency
+            window_count = window_count
+            monitor_count = monitor_count
+            connected_joystick_count = connected_joystick_count
+            version_info = version_info
+            version_string = version_string
+            platform = platform
+            last_error = last_error
+            current_context_window_id = current_context_window_id
+            primary_monitor_id = primary_monitor_id
+            windows = windows
+            monitors = monitors
+            joysticks = joysticks
+
+    fn create_window(edit self, take spec: WindowSpec) -> Result[Window, AppError]:
+        return app_create_window :: self, spec :: call
+
+    fn create_centered_window_on(edit self, take spec: WindowSpec, read monitor: Monitor) -> Result[Window, AppError]:
+        return app_create_centered_window_on :: self, spec, monitor :: call
+
+    fn create_primary_centered_window(edit self, take spec: WindowSpec) -> Result[Window, AppError]:
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_fullscreen_window(edit self, take title: Str, read monitor: Monitor) -> Result[Window, AppError]:
+        select fullscreen_window_spec :: title, monitor :: call:
+            when Result.Ok(spec) => return app_create_window :: self, spec :: call
+            when Result.Err(_) => return Result.Err :: AppError.InvalidWindowSpec :: call
+
+    fn create_fullscreen_window_with_video_mode(edit self, take title: Str, read monitor: Monitor, read mode: VideoMode) -> Result[Window, AppError]:
+        select fullscreen_window_spec_with_video_mode :: title, monitor, mode :: call:
+            when Result.Ok(spec) => return app_create_window :: self, spec :: call
+            when Result.Err(_) => return Result.Err :: AppError.InvalidWindowSpec :: call
+
+    fn create_fullscreen_window_matching_mode(edit self, take title: Str, read monitor: Monitor, width: CInt, height: CInt, refresh_rate: CInt) -> Result[Window, AppError]:
+        select monitor.video_mode_matching :: width, height, refresh_rate :: method:
+            when Option.Some(mode) => return self.create_fullscreen_window_with_video_mode :: title, monitor, mode :: method
+            when Option.None => return Result.Err :: AppError.VideoModeNotFound :: call
+
+    fn create_primary_fullscreen_window(edit self, take title: Str) -> Result[Window, AppError]:
+        select self.primary_monitor :: :: method:
+            when Result.Ok(monitor) => return self.create_fullscreen_window :: title, monitor :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn create_primary_fullscreen_window_with_video_mode(edit self, take title: Str, read mode: VideoMode) -> Result[Window, AppError]:
+        select self.primary_monitor :: :: method:
+            when Result.Ok(monitor) => return self.create_fullscreen_window_with_video_mode :: title, monitor, mode :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn create_primary_fullscreen_window_matching_mode(edit self, take title: Str, width: CInt, height: CInt, refresh_rate: CInt) -> Result[Window, AppError]:
+        select self.primary_monitor :: :: method:
+            when Result.Ok(monitor) => return self.create_fullscreen_window_matching_mode :: title, monitor, width, height, refresh_rate :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn create_hidden_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = hidden_window_spec :: title, width, height :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_primary_centered_hidden_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = hidden_window_spec :: title, width, height :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_positioned_window(edit self, take title: Str, width: Index, height: Index, x: CInt, y: CInt) -> Result[Window, AppError]:
+        let spec = positioned_window_spec :: title, width, height, x, y :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_fixed_size_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = fixed_size_window_spec :: title, width, height :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_primary_centered_fixed_size_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = fixed_size_window_spec :: title, width, height :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_unfocused_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = unfocused_window_spec :: title, width, height :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_primary_centered_unfocused_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = unfocused_window_spec :: title, width, height :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_undecorated_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = undecorated_window_spec :: title, width, height :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_primary_centered_undecorated_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = undecorated_window_spec :: title, width, height :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_floating_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = floating_window_spec :: title, width, height :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_primary_centered_floating_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = floating_window_spec :: title, width, height :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_maximized_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = maximized_window_spec :: title, width, height :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_primary_centered_maximized_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = maximized_window_spec :: title, width, height :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_transparent_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = transparent_window_spec :: title, width, height :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_primary_centered_transparent_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = transparent_window_spec :: title, width, height :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_mouse_passthrough_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = mouse_passthrough_window_spec :: title, width, height :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_primary_centered_mouse_passthrough_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = mouse_passthrough_window_spec :: title, width, height :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_win32_keyboard_menu_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = win32_keyboard_menu_window_spec :: title, width, height :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_primary_centered_win32_keyboard_menu_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = win32_keyboard_menu_window_spec :: title, width, height :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_win32_showdefault_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = win32_showdefault_window_spec :: title, width, height :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_primary_centered_win32_showdefault_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = win32_showdefault_window_spec :: title, width, height :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_no_api_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = no_api_window_spec :: title, width, height :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_primary_centered_no_api_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = no_api_window_spec :: title, width, height :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_vulkan_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = vulkan_window_spec :: title, width, height :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_primary_centered_vulkan_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        let spec = vulkan_window_spec :: title, width, height :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_window_spec :: title, width, height, major, minor :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_opengl_core_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_core_window_spec :: title, width, height, major, minor :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_opengl_compat_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_compat_window_spec :: title, width, height, major, minor :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_opengl_es_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_es_window_spec :: title, width, height, major, minor :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_egl_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = egl_opengl_window_spec :: title, width, height, major, minor :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_egl_opengl_es_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = egl_opengl_es_window_spec :: title, width, height, major, minor :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_osmesa_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = osmesa_opengl_window_spec :: title, width, height, major, minor :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_opengl_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_debug_window_spec :: title, width, height, major, minor :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_opengl_core_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_core_debug_window_spec :: title, width, height, major, minor :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_opengl_compat_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_compat_debug_window_spec :: title, width, height, major, minor :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_opengl_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_srgb_window_spec :: title, width, height, major, minor :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_opengl_core_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_core_srgb_window_spec :: title, width, height, major, minor :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_opengl_compat_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_compat_srgb_window_spec :: title, width, height, major, minor :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_opengl_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_debug_srgb_window_spec :: title, width, height, major, minor :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_opengl_core_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_core_debug_srgb_window_spec :: title, width, height, major, minor :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_opengl_compat_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_compat_debug_srgb_window_spec :: title, width, height, major, minor :: call
+        return app_create_window :: self, spec :: call
+
+    fn create_primary_centered_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_window_spec :: title, width, height, major, minor :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_primary_centered_opengl_core_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_core_window_spec :: title, width, height, major, minor :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_primary_centered_opengl_compat_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_compat_window_spec :: title, width, height, major, minor :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_primary_centered_opengl_es_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_es_window_spec :: title, width, height, major, minor :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_primary_centered_egl_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = egl_opengl_window_spec :: title, width, height, major, minor :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_primary_centered_egl_opengl_es_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = egl_opengl_es_window_spec :: title, width, height, major, minor :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_primary_centered_osmesa_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = osmesa_opengl_window_spec :: title, width, height, major, minor :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_primary_centered_opengl_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_debug_window_spec :: title, width, height, major, minor :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_primary_centered_opengl_core_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_core_debug_window_spec :: title, width, height, major, minor :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_primary_centered_opengl_compat_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_compat_debug_window_spec :: title, width, height, major, minor :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_primary_centered_opengl_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_srgb_window_spec :: title, width, height, major, minor :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_primary_centered_opengl_core_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_core_srgb_window_spec :: title, width, height, major, minor :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_primary_centered_opengl_compat_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_compat_srgb_window_spec :: title, width, height, major, minor :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_primary_centered_opengl_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_debug_srgb_window_spec :: title, width, height, major, minor :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_primary_centered_opengl_core_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_core_debug_srgb_window_spec :: title, width, height, major, minor :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn create_primary_centered_opengl_compat_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        let spec = opengl_compat_debug_srgb_window_spec :: title, width, height, major, minor :: call
+        return app_create_primary_centered_window :: self, spec :: call
+
+    fn window(read self, id: WindowId) -> Result[Window, AppError]:
+        let Option.Some(index) = find_window_index :: self, id :: call else => return Result.Err :: AppError.WindowNotFound :: call
+        let raw_handle = glfw_window_raw_handle :: self.windows[index].window.raw :: call
+        let window = live_window_from_raw_handle :: raw_handle, self.windows[index].window.id :: call
+        return Result.Ok :: window :: call
+
+    fn destroy_window_by_id(edit self, id: WindowId) -> Result[Unit, AppError]:
+        return app_destroy_window_by_id :: self, id :: call
+
+    fn destroy_window(edit self, take window: Window) -> Result[Unit, AppError]:
+        return app_destroy_window_by_id :: self, window.id :: call
+
+    fn close_all_windows(read self) -> Unit:
+        let ids = self.window_ids :: :: method
+        let windows = List[Window] :: :: call
+        repeat while !ids.is_empty :: :: method:
+            let id = ids.remove :: 0 :: method
+            select self.window :: id :: method:
+                when Result.Ok(window) => windows.push :: window :: method
+                when Result.Err(_) => ()
+        repeat while !windows.is_empty :: :: method:
+            let window = windows.remove :: 0 :: method
+            window.close :: :: method
+        return
+
+    fn destroy_close_requested_windows(edit self) -> Index:
+        let destroyed: CInt = 0
+        let ids = self.close_requested_window_ids :: :: method
+        repeat while !ids.is_empty :: :: method:
+            let id = ids.remove :: 0 :: method
+            select app_destroy_window_by_id :: self, id :: call:
+                when Result.Ok(_) => destroyed = destroyed + 1
+                when Result.Err(_) => ()
+        let Result.Ok(result) = destroyed as Maybe[Index] else => return 0
+        return result
+
+    fn destroy_all_windows(edit self) -> Index:
+        let destroyed: CInt = 0
+        repeat:
+            select:
+                when self.windows.is_empty :: :: method => break
+                else =>
+                    let _ = destroy_window_record_at :: self, 0 :: call
+                    destroyed = destroyed + 1
+        let Result.Ok(result) = destroyed as Maybe[Index] else => return 0
+        return result
+
+    fn post_empty_event(read self) -> Unit:
+        glfw_post_empty_event :: :: call
+        return
+
+    fn post_user_event(edit self, id: UserEventId) -> Unit:
+        let event = UserEvent.Signaled :: :: call
+            id = id
+        push_user_event :: self.pending, event :: call
+        glfw_post_empty_event :: :: call
+        return
+
+    fn next_event(edit self) -> Option[AppEvent]:
+        return pending_pop_front :: self.pending :: call
+
+    fn next_window_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_window :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_monitor_event(edit self) -> Option[MonitorEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_monitor :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_joystick_event(edit self) -> Option[JoystickEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_joystick :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_user_event(edit self) -> Option[UserEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_user :: :: method
+        self.pending = batch.events
+        return event
+
+    fn take_pending_events(edit self) -> List[AppEvent]:
+        return drain_pending_events :: self.pending :: call
+
+    fn take_event_batch(edit self) -> AppEventBatch:
+        let events = self.take_pending_events :: :: method
+        return split_app_events :: events :: call
+
+    fn events_for(edit self, read flow: ControlFlow) -> List[AppEvent]:
+        select flow:
+            when ControlFlow.Poll => return self.poll_events :: :: method
+            when ControlFlow.Wait => return self.wait_events :: :: method
+            when ControlFlow.WaitTimeout(seconds = seconds) => return self.wait_timeout_events :: seconds :: method
+            when ControlFlow.Exit => return List[AppEvent] :: :: call
+
+    fn event_batch_for(edit self, read flow: ControlFlow) -> AppEventBatch:
+        let events = self.events_for :: flow :: method
+        return split_app_events :: events :: call
+
+    fn pump_poll(edit self) -> Unit:
+        glfw_poll_events :: :: call
+        collect_window_events :: self :: call
+        refresh_monitor_snapshot :: self, true :: call
+        let previous_bits = self.joystick_state.bits_value :: :: method
+        let next_bits = collect_joystick_bits :: previous_bits, true, self.pending :: call
+        self.joystick_state.bits = next_bits
+        return
+
+    fn pump_wait(edit self) -> Unit:
+        glfw_wait_events :: :: call
+        collect_window_events :: self :: call
+        refresh_monitor_snapshot :: self, true :: call
+        let previous_bits = self.joystick_state.bits_value :: :: method
+        let next_bits = collect_joystick_bits :: previous_bits, true, self.pending :: call
+        self.joystick_state.bits = next_bits
+        return
+
+    fn pump_wait_timeout(edit self, timeout: F64) -> Unit:
+        glfw_wait_events_timeout :: timeout :: call
+        collect_window_events :: self :: call
+        refresh_monitor_snapshot :: self, true :: call
+        let previous_bits = self.joystick_state.bits_value :: :: method
+        let next_bits = collect_joystick_bits :: previous_bits, true, self.pending :: call
+        self.joystick_state.bits = next_bits
+        return
+
+    fn poll_events(edit self) -> List[AppEvent]:
+        select:
+            when self.has_pending_events :: :: method => return self.take_pending_events :: :: method
+            else => ()
+        self.pump_poll :: :: method
+        return self.take_pending_events :: :: method
+
+    fn poll_event_batch(edit self) -> AppEventBatch:
+        let events = self.poll_events :: :: method
+        return split_app_events :: events :: call
+
+    fn poll_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        let batch = self.poll_event_batch :: :: method
+        let event = batch.pop_window :: :: method
+        self.pending = batch.events
+        return Result.Ok :: event :: call
+
+    fn poll_monitor_event(edit self) -> Result[Option[MonitorEvent], AppError]:
+        let batch = self.poll_event_batch :: :: method
+        let event = batch.pop_monitor :: :: method
+        self.pending = batch.events
+        return Result.Ok :: event :: call
+
+    fn poll_joystick_event(edit self) -> Result[Option[JoystickEvent], AppError]:
+        let batch = self.poll_event_batch :: :: method
+        let event = batch.pop_joystick :: :: method
+        self.pending = batch.events
+        return Result.Ok :: event :: call
+
+    fn poll_user_event(edit self) -> Result[Option[UserEvent], AppError]:
+        let batch = self.poll_event_batch :: :: method
+        let event = batch.pop_user :: :: method
+        self.pending = batch.events
+        return Result.Ok :: event :: call
+
+    fn poll_window_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_windows :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_window_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_created_window_ids(edit self) -> List[WindowId]:
+        let batch = self.poll_event_batch :: :: method
+        let ids = batch.take_created_window_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn poll_created_window_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_created_window_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_destroyed_window_ids(edit self) -> List[WindowId]:
+        let batch = self.poll_event_batch :: :: method
+        let ids = batch.take_destroyed_window_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn poll_destroyed_window_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_destroyed_window_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_close_requested_window_ids(edit self) -> List[WindowId]:
+        let batch = self.poll_event_batch :: :: method
+        let ids = batch.take_close_requested_window_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn poll_close_requested_window_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_close_requested_window_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_monitor_events(edit self) -> List[MonitorEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_monitors :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_joystick_events(edit self) -> List[JoystickEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_joysticks :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_user_events(edit self) -> List[UserEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_users :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_user_ids(edit self) -> List[UserEventId]:
+        let batch = self.poll_event_batch :: :: method
+        let ids = batch.take_user_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn wait_events(edit self) -> List[AppEvent]:
+        select:
+            when self.has_pending_events :: :: method => return self.take_pending_events :: :: method
+            else => ()
+        self.pump_wait :: :: method
+        return self.take_pending_events :: :: method
+
+    fn wait_event_batch(edit self) -> AppEventBatch:
+        let events = self.wait_events :: :: method
+        return split_app_events :: events :: call
+
+    fn wait_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        let batch = self.wait_event_batch :: :: method
+        let event = batch.pop_window :: :: method
+        self.pending = batch.events
+        return Result.Ok :: event :: call
+
+    fn wait_monitor_event(edit self) -> Result[Option[MonitorEvent], AppError]:
+        let batch = self.wait_event_batch :: :: method
+        let event = batch.pop_monitor :: :: method
+        self.pending = batch.events
+        return Result.Ok :: event :: call
+
+    fn wait_joystick_event(edit self) -> Result[Option[JoystickEvent], AppError]:
+        let batch = self.wait_event_batch :: :: method
+        let event = batch.pop_joystick :: :: method
+        self.pending = batch.events
+        return Result.Ok :: event :: call
+
+    fn wait_user_event(edit self) -> Result[Option[UserEvent], AppError]:
+        let batch = self.wait_event_batch :: :: method
+        let event = batch.pop_user :: :: method
+        self.pending = batch.events
+        return Result.Ok :: event :: call
+
+    fn wait_window_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_windows :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_window_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_created_window_ids(edit self) -> List[WindowId]:
+        let batch = self.wait_event_batch :: :: method
+        let ids = batch.take_created_window_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn wait_created_window_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_created_window_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_destroyed_window_ids(edit self) -> List[WindowId]:
+        let batch = self.wait_event_batch :: :: method
+        let ids = batch.take_destroyed_window_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn wait_destroyed_window_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_destroyed_window_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_close_requested_window_ids(edit self) -> List[WindowId]:
+        let batch = self.wait_event_batch :: :: method
+        let ids = batch.take_close_requested_window_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn wait_close_requested_window_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_close_requested_window_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_monitor_events(edit self) -> List[MonitorEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_monitors :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_joystick_events(edit self) -> List[JoystickEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_joysticks :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_user_events(edit self) -> List[UserEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_users :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_user_ids(edit self) -> List[UserEventId]:
+        let batch = self.wait_event_batch :: :: method
+        let ids = batch.take_user_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn wait_timeout_events(edit self, timeout: F64) -> List[AppEvent]:
+        select:
+            when self.has_pending_events :: :: method => return self.take_pending_events :: :: method
+            else => ()
+        self.pump_wait_timeout :: timeout :: method
+        return self.take_pending_events :: :: method
+
+    fn wait_timeout_event_batch(edit self, timeout: F64) -> AppEventBatch:
+        let events = self.wait_timeout_events :: timeout :: method
+        return split_app_events :: events :: call
+
+    fn wait_timeout_window_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let event = batch.pop_window :: :: method
+        self.pending = batch.events
+        return Result.Ok :: event :: call
+
+    fn wait_timeout_monitor_event(edit self, timeout: F64) -> Result[Option[MonitorEvent], AppError]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let event = batch.pop_monitor :: :: method
+        self.pending = batch.events
+        return Result.Ok :: event :: call
+
+    fn wait_timeout_joystick_event(edit self, timeout: F64) -> Result[Option[JoystickEvent], AppError]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let event = batch.pop_joystick :: :: method
+        self.pending = batch.events
+        return Result.Ok :: event :: call
+
+    fn wait_timeout_user_event(edit self, timeout: F64) -> Result[Option[UserEvent], AppError]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let event = batch.pop_user :: :: method
+        self.pending = batch.events
+        return Result.Ok :: event :: call
+
+    fn wait_timeout_window_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_windows :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_window_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_window_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_created_window_ids(edit self, timeout: F64) -> List[WindowId]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let ids = batch.take_created_window_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn wait_timeout_created_window_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_created_window_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_destroyed_window_ids(edit self, timeout: F64) -> List[WindowId]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let ids = batch.take_destroyed_window_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn wait_timeout_destroyed_window_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_destroyed_window_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_close_requested_window_ids(edit self, timeout: F64) -> List[WindowId]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let ids = batch.take_close_requested_window_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn wait_timeout_close_requested_window_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_close_requested_window_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_monitor_events(edit self, timeout: F64) -> List[MonitorEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_monitors :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_joystick_events(edit self, timeout: F64) -> List[JoystickEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_joysticks :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_user_events(edit self, timeout: F64) -> List[UserEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_users :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_user_ids(edit self, timeout: F64) -> List[UserEventId]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let ids = batch.take_user_ids :: :: method
+        self.pending = batch.events
+        return ids
+
+    fn poll(edit self) -> Result[Option[AppEvent], AppError]:
+        let queued = pending_pop_front :: self.pending :: call
+        select queued:
+            when Option.Some(event) =>
+                let wrapped: Option[AppEvent] = Option.Some :: event :: call
+                return Result.Ok :: wrapped :: call
+            when Option.None =>
+                self.pump_poll :: :: method
+                let drained = pending_pop_front :: self.pending :: call
+                return Result.Ok :: drained :: call
+        let empty: Option[AppEvent] = Option.None
+        return Result.Ok :: empty :: call
+
+    fn wait(edit self) -> Result[Option[AppEvent], AppError]:
+        let queued = pending_pop_front :: self.pending :: call
+        select queued:
+            when Option.Some(event) =>
+                let wrapped: Option[AppEvent] = Option.Some :: event :: call
+                return Result.Ok :: wrapped :: call
+            when Option.None =>
+                self.pump_wait :: :: method
+                let drained = pending_pop_front :: self.pending :: call
+                return Result.Ok :: drained :: call
+        let empty: Option[AppEvent] = Option.None
+        return Result.Ok :: empty :: call
+
+    fn wait_timeout(edit self, timeout: F64) -> Result[Option[AppEvent], AppError]:
+        let queued = pending_pop_front :: self.pending :: call
+        select queued:
+            when Option.Some(event) =>
+                let wrapped: Option[AppEvent] = Option.Some :: event :: call
+                return Result.Ok :: wrapped :: call
+            when Option.None =>
+                self.pump_wait_timeout :: timeout :: method
+                let drained = pending_pop_front :: self.pending :: call
+                return Result.Ok :: drained :: call
+        let empty: Option[AppEvent] = Option.None
+        return Result.Ok :: empty :: call
+
+    fn time(read self) -> F64:
+        return glfw_get_time :: :: call
+
+    fn version_info(read self) -> VersionInfo:
+        let _ = self
+        return runtime_version :: :: call
+
+    fn version_string(read self) -> Result[Str, TextDecodeError]:
+        let _ = self
+        return runtime_version_string :: :: call
+
+    fn current_platform(read self) -> Platform:
+        let _ = self
+        return runtime_platform :: :: call
+
+    fn platform_supported(read self, read platform: Platform) -> Bool:
+        let _ = self
+        return runtime_platform_supported :: platform :: call
+
+    fn last_error(read self) -> Result[Option[RuntimeErrorInfo], TextDecodeError]:
+        let _ = self
+        return runtime_last_error :: :: call
+
+    fn set_time(read self, time_value: F64) -> Unit:
+        let _ = self
+        glfw_set_time :: time_value :: call
+        return
+
+    fn timer_value(read self) -> U64:
+        let _ = self
+        return glfw_get_timer_value :: :: call
+
+    fn timer_frequency(read self) -> U64:
+        let _ = self
+        return glfw_get_timer_frequency :: :: call
+
+    fn current_context_window(read self) -> Result[Window, AppError]:
+        let current = glfw_get_current_context :: :: call
+        select:
+            when current.is_null :: :: method => return Result.Err :: AppError.NoCurrentContext :: call
+            else => ()
+        let count = self.windows.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return Result.Err :: AppError.CurrentContextWindowNotTracked :: call
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return Result.Err :: AppError.CurrentContextWindowNotTracked :: call
+            let id = self.windows[index].window.id
+            select self.window :: id :: method:
+                when Result.Ok(window) =>
+                    select:
+                        when window.current_context :: :: method => return Result.Ok :: window :: call
+                        else => ()
+                when Result.Err(_) => ()
+            scan = scan + 1
+        return Result.Err :: AppError.CurrentContextWindowNotTracked :: call
+
+    fn terminate(take self) -> Unit:
+        let _ = self.destroy_all_windows :: :: method
+        glfw_terminate :: :: call
+        return

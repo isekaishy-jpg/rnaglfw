@@ -1,0 +1,14 @@
+use present.VulkanPresentApp
+
+impl VulkanPresentApp:
+    fn has_monitors(read self) -> Bool:
+        return self.app.has_monitors :: :: method
+
+    fn has_joysticks(read self) -> Bool:
+        return self.app.has_joysticks :: :: method
+
+    fn has_current_context_window(read self) -> Bool:
+        return self.app.has_current_context_window :: :: method
+
+    fn has_primary_monitor(read self) -> Bool:
+        return self.app.has_primary_monitor :: :: method

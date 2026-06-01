@@ -1,0 +1,76 @@
+use std.Result
+
+use runa_app.{rgba_color, solid_rgba_image}
+use runa_app_vulkan.{VulkanPixelFormat, vulkan_pixel_frame_with_color}
+
+pub fn check_rgba_line_helpers() -> I32:
+    let blank = rgba_color :: 0U8, 0U8, 0U8, 0U8 :: call
+    let line_fill = rgba_color :: 90U8, 100U8, 110U8, 120U8 :: call
+    select solid_rgba_image :: 4, 4, blank :: call:
+        when Result.Ok(image) =>
+            select image.draw_line :: 0, 0, 3, 3, line_fill :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) => return 1
+            select image.pixel :: 2, 2 :: method:
+                when Result.Ok(color) =>
+                    select:
+                        when color.red != line_fill.red => return 2
+                        when color.green != line_fill.green => return 3
+                        when color.blue != line_fill.blue => return 4
+                        when color.alpha != line_fill.alpha => return 5
+                        else => ()
+                when Result.Err(_) => return 6
+            let reverse_fill = rgba_color :: 10U8, 20U8, 30U8, 40U8 :: call
+            select image.draw_line :: 3, 0, 0, 3, reverse_fill :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) => return 7
+            select image.pixel :: 2, 1 :: method:
+                when Result.Ok(color) =>
+                    select:
+                        when color.red != reverse_fill.red => return 8
+                        when color.green != reverse_fill.green => return 9
+                        when color.blue != reverse_fill.blue => return 10
+                        when color.alpha != reverse_fill.alpha => return 11
+                        else => ()
+                when Result.Err(_) => return 12
+            select image.draw_line :: 4, 0, 0, 0, line_fill :: method:
+                when Result.Ok(_) => return 13
+                when Result.Err(_) => ()
+        when Result.Err(_) => return 14
+    return 0
+
+pub fn check_vulkan_pixel_frame_line_helpers() -> I32:
+    let blank = rgba_color :: 0U8, 0U8, 0U8, 0U8 :: call
+    let line_fill = rgba_color :: 90U8, 100U8, 110U8, 120U8 :: call
+    select vulkan_pixel_frame_with_color :: 4, 4, VulkanPixelFormat.Rgba8, blank :: call:
+        when Result.Ok(frame) =>
+            select frame.draw_line :: 0, 0, 3, 3, line_fill :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) => return 15
+            select frame.pixel :: 2, 2 :: method:
+                when Result.Ok(color) =>
+                    select:
+                        when color.red != line_fill.red => return 16
+                        when color.green != line_fill.green => return 17
+                        when color.blue != line_fill.blue => return 18
+                        when color.alpha != line_fill.alpha => return 19
+                        else => ()
+                when Result.Err(_) => return 20
+            let reverse_fill = rgba_color :: 10U8, 20U8, 30U8, 40U8 :: call
+            select frame.draw_line :: 3, 0, 0, 3, reverse_fill :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) => return 21
+            select frame.pixel :: 2, 1 :: method:
+                when Result.Ok(color) =>
+                    select:
+                        when color.red != reverse_fill.red => return 22
+                        when color.green != reverse_fill.green => return 23
+                        when color.blue != reverse_fill.blue => return 24
+                        when color.alpha != reverse_fill.alpha => return 25
+                        else => ()
+                when Result.Err(_) => return 26
+            select frame.draw_line :: 4, 0, 0, 0, line_fill :: method:
+                when Result.Ok(_) => return 27
+                when Result.Err(_) => ()
+        when Result.Err(_) => return 28
+    return 0

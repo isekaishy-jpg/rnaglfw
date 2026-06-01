@@ -1,0 +1,69 @@
+use std.{Result, Str}
+
+use present.{PresentColor, VulkanPresentApp, VulkanPresentAppError}
+use present.finish_vulkan_present_app
+use runa_app.{App, AppError, AppInitConfig, Window, WindowSpec}
+use runa_app.{app_create_primary_centered_window, app_create_window, app_init_with}
+use runa_app.vulkan_window_spec
+
+pub fn present_color(red: F32, green: F32, blue: F32, alpha: F32) -> PresentColor:
+    return PresentColor :: :: call
+        red = red
+        green = green
+        blue = blue
+        alpha = alpha
+
+pub fn app_init_vulkan_present(config: AppInitConfig, window_title: Str, app_name: Str, width: Index, height: Index) -> Result[VulkanPresentApp, VulkanPresentAppError]:
+    let spec = vulkan_window_spec :: window_title, width, height :: call
+    return app_init_vulkan_present_with :: config, app_name, spec :: call
+
+pub fn app_init_vulkan_present_with(config: AppInitConfig, app_name: Str, take spec: WindowSpec) -> Result[VulkanPresentApp, VulkanPresentAppError]:
+    let spec = spec.with_vulkan :: :: method
+    select app_init_with :: config :: call:
+        when Result.Ok(app) => return finish_created_present_app :: app, app_name, spec, false :: call
+        when Result.Err(err) =>
+            let error = VulkanPresentAppError.AppInit :: err :: call
+            return Result.Err :: error :: call
+
+pub fn app_init_primary_centered_vulkan_present(config: AppInitConfig, window_title: Str, app_name: Str, width: Index, height: Index) -> Result[VulkanPresentApp, VulkanPresentAppError]:
+    let spec = vulkan_window_spec :: window_title, width, height :: call
+    return app_init_primary_centered_vulkan_present_with :: config, app_name, spec :: call
+
+pub fn app_init_primary_centered_vulkan_present_with(config: AppInitConfig, app_name: Str, take spec: WindowSpec) -> Result[VulkanPresentApp, VulkanPresentAppError]:
+    let spec = spec.with_vulkan :: :: method
+    select app_init_with :: config :: call:
+        when Result.Ok(app) => return finish_created_present_app :: app, app_name, spec, true :: call
+        when Result.Err(err) =>
+            let error = VulkanPresentAppError.AppInit :: err :: call
+            return Result.Err :: error :: call
+
+pub fn app_init_hidden_vulkan_present(config: AppInitConfig, window_title: Str, app_name: Str, width: Index, height: Index) -> Result[VulkanPresentApp, VulkanPresentAppError]:
+    let spec = vulkan_window_spec :: window_title, width, height :: call
+    let spec = spec.with_hidden :: :: method
+    return app_init_vulkan_present_with :: config, app_name, spec :: call
+
+pub fn app_init_hidden_vulkan_present_with(config: AppInitConfig, app_name: Str, take spec: WindowSpec) -> Result[VulkanPresentApp, VulkanPresentAppError]:
+    let spec = spec.with_hidden :: :: method
+    return app_init_vulkan_present_with :: config, app_name, spec :: call
+
+pub fn app_init_primary_centered_hidden_vulkan_present(config: AppInitConfig, window_title: Str, app_name: Str, width: Index, height: Index) -> Result[VulkanPresentApp, VulkanPresentAppError]:
+    let spec = vulkan_window_spec :: window_title, width, height :: call
+    let spec = spec.with_hidden :: :: method
+    return app_init_primary_centered_vulkan_present_with :: config, app_name, spec :: call
+
+pub fn app_init_primary_centered_hidden_vulkan_present_with(config: AppInitConfig, app_name: Str, take spec: WindowSpec) -> Result[VulkanPresentApp, VulkanPresentAppError]:
+    let spec = spec.with_hidden :: :: method
+    return app_init_primary_centered_vulkan_present_with :: config, app_name, spec :: call
+
+fn finish_created_present_app(take app: App, app_name: Str, take spec: WindowSpec, centered: Bool) -> Result[VulkanPresentApp, VulkanPresentAppError]:
+    select create_present_window :: app, spec, centered :: call:
+        when Result.Ok(window) => return finish_vulkan_present_app :: app, window, app_name :: call
+        when Result.Err(err) =>
+            app.terminate :: :: method
+            let error = VulkanPresentAppError.WindowCreate :: err :: call
+            return Result.Err :: error :: call
+
+fn create_present_window(edit app: App, take spec: WindowSpec, centered: Bool) -> Result[Window, AppError]:
+    select:
+        when centered => return app_create_primary_centered_window :: app, spec :: call
+        else => return app_create_window :: app, spec :: call

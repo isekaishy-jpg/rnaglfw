@@ -1,0 +1,2662 @@
+use std.{List, Option, Result, Str}
+use runa_app.{AppError, AppEvent, AppEventBatch, ControlFlow}
+use runa_app.{JoystickEvent, JoystickId, MonitorEvent, MonitorId}
+use runa_app.{UserEvent, UserEventId, WindowEvent, WindowId}
+use runa_app.{JoystickSnapshot, Monitor, MonitorSnapshot, Window, WindowSnapshot}
+use runa_app.Joystick
+use runa_app.{WindowCharacterData, WindowCharacterModsData, WindowCursorData}
+use runa_app.{WindowKeyData, WindowMouseButtonData, WindowMoveData}
+use runa_app.{WindowScaleData, WindowScrollData, WindowSizeData}
+use present.VulkanPresentApp
+
+impl VulkanPresentApp:
+    fn post_user_event(edit self, id: UserEventId) -> Unit:
+        self.app.post_user_event :: id :: method
+        return
+
+    fn post_empty_event(read self) -> Unit:
+        self.app.post_empty_event :: :: method
+        return
+
+    fn next_event(edit self) -> Option[AppEvent]:
+        return self.app.next_event :: :: method
+
+    fn next_monitor_event(edit self) -> Option[MonitorEvent]:
+        return self.app.next_monitor_event :: :: method
+
+    fn next_monitor_event_for(edit self, id: MonitorId) -> Option[MonitorEvent]:
+        return self.app.next_monitor_event_for :: id :: method
+
+    fn next_joystick_event(edit self) -> Option[JoystickEvent]:
+        return self.app.next_joystick_event :: :: method
+
+    fn next_joystick_event_for(edit self, id: JoystickId) -> Option[JoystickEvent]:
+        return self.app.next_joystick_event_for :: id :: method
+
+    fn next_user_event(edit self) -> Option[UserEvent]:
+        return self.app.next_user_event :: :: method
+
+    fn next_user_event_for(edit self, id: UserEventId) -> Option[UserEvent]:
+        return self.app.next_user_event_for :: id :: method
+
+    fn next_window_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_window_event_for :: self.window.id :: method
+
+    fn next_window_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_window_event_for :: id :: method
+
+    fn next_cursor_data(edit self) -> Option[WindowCursorData]:
+        return self.app.next_cursor_data_for :: self.window.id :: method
+
+    fn next_scroll_data(edit self) -> Option[WindowScrollData]:
+        return self.app.next_scroll_data_for :: self.window.id :: method
+
+    fn next_key_data(edit self) -> Option[WindowKeyData]:
+        return self.app.next_key_data_for :: self.window.id :: method
+
+    fn next_character_data(edit self) -> Option[WindowCharacterData]:
+        return self.app.next_character_data_for :: self.window.id :: method
+
+    fn next_character_mods_data(edit self) -> Option[WindowCharacterModsData]:
+        return self.app.next_character_mods_data_for :: self.window.id :: method
+
+    fn next_mouse_button_data(edit self) -> Option[WindowMouseButtonData]:
+        return self.app.next_mouse_button_data_for :: self.window.id :: method
+
+    fn next_dropped_paths_list(edit self) -> Option[List[Str]]:
+        return self.app.next_dropped_paths_list_for :: self.window.id :: method
+
+    fn next_cursor_data_for(edit self, id: WindowId) -> Option[WindowCursorData]:
+        return self.app.next_cursor_data_for :: id :: method
+
+    fn next_scroll_data_for(edit self, id: WindowId) -> Option[WindowScrollData]:
+        return self.app.next_scroll_data_for :: id :: method
+
+    fn next_key_data_for(edit self, id: WindowId) -> Option[WindowKeyData]:
+        return self.app.next_key_data_for :: id :: method
+
+    fn next_character_data_for(edit self, id: WindowId) -> Option[WindowCharacterData]:
+        return self.app.next_character_data_for :: id :: method
+
+    fn next_character_mods_data_for(edit self, id: WindowId) -> Option[WindowCharacterModsData]:
+        return self.app.next_character_mods_data_for :: id :: method
+
+    fn next_mouse_button_data_for(edit self, id: WindowId) -> Option[WindowMouseButtonData]:
+        return self.app.next_mouse_button_data_for :: id :: method
+
+    fn next_dropped_paths_list_for(edit self, id: WindowId) -> Option[List[Str]]:
+        return self.app.next_dropped_paths_list_for :: id :: method
+
+    fn next_key_changed_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_key_changed_event_for :: self.window.id :: method
+
+    fn next_character_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_character_event_for :: self.window.id :: method
+
+    fn next_character_mods_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_character_mods_event_for :: self.window.id :: method
+
+    fn next_mouse_button_changed_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_mouse_button_changed_event_for :: self.window.id :: method
+
+    fn next_cursor_moved_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_cursor_moved_event_for :: self.window.id :: method
+
+    fn next_scrolled_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_scrolled_event_for :: self.window.id :: method
+
+    fn next_dropped_path_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_dropped_path_event_for :: self.window.id :: method
+
+    fn next_key_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_key_changed_event_for :: id :: method
+
+    fn next_character_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_character_event_for :: id :: method
+
+    fn next_character_mods_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_character_mods_event_for :: id :: method
+
+    fn next_mouse_button_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_mouse_button_changed_event_for :: id :: method
+
+    fn next_cursor_moved_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_cursor_moved_event_for :: id :: method
+
+    fn next_scrolled_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_scrolled_event_for :: id :: method
+
+    fn next_dropped_path_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_dropped_path_event_for :: id :: method
+
+    fn next_refreshed_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_refreshed_event_for :: self.window.id :: method
+
+    fn next_moved_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_moved_event_for :: self.window.id :: method
+
+    fn next_resized_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_resized_event_for :: self.window.id :: method
+
+    fn next_framebuffer_resized_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_framebuffer_resized_event_for :: self.window.id :: method
+
+    fn next_content_scale_changed_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_content_scale_changed_event_for :: self.window.id :: method
+
+    fn next_focus_changed_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_focus_changed_event_for :: self.window.id :: method
+
+    fn next_iconified_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_iconified_event_for :: self.window.id :: method
+
+    fn next_maximized_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_maximized_event_for :: self.window.id :: method
+
+    fn next_cursor_entered_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_cursor_entered_event_for :: self.window.id :: method
+
+    fn next_refreshed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_refreshed_event_for :: id :: method
+
+    fn next_moved_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_moved_event_for :: id :: method
+
+    fn next_resized_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_resized_event_for :: id :: method
+
+    fn next_framebuffer_resized_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_framebuffer_resized_event_for :: id :: method
+
+    fn next_content_scale_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_content_scale_changed_event_for :: id :: method
+
+    fn next_focus_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_focus_changed_event_for :: id :: method
+
+    fn next_iconified_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_iconified_event_for :: id :: method
+
+    fn next_maximized_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_maximized_event_for :: id :: method
+
+    fn next_cursor_entered_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_cursor_entered_event_for :: id :: method
+
+    fn next_created_window_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_created_window_event_for :: self.window.id :: method
+
+    fn next_destroyed_window_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_destroyed_window_event_for :: self.window.id :: method
+
+    fn next_close_requested_window_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_close_requested_window_event_for :: self.window.id :: method
+
+    fn next_created_window_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_created_window_event_for :: id :: method
+
+    fn next_destroyed_window_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_destroyed_window_event_for :: id :: method
+
+    fn next_close_requested_window_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_close_requested_window_event_for :: id :: method
+
+    fn next_connected_monitor_event(edit self) -> Option[MonitorEvent]:
+        return self.app.next_connected_monitor_event :: :: method
+
+    fn next_disconnected_monitor_event(edit self) -> Option[MonitorEvent]:
+        return self.app.next_disconnected_monitor_event :: :: method
+
+    fn next_connected_monitor_event_for(edit self, id: MonitorId) -> Option[MonitorEvent]:
+        return self.app.next_connected_monitor_event_for :: id :: method
+
+    fn next_disconnected_monitor_event_for(edit self, id: MonitorId) -> Option[MonitorEvent]:
+        return self.app.next_disconnected_monitor_event_for :: id :: method
+
+    fn next_connected_joystick_event(edit self) -> Option[JoystickEvent]:
+        return self.app.next_connected_joystick_event :: :: method
+
+    fn next_disconnected_joystick_event(edit self) -> Option[JoystickEvent]:
+        return self.app.next_disconnected_joystick_event :: :: method
+
+    fn next_connected_joystick_event_for(edit self, id: JoystickId) -> Option[JoystickEvent]:
+        return self.app.next_connected_joystick_event_for :: id :: method
+
+    fn next_disconnected_joystick_event_for(edit self, id: JoystickId) -> Option[JoystickEvent]:
+        return self.app.next_disconnected_joystick_event_for :: id :: method
+
+    fn next_created_window_id(edit self) -> Option[WindowId]:
+        return self.app.next_created_window_id :: :: method
+
+    fn next_destroyed_window_id(edit self) -> Option[WindowId]:
+        return self.app.next_destroyed_window_id :: :: method
+
+    fn next_close_requested_window_id(edit self) -> Option[WindowId]:
+        return self.app.next_close_requested_window_id :: :: method
+
+    fn next_connected_monitor_id(edit self) -> Option[MonitorId]:
+        return self.app.next_connected_monitor_id :: :: method
+
+    fn next_disconnected_monitor_id(edit self) -> Option[MonitorId]:
+        return self.app.next_disconnected_monitor_id :: :: method
+
+    fn next_connected_joystick_id(edit self) -> Option[JoystickId]:
+        return self.app.next_connected_joystick_id :: :: method
+
+    fn next_disconnected_joystick_id(edit self) -> Option[JoystickId]:
+        return self.app.next_disconnected_joystick_id :: :: method
+
+    fn next_created_window(edit self) -> Option[Window]:
+        return self.app.next_created_window :: :: method
+
+    fn next_created_window_snapshot(edit self) -> Option[WindowSnapshot]:
+        return self.app.next_created_window_snapshot :: :: method
+
+    fn next_close_requested_window(edit self) -> Option[Window]:
+        return self.app.next_close_requested_window :: :: method
+
+    fn next_close_requested_window_snapshot(edit self) -> Option[WindowSnapshot]:
+        return self.app.next_close_requested_window_snapshot :: :: method
+
+    fn next_connected_monitor(edit self) -> Option[Monitor]:
+        return self.app.next_connected_monitor :: :: method
+
+    fn next_connected_monitor_snapshot(edit self) -> Option[MonitorSnapshot]:
+        return self.app.next_connected_monitor_snapshot :: :: method
+
+    fn next_connected_joystick(edit self) -> Option[Joystick]:
+        return self.app.next_connected_joystick :: :: method
+
+    fn next_connected_joystick_snapshot(edit self) -> Option[JoystickSnapshot]:
+        return self.app.next_connected_joystick_snapshot :: :: method
+
+    fn next_created_window_for(edit self, id: WindowId) -> Option[Window]:
+        return self.app.next_created_window_for :: id :: method
+
+    fn next_created_window_snapshot_for(edit self, id: WindowId) -> Option[WindowSnapshot]:
+        return self.app.next_created_window_snapshot_for :: id :: method
+
+    fn next_close_requested_window_for(edit self, id: WindowId) -> Option[Window]:
+        return self.app.next_close_requested_window_for :: id :: method
+
+    fn next_close_requested_window_snapshot_for(edit self, id: WindowId) -> Option[WindowSnapshot]:
+        return self.app.next_close_requested_window_snapshot_for :: id :: method
+
+    fn next_connected_monitor_for(edit self, id: MonitorId) -> Option[Monitor]:
+        return self.app.next_connected_monitor_for :: id :: method
+
+    fn next_connected_monitor_snapshot_for(edit self, id: MonitorId) -> Option[MonitorSnapshot]:
+        return self.app.next_connected_monitor_snapshot_for :: id :: method
+
+    fn next_connected_joystick_for(edit self, id: JoystickId) -> Option[Joystick]:
+        return self.app.next_connected_joystick_for :: id :: method
+
+    fn next_connected_joystick_snapshot_for(edit self, id: JoystickId) -> Option[JoystickSnapshot]:
+        return self.app.next_connected_joystick_snapshot_for :: id :: method
+
+    fn next_moved_data(edit self) -> Option[WindowMoveData]:
+        return self.app.next_moved_data_for :: self.window.id :: method
+
+    fn next_resized_data(edit self) -> Option[WindowSizeData]:
+        return self.app.next_resized_data_for :: self.window.id :: method
+
+    fn next_framebuffer_resized_data(edit self) -> Option[WindowSizeData]:
+        return self.app.next_framebuffer_resized_data_for :: self.window.id :: method
+
+    fn next_content_scale_data(edit self) -> Option[WindowScaleData]:
+        return self.app.next_content_scale_data_for :: self.window.id :: method
+
+    fn next_focus_state(edit self) -> Option[Bool]:
+        return self.app.next_focus_state_for :: self.window.id :: method
+
+    fn next_iconified_state(edit self) -> Option[Bool]:
+        return self.app.next_iconified_state_for :: self.window.id :: method
+
+    fn next_maximized_state(edit self) -> Option[Bool]:
+        return self.app.next_maximized_state_for :: self.window.id :: method
+
+    fn next_cursor_entered_state(edit self) -> Option[Bool]:
+        return self.app.next_cursor_entered_state_for :: self.window.id :: method
+
+    fn next_moved_data_for(edit self, id: WindowId) -> Option[WindowMoveData]:
+        return self.app.next_moved_data_for :: id :: method
+
+    fn next_resized_data_for(edit self, id: WindowId) -> Option[WindowSizeData]:
+        return self.app.next_resized_data_for :: id :: method
+
+    fn next_framebuffer_resized_data_for(edit self, id: WindowId) -> Option[WindowSizeData]:
+        return self.app.next_framebuffer_resized_data_for :: id :: method
+
+    fn next_content_scale_data_for(edit self, id: WindowId) -> Option[WindowScaleData]:
+        return self.app.next_content_scale_data_for :: id :: method
+
+    fn next_focus_state_for(edit self, id: WindowId) -> Option[Bool]:
+        return self.app.next_focus_state_for :: id :: method
+
+    fn next_iconified_state_for(edit self, id: WindowId) -> Option[Bool]:
+        return self.app.next_iconified_state_for :: id :: method
+
+    fn next_maximized_state_for(edit self, id: WindowId) -> Option[Bool]:
+        return self.app.next_maximized_state_for :: id :: method
+
+    fn next_cursor_entered_state_for(edit self, id: WindowId) -> Option[Bool]:
+        return self.app.next_cursor_entered_state_for :: id :: method
+
+    fn take_pending_events(edit self) -> List[AppEvent]:
+        return self.app.take_pending_events :: :: method
+
+    fn take_event_batch(edit self) -> AppEventBatch:
+        return self.app.take_event_batch :: :: method
+
+    fn events_for(edit self, read flow: ControlFlow) -> List[AppEvent]:
+        return self.app.events_for :: flow :: method
+
+    fn event_batch_for(edit self, read flow: ControlFlow) -> AppEventBatch:
+        return self.app.event_batch_for :: flow :: method
+
+    fn poll(edit self) -> Result[Option[AppEvent], AppError]:
+        return self.app.poll :: :: method
+
+    fn poll_events(edit self) -> List[AppEvent]:
+        return self.app.poll_events :: :: method
+
+    fn poll_event_batch(edit self) -> AppEventBatch:
+        return self.app.poll_event_batch :: :: method
+
+    fn wait(edit self) -> Result[Option[AppEvent], AppError]:
+        return self.app.wait :: :: method
+
+    fn wait_events(edit self) -> List[AppEvent]:
+        return self.app.wait_events :: :: method
+
+    fn wait_event_batch(edit self) -> AppEventBatch:
+        return self.app.wait_event_batch :: :: method
+
+    fn wait_timeout(edit self, timeout: F64) -> Result[Option[AppEvent], AppError]:
+        return self.app.wait_timeout :: timeout :: method
+
+    fn wait_timeout_events(edit self, timeout: F64) -> List[AppEvent]:
+        return self.app.wait_timeout_events :: timeout :: method
+
+    fn wait_timeout_event_batch(edit self, timeout: F64) -> AppEventBatch:
+        return self.app.wait_timeout_event_batch :: timeout :: method
+
+    fn poll_window_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_window_events_for :: self.window.id :: method
+
+    fn poll_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_window_event_for :: self.window.id :: method
+
+    fn poll_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_window_events_for :: id :: method
+
+    fn poll_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_window_event_for :: id :: method
+
+    fn poll_created_window_ids(edit self) -> List[WindowId]:
+        return self.app.poll_created_window_ids :: :: method
+
+    fn poll_created_windows(edit self) -> List[Window]:
+        return self.app.poll_created_windows :: :: method
+
+    fn poll_created_window_snapshots(edit self) -> List[WindowSnapshot]:
+        return self.app.poll_created_window_snapshots :: :: method
+
+    fn poll_created_windows_for(edit self, id: WindowId) -> List[Window]:
+        return self.app.poll_created_windows_for :: id :: method
+
+    fn poll_created_window_snapshots_for(edit self, id: WindowId) -> List[WindowSnapshot]:
+        return self.app.poll_created_window_snapshots_for :: id :: method
+
+    fn poll_created_window_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_created_window_events :: :: method
+
+    fn poll_created_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_created_window_events_for :: id :: method
+
+    fn poll_destroyed_window_ids(edit self) -> List[WindowId]:
+        return self.app.poll_destroyed_window_ids :: :: method
+
+    fn poll_destroyed_window_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_destroyed_window_events :: :: method
+
+    fn poll_destroyed_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_destroyed_window_events_for :: id :: method
+
+    fn poll_close_requested_window_ids(edit self) -> List[WindowId]:
+        return self.app.poll_close_requested_window_ids :: :: method
+
+    fn poll_close_requested_windows(edit self) -> List[Window]:
+        return self.app.poll_close_requested_windows :: :: method
+
+    fn poll_close_requested_window_snapshots(edit self) -> List[WindowSnapshot]:
+        return self.app.poll_close_requested_window_snapshots :: :: method
+
+    fn poll_close_requested_windows_for(edit self, id: WindowId) -> List[Window]:
+        return self.app.poll_close_requested_windows_for :: id :: method
+
+    fn poll_close_requested_window_snapshots_for(edit self, id: WindowId) -> List[WindowSnapshot]:
+        return self.app.poll_close_requested_window_snapshots_for :: id :: method
+
+    fn poll_close_requested_window_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_close_requested_window_events :: :: method
+
+    fn poll_close_requested_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_close_requested_window_events_for :: id :: method
+
+    fn poll_monitor_event(edit self) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.poll_monitor_event :: :: method
+
+    fn poll_monitor_event_for(edit self, id: MonitorId) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.poll_monitor_event_for :: id :: method
+
+    fn poll_joystick_event(edit self) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.poll_joystick_event :: :: method
+
+    fn poll_joystick_event_for(edit self, id: JoystickId) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.poll_joystick_event_for :: id :: method
+
+    fn poll_user_event(edit self) -> Result[Option[UserEvent], AppError]:
+        return self.app.poll_user_event :: :: method
+
+    fn poll_user_event_for(edit self, id: UserEventId) -> Result[Option[UserEvent], AppError]:
+        return self.app.poll_user_event_for :: id :: method
+
+    fn poll_next_cursor_data(edit self) -> Result[Option[WindowCursorData], AppError]:
+        return self.app.poll_next_cursor_data_for :: self.window.id :: method
+
+    fn poll_next_scroll_data(edit self) -> Result[Option[WindowScrollData], AppError]:
+        return self.app.poll_next_scroll_data_for :: self.window.id :: method
+
+    fn poll_next_key_data(edit self) -> Result[Option[WindowKeyData], AppError]:
+        return self.app.poll_next_key_data_for :: self.window.id :: method
+
+    fn poll_next_character_data(edit self) -> Result[Option[WindowCharacterData], AppError]:
+        return self.app.poll_next_character_data_for :: self.window.id :: method
+
+    fn poll_next_character_mods_data(edit self) -> Result[Option[WindowCharacterModsData], AppError]:
+        return self.app.poll_next_character_mods_data_for :: self.window.id :: method
+
+    fn poll_next_mouse_button_data(edit self) -> Result[Option[WindowMouseButtonData], AppError]:
+        return self.app.poll_next_mouse_button_data_for :: self.window.id :: method
+
+    fn poll_next_dropped_paths_list(edit self) -> Result[Option[List[Str]], AppError]:
+        return self.app.poll_next_dropped_paths_list_for :: self.window.id :: method
+
+    fn poll_next_cursor_data_for(edit self, id: WindowId) -> Result[Option[WindowCursorData], AppError]:
+        return self.app.poll_next_cursor_data_for :: id :: method
+
+    fn poll_next_scroll_data_for(edit self, id: WindowId) -> Result[Option[WindowScrollData], AppError]:
+        return self.app.poll_next_scroll_data_for :: id :: method
+
+    fn poll_next_key_data_for(edit self, id: WindowId) -> Result[Option[WindowKeyData], AppError]:
+        return self.app.poll_next_key_data_for :: id :: method
+
+    fn poll_next_character_data_for(edit self, id: WindowId) -> Result[Option[WindowCharacterData], AppError]:
+        return self.app.poll_next_character_data_for :: id :: method
+
+    fn poll_next_character_mods_data_for(edit self, id: WindowId) -> Result[Option[WindowCharacterModsData], AppError]:
+        return self.app.poll_next_character_mods_data_for :: id :: method
+
+    fn poll_next_mouse_button_data_for(edit self, id: WindowId) -> Result[Option[WindowMouseButtonData], AppError]:
+        return self.app.poll_next_mouse_button_data_for :: id :: method
+
+    fn poll_next_dropped_paths_list_for(edit self, id: WindowId) -> Result[Option[List[Str]], AppError]:
+        return self.app.poll_next_dropped_paths_list_for :: id :: method
+
+    fn poll_next_key_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_key_changed_event_for :: self.window.id :: method
+
+    fn poll_next_character_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_character_event_for :: self.window.id :: method
+
+    fn poll_next_character_mods_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_character_mods_event_for :: self.window.id :: method
+
+    fn poll_next_mouse_button_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_mouse_button_changed_event_for :: self.window.id :: method
+
+    fn poll_next_cursor_moved_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_cursor_moved_event_for :: self.window.id :: method
+
+    fn poll_next_scrolled_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_scrolled_event_for :: self.window.id :: method
+
+    fn poll_next_dropped_path_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_dropped_path_event_for :: self.window.id :: method
+
+    fn poll_next_key_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_key_changed_event_for :: id :: method
+
+    fn poll_next_character_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_character_event_for :: id :: method
+
+    fn poll_next_character_mods_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_character_mods_event_for :: id :: method
+
+    fn poll_next_mouse_button_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_mouse_button_changed_event_for :: id :: method
+
+    fn poll_next_cursor_moved_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_cursor_moved_event_for :: id :: method
+
+    fn poll_next_scrolled_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_scrolled_event_for :: id :: method
+
+    fn poll_next_dropped_path_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_dropped_path_event_for :: id :: method
+
+    fn poll_next_refreshed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_refreshed_event_for :: self.window.id :: method
+
+    fn poll_next_moved_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_moved_event_for :: self.window.id :: method
+
+    fn poll_next_resized_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_resized_event_for :: self.window.id :: method
+
+    fn poll_next_framebuffer_resized_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_framebuffer_resized_event_for :: self.window.id :: method
+
+    fn poll_next_content_scale_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_content_scale_changed_event_for :: self.window.id :: method
+
+    fn poll_next_focus_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_focus_changed_event_for :: self.window.id :: method
+
+    fn poll_next_iconified_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_iconified_event_for :: self.window.id :: method
+
+    fn poll_next_maximized_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_maximized_event_for :: self.window.id :: method
+
+    fn poll_next_cursor_entered_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_cursor_entered_event_for :: self.window.id :: method
+
+    fn poll_next_refreshed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_refreshed_event_for :: id :: method
+
+    fn poll_next_moved_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_moved_event_for :: id :: method
+
+    fn poll_next_resized_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_resized_event_for :: id :: method
+
+    fn poll_next_framebuffer_resized_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_framebuffer_resized_event_for :: id :: method
+
+    fn poll_next_content_scale_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_content_scale_changed_event_for :: id :: method
+
+    fn poll_next_focus_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_focus_changed_event_for :: id :: method
+
+    fn poll_next_iconified_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_iconified_event_for :: id :: method
+
+    fn poll_next_maximized_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_maximized_event_for :: id :: method
+
+    fn poll_next_cursor_entered_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_cursor_entered_event_for :: id :: method
+
+    fn poll_next_created_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_created_window_event_for :: self.window.id :: method
+
+    fn poll_next_destroyed_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_destroyed_window_event_for :: self.window.id :: method
+
+    fn poll_next_close_requested_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_close_requested_window_event_for :: self.window.id :: method
+
+    fn poll_next_created_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_created_window_event_for :: id :: method
+
+    fn poll_next_destroyed_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_destroyed_window_event_for :: id :: method
+
+    fn poll_next_close_requested_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_close_requested_window_event_for :: id :: method
+
+    fn poll_next_connected_monitor_event(edit self) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.poll_next_connected_monitor_event :: :: method
+
+    fn poll_next_disconnected_monitor_event(edit self) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.poll_next_disconnected_monitor_event :: :: method
+
+    fn poll_next_connected_monitor_event_for(edit self, id: MonitorId) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.poll_next_connected_monitor_event_for :: id :: method
+
+    fn poll_next_disconnected_monitor_event_for(edit self, id: MonitorId) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.poll_next_disconnected_monitor_event_for :: id :: method
+
+    fn poll_next_connected_joystick_event(edit self) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.poll_next_connected_joystick_event :: :: method
+
+    fn poll_next_disconnected_joystick_event(edit self) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.poll_next_disconnected_joystick_event :: :: method
+
+    fn poll_next_connected_joystick_event_for(edit self, id: JoystickId) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.poll_next_connected_joystick_event_for :: id :: method
+
+    fn poll_next_disconnected_joystick_event_for(edit self, id: JoystickId) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.poll_next_disconnected_joystick_event_for :: id :: method
+
+    fn poll_next_created_window_id(edit self) -> Result[Option[WindowId], AppError]:
+        return self.app.poll_next_created_window_id :: :: method
+
+    fn poll_next_destroyed_window_id(edit self) -> Result[Option[WindowId], AppError]:
+        return self.app.poll_next_destroyed_window_id :: :: method
+
+    fn poll_next_close_requested_window_id(edit self) -> Result[Option[WindowId], AppError]:
+        return self.app.poll_next_close_requested_window_id :: :: method
+
+    fn poll_next_connected_monitor_id(edit self) -> Result[Option[MonitorId], AppError]:
+        return self.app.poll_next_connected_monitor_id :: :: method
+
+    fn poll_next_disconnected_monitor_id(edit self) -> Result[Option[MonitorId], AppError]:
+        return self.app.poll_next_disconnected_monitor_id :: :: method
+
+    fn poll_next_connected_joystick_id(edit self) -> Result[Option[JoystickId], AppError]:
+        return self.app.poll_next_connected_joystick_id :: :: method
+
+    fn poll_next_disconnected_joystick_id(edit self) -> Result[Option[JoystickId], AppError]:
+        return self.app.poll_next_disconnected_joystick_id :: :: method
+
+    fn poll_next_created_window(edit self) -> Result[Option[Window], AppError]:
+        return self.app.poll_next_created_window :: :: method
+
+    fn poll_next_created_window_snapshot(edit self) -> Result[Option[WindowSnapshot], AppError]:
+        return self.app.poll_next_created_window_snapshot :: :: method
+
+    fn poll_next_close_requested_window(edit self) -> Result[Option[Window], AppError]:
+        return self.app.poll_next_close_requested_window :: :: method
+
+    fn poll_next_close_requested_window_snapshot(edit self) -> Result[Option[WindowSnapshot], AppError]:
+        return self.app.poll_next_close_requested_window_snapshot :: :: method
+
+    fn poll_next_connected_monitor(edit self) -> Result[Option[Monitor], AppError]:
+        return self.app.poll_next_connected_monitor :: :: method
+
+    fn poll_next_connected_monitor_snapshot(edit self) -> Result[Option[MonitorSnapshot], AppError]:
+        return self.app.poll_next_connected_monitor_snapshot :: :: method
+
+    fn poll_next_connected_joystick(edit self) -> Result[Option[Joystick], AppError]:
+        return self.app.poll_next_connected_joystick :: :: method
+
+    fn poll_next_connected_joystick_snapshot(edit self) -> Result[Option[JoystickSnapshot], AppError]:
+        return self.app.poll_next_connected_joystick_snapshot :: :: method
+
+    fn poll_next_created_window_for(edit self, id: WindowId) -> Result[Option[Window], AppError]:
+        return self.app.poll_next_created_window_for :: id :: method
+
+    fn poll_next_created_window_snapshot_for(edit self, id: WindowId) -> Result[Option[WindowSnapshot], AppError]:
+        return self.app.poll_next_created_window_snapshot_for :: id :: method
+
+    fn poll_next_close_requested_window_for(edit self, id: WindowId) -> Result[Option[Window], AppError]:
+        return self.app.poll_next_close_requested_window_for :: id :: method
+
+    fn poll_next_close_requested_window_snapshot_for(edit self, id: WindowId) -> Result[Option[WindowSnapshot], AppError]:
+        return self.app.poll_next_close_requested_window_snapshot_for :: id :: method
+
+    fn poll_next_connected_monitor_for(edit self, id: MonitorId) -> Result[Option[Monitor], AppError]:
+        return self.app.poll_next_connected_monitor_for :: id :: method
+
+    fn poll_next_connected_monitor_snapshot_for(edit self, id: MonitorId) -> Result[Option[MonitorSnapshot], AppError]:
+        return self.app.poll_next_connected_monitor_snapshot_for :: id :: method
+
+    fn poll_next_connected_joystick_for(edit self, id: JoystickId) -> Result[Option[Joystick], AppError]:
+        return self.app.poll_next_connected_joystick_for :: id :: method
+
+    fn poll_next_connected_joystick_snapshot_for(edit self, id: JoystickId) -> Result[Option[JoystickSnapshot], AppError]:
+        return self.app.poll_next_connected_joystick_snapshot_for :: id :: method
+
+    fn poll_next_moved_data(edit self) -> Result[Option[WindowMoveData], AppError]:
+        return self.app.poll_next_moved_data_for :: self.window.id :: method
+
+    fn poll_next_resized_data(edit self) -> Result[Option[WindowSizeData], AppError]:
+        return self.app.poll_next_resized_data_for :: self.window.id :: method
+
+    fn poll_next_framebuffer_resized_data(edit self) -> Result[Option[WindowSizeData], AppError]:
+        return self.app.poll_next_framebuffer_resized_data_for :: self.window.id :: method
+
+    fn poll_next_content_scale_data(edit self) -> Result[Option[WindowScaleData], AppError]:
+        return self.app.poll_next_content_scale_data_for :: self.window.id :: method
+
+    fn poll_next_focus_state(edit self) -> Result[Option[Bool], AppError]:
+        return self.app.poll_next_focus_state_for :: self.window.id :: method
+
+    fn poll_next_iconified_state(edit self) -> Result[Option[Bool], AppError]:
+        return self.app.poll_next_iconified_state_for :: self.window.id :: method
+
+    fn poll_next_maximized_state(edit self) -> Result[Option[Bool], AppError]:
+        return self.app.poll_next_maximized_state_for :: self.window.id :: method
+
+    fn poll_next_cursor_entered_state(edit self) -> Result[Option[Bool], AppError]:
+        return self.app.poll_next_cursor_entered_state_for :: self.window.id :: method
+
+    fn poll_next_moved_data_for(edit self, id: WindowId) -> Result[Option[WindowMoveData], AppError]:
+        return self.app.poll_next_moved_data_for :: id :: method
+
+    fn poll_next_resized_data_for(edit self, id: WindowId) -> Result[Option[WindowSizeData], AppError]:
+        return self.app.poll_next_resized_data_for :: id :: method
+
+    fn poll_next_framebuffer_resized_data_for(edit self, id: WindowId) -> Result[Option[WindowSizeData], AppError]:
+        return self.app.poll_next_framebuffer_resized_data_for :: id :: method
+
+    fn poll_next_content_scale_data_for(edit self, id: WindowId) -> Result[Option[WindowScaleData], AppError]:
+        return self.app.poll_next_content_scale_data_for :: id :: method
+
+    fn poll_next_focus_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
+        return self.app.poll_next_focus_state_for :: id :: method
+
+    fn poll_next_iconified_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
+        return self.app.poll_next_iconified_state_for :: id :: method
+
+    fn poll_next_maximized_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
+        return self.app.poll_next_maximized_state_for :: id :: method
+
+    fn poll_next_cursor_entered_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
+        return self.app.poll_next_cursor_entered_state_for :: id :: method
+
+    fn poll_monitor_events(edit self) -> List[MonitorEvent]:
+        return self.app.poll_monitor_events :: :: method
+
+    fn poll_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        return self.app.poll_monitor_events_for :: id :: method
+
+    fn poll_connected_monitor_ids(edit self) -> List[MonitorId]:
+        return self.app.poll_connected_monitor_ids :: :: method
+
+    fn poll_connected_monitors(edit self) -> List[Monitor]:
+        return self.app.poll_connected_monitors :: :: method
+
+    fn poll_connected_monitor_snapshots(edit self) -> List[MonitorSnapshot]:
+        return self.app.poll_connected_monitor_snapshots :: :: method
+
+    fn poll_connected_monitors_for(edit self, id: MonitorId) -> List[Monitor]:
+        return self.app.poll_connected_monitors_for :: id :: method
+
+    fn poll_connected_monitor_snapshots_for(edit self, id: MonitorId) -> List[MonitorSnapshot]:
+        return self.app.poll_connected_monitor_snapshots_for :: id :: method
+
+    fn poll_connected_monitor_events(edit self) -> List[MonitorEvent]:
+        return self.app.poll_connected_monitor_events :: :: method
+
+    fn poll_connected_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        return self.app.poll_connected_monitor_events_for :: id :: method
+
+    fn poll_disconnected_monitor_ids(edit self) -> List[MonitorId]:
+        return self.app.poll_disconnected_monitor_ids :: :: method
+
+    fn poll_disconnected_monitor_events(edit self) -> List[MonitorEvent]:
+        return self.app.poll_disconnected_monitor_events :: :: method
+
+    fn poll_disconnected_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        return self.app.poll_disconnected_monitor_events_for :: id :: method
+
+    fn poll_joystick_events(edit self) -> List[JoystickEvent]:
+        return self.app.poll_joystick_events :: :: method
+
+    fn poll_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        return self.app.poll_joystick_events_for :: id :: method
+
+    fn poll_connected_joystick_events(edit self) -> List[JoystickEvent]:
+        return self.app.poll_connected_joystick_events :: :: method
+
+    fn poll_connected_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        return self.app.poll_connected_joystick_events_for :: id :: method
+
+    fn poll_connected_joystick_ids(edit self) -> List[JoystickId]:
+        return self.app.poll_connected_joystick_ids :: :: method
+
+    fn poll_connected_joysticks(edit self) -> List[Joystick]:
+        return self.app.poll_connected_joysticks :: :: method
+
+    fn poll_connected_joystick_snapshots(edit self) -> List[JoystickSnapshot]:
+        return self.app.poll_connected_joystick_snapshots :: :: method
+
+    fn poll_connected_joysticks_for(edit self, id: JoystickId) -> List[Joystick]:
+        return self.app.poll_connected_joysticks_for :: id :: method
+
+    fn poll_connected_joystick_snapshots_for(edit self, id: JoystickId) -> List[JoystickSnapshot]:
+        return self.app.poll_connected_joystick_snapshots_for :: id :: method
+
+    fn poll_disconnected_joystick_ids(edit self) -> List[JoystickId]:
+        return self.app.poll_disconnected_joystick_ids :: :: method
+
+    fn poll_disconnected_joystick_events(edit self) -> List[JoystickEvent]:
+        return self.app.poll_disconnected_joystick_events :: :: method
+
+    fn poll_disconnected_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        return self.app.poll_disconnected_joystick_events_for :: id :: method
+
+    fn poll_user_events(edit self) -> List[UserEvent]:
+        return self.app.poll_user_events :: :: method
+
+    fn poll_user_events_for(edit self, id: UserEventId) -> List[UserEvent]:
+        return self.app.poll_user_events_for :: id :: method
+
+    fn poll_user_ids(edit self) -> List[UserEventId]:
+        return self.app.poll_user_ids :: :: method
+
+    fn wait_window_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_window_events_for :: self.window.id :: method
+
+    fn wait_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_window_event_for :: self.window.id :: method
+
+    fn wait_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_window_events_for :: id :: method
+
+    fn wait_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_window_event_for :: id :: method
+
+    fn wait_created_window_ids(edit self) -> List[WindowId]:
+        return self.app.wait_created_window_ids :: :: method
+
+    fn wait_created_windows(edit self) -> List[Window]:
+        return self.app.wait_created_windows :: :: method
+
+    fn wait_created_window_snapshots(edit self) -> List[WindowSnapshot]:
+        return self.app.wait_created_window_snapshots :: :: method
+
+    fn wait_created_windows_for(edit self, id: WindowId) -> List[Window]:
+        return self.app.wait_created_windows_for :: id :: method
+
+    fn wait_created_window_snapshots_for(edit self, id: WindowId) -> List[WindowSnapshot]:
+        return self.app.wait_created_window_snapshots_for :: id :: method
+
+    fn wait_created_window_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_created_window_events :: :: method
+
+    fn wait_created_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_created_window_events_for :: id :: method
+
+    fn wait_destroyed_window_ids(edit self) -> List[WindowId]:
+        return self.app.wait_destroyed_window_ids :: :: method
+
+    fn wait_destroyed_window_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_destroyed_window_events :: :: method
+
+    fn wait_destroyed_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_destroyed_window_events_for :: id :: method
+
+    fn wait_close_requested_window_ids(edit self) -> List[WindowId]:
+        return self.app.wait_close_requested_window_ids :: :: method
+
+    fn wait_close_requested_windows(edit self) -> List[Window]:
+        return self.app.wait_close_requested_windows :: :: method
+
+    fn wait_close_requested_window_snapshots(edit self) -> List[WindowSnapshot]:
+        return self.app.wait_close_requested_window_snapshots :: :: method
+
+    fn wait_close_requested_windows_for(edit self, id: WindowId) -> List[Window]:
+        return self.app.wait_close_requested_windows_for :: id :: method
+
+    fn wait_close_requested_window_snapshots_for(edit self, id: WindowId) -> List[WindowSnapshot]:
+        return self.app.wait_close_requested_window_snapshots_for :: id :: method
+
+    fn wait_close_requested_window_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_close_requested_window_events :: :: method
+
+    fn wait_close_requested_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_close_requested_window_events_for :: id :: method
+
+    fn wait_monitor_event(edit self) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.wait_monitor_event :: :: method
+
+    fn wait_monitor_event_for(edit self, id: MonitorId) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.wait_monitor_event_for :: id :: method
+
+    fn wait_joystick_event(edit self) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.wait_joystick_event :: :: method
+
+    fn wait_joystick_event_for(edit self, id: JoystickId) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.wait_joystick_event_for :: id :: method
+
+    fn wait_user_event(edit self) -> Result[Option[UserEvent], AppError]:
+        return self.app.wait_user_event :: :: method
+
+    fn wait_user_event_for(edit self, id: UserEventId) -> Result[Option[UserEvent], AppError]:
+        return self.app.wait_user_event_for :: id :: method
+
+    fn wait_next_cursor_data(edit self) -> Result[Option[WindowCursorData], AppError]:
+        return self.app.wait_next_cursor_data_for :: self.window.id :: method
+
+    fn wait_next_scroll_data(edit self) -> Result[Option[WindowScrollData], AppError]:
+        return self.app.wait_next_scroll_data_for :: self.window.id :: method
+
+    fn wait_next_key_data(edit self) -> Result[Option[WindowKeyData], AppError]:
+        return self.app.wait_next_key_data_for :: self.window.id :: method
+
+    fn wait_next_character_data(edit self) -> Result[Option[WindowCharacterData], AppError]:
+        return self.app.wait_next_character_data_for :: self.window.id :: method
+
+    fn wait_next_character_mods_data(edit self) -> Result[Option[WindowCharacterModsData], AppError]:
+        return self.app.wait_next_character_mods_data_for :: self.window.id :: method
+
+    fn wait_next_mouse_button_data(edit self) -> Result[Option[WindowMouseButtonData], AppError]:
+        return self.app.wait_next_mouse_button_data_for :: self.window.id :: method
+
+    fn wait_next_dropped_paths_list(edit self) -> Result[Option[List[Str]], AppError]:
+        return self.app.wait_next_dropped_paths_list_for :: self.window.id :: method
+
+    fn wait_next_cursor_data_for(edit self, id: WindowId) -> Result[Option[WindowCursorData], AppError]:
+        return self.app.wait_next_cursor_data_for :: id :: method
+
+    fn wait_next_scroll_data_for(edit self, id: WindowId) -> Result[Option[WindowScrollData], AppError]:
+        return self.app.wait_next_scroll_data_for :: id :: method
+
+    fn wait_next_key_data_for(edit self, id: WindowId) -> Result[Option[WindowKeyData], AppError]:
+        return self.app.wait_next_key_data_for :: id :: method
+
+    fn wait_next_character_data_for(edit self, id: WindowId) -> Result[Option[WindowCharacterData], AppError]:
+        return self.app.wait_next_character_data_for :: id :: method
+
+    fn wait_next_character_mods_data_for(edit self, id: WindowId) -> Result[Option[WindowCharacterModsData], AppError]:
+        return self.app.wait_next_character_mods_data_for :: id :: method
+
+    fn wait_next_mouse_button_data_for(edit self, id: WindowId) -> Result[Option[WindowMouseButtonData], AppError]:
+        return self.app.wait_next_mouse_button_data_for :: id :: method
+
+    fn wait_next_dropped_paths_list_for(edit self, id: WindowId) -> Result[Option[List[Str]], AppError]:
+        return self.app.wait_next_dropped_paths_list_for :: id :: method
+
+    fn wait_next_key_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_key_changed_event_for :: self.window.id :: method
+
+    fn wait_next_character_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_character_event_for :: self.window.id :: method
+
+    fn wait_next_character_mods_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_character_mods_event_for :: self.window.id :: method
+
+    fn wait_next_mouse_button_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_mouse_button_changed_event_for :: self.window.id :: method
+
+    fn wait_next_cursor_moved_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_cursor_moved_event_for :: self.window.id :: method
+
+    fn wait_next_scrolled_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_scrolled_event_for :: self.window.id :: method
+
+    fn wait_next_dropped_path_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_dropped_path_event_for :: self.window.id :: method
+
+    fn wait_next_key_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_key_changed_event_for :: id :: method
+
+    fn wait_next_character_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_character_event_for :: id :: method
+
+    fn wait_next_character_mods_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_character_mods_event_for :: id :: method
+
+    fn wait_next_mouse_button_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_mouse_button_changed_event_for :: id :: method
+
+    fn wait_next_cursor_moved_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_cursor_moved_event_for :: id :: method
+
+    fn wait_next_scrolled_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_scrolled_event_for :: id :: method
+
+    fn wait_next_dropped_path_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_dropped_path_event_for :: id :: method
+
+    fn wait_next_refreshed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_refreshed_event_for :: self.window.id :: method
+
+    fn wait_next_moved_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_moved_event_for :: self.window.id :: method
+
+    fn wait_next_resized_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_resized_event_for :: self.window.id :: method
+
+    fn wait_next_framebuffer_resized_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_framebuffer_resized_event_for :: self.window.id :: method
+
+    fn wait_next_content_scale_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_content_scale_changed_event_for :: self.window.id :: method
+
+    fn wait_next_focus_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_focus_changed_event_for :: self.window.id :: method
+
+    fn wait_next_iconified_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_iconified_event_for :: self.window.id :: method
+
+    fn wait_next_maximized_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_maximized_event_for :: self.window.id :: method
+
+    fn wait_next_cursor_entered_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_cursor_entered_event_for :: self.window.id :: method
+
+    fn wait_next_refreshed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_refreshed_event_for :: id :: method
+
+    fn wait_next_moved_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_moved_event_for :: id :: method
+
+    fn wait_next_resized_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_resized_event_for :: id :: method
+
+    fn wait_next_framebuffer_resized_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_framebuffer_resized_event_for :: id :: method
+
+    fn wait_next_content_scale_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_content_scale_changed_event_for :: id :: method
+
+    fn wait_next_focus_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_focus_changed_event_for :: id :: method
+
+    fn wait_next_iconified_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_iconified_event_for :: id :: method
+
+    fn wait_next_maximized_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_maximized_event_for :: id :: method
+
+    fn wait_next_cursor_entered_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_cursor_entered_event_for :: id :: method
+
+    fn wait_next_created_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_created_window_event_for :: self.window.id :: method
+
+    fn wait_next_destroyed_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_destroyed_window_event_for :: self.window.id :: method
+
+    fn wait_next_close_requested_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_close_requested_window_event_for :: self.window.id :: method
+
+    fn wait_next_created_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_created_window_event_for :: id :: method
+
+    fn wait_next_destroyed_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_destroyed_window_event_for :: id :: method
+
+    fn wait_next_close_requested_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_close_requested_window_event_for :: id :: method
+
+    fn wait_next_connected_monitor_event(edit self) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.wait_next_connected_monitor_event :: :: method
+
+    fn wait_next_disconnected_monitor_event(edit self) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.wait_next_disconnected_monitor_event :: :: method
+
+    fn wait_next_connected_monitor_event_for(edit self, id: MonitorId) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.wait_next_connected_monitor_event_for :: id :: method
+
+    fn wait_next_disconnected_monitor_event_for(edit self, id: MonitorId) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.wait_next_disconnected_monitor_event_for :: id :: method
+
+    fn wait_next_connected_joystick_event(edit self) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.wait_next_connected_joystick_event :: :: method
+
+    fn wait_next_disconnected_joystick_event(edit self) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.wait_next_disconnected_joystick_event :: :: method
+
+    fn wait_next_connected_joystick_event_for(edit self, id: JoystickId) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.wait_next_connected_joystick_event_for :: id :: method
+
+    fn wait_next_disconnected_joystick_event_for(edit self, id: JoystickId) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.wait_next_disconnected_joystick_event_for :: id :: method
+
+    fn wait_next_created_window_id(edit self) -> Result[Option[WindowId], AppError]:
+        return self.app.wait_next_created_window_id :: :: method
+
+    fn wait_next_destroyed_window_id(edit self) -> Result[Option[WindowId], AppError]:
+        return self.app.wait_next_destroyed_window_id :: :: method
+
+    fn wait_next_close_requested_window_id(edit self) -> Result[Option[WindowId], AppError]:
+        return self.app.wait_next_close_requested_window_id :: :: method
+
+    fn wait_next_connected_monitor_id(edit self) -> Result[Option[MonitorId], AppError]:
+        return self.app.wait_next_connected_monitor_id :: :: method
+
+    fn wait_next_disconnected_monitor_id(edit self) -> Result[Option[MonitorId], AppError]:
+        return self.app.wait_next_disconnected_monitor_id :: :: method
+
+    fn wait_next_connected_joystick_id(edit self) -> Result[Option[JoystickId], AppError]:
+        return self.app.wait_next_connected_joystick_id :: :: method
+
+    fn wait_next_disconnected_joystick_id(edit self) -> Result[Option[JoystickId], AppError]:
+        return self.app.wait_next_disconnected_joystick_id :: :: method
+
+    fn wait_next_created_window(edit self) -> Result[Option[Window], AppError]:
+        return self.app.wait_next_created_window :: :: method
+
+    fn wait_next_created_window_snapshot(edit self) -> Result[Option[WindowSnapshot], AppError]:
+        return self.app.wait_next_created_window_snapshot :: :: method
+
+    fn wait_next_close_requested_window(edit self) -> Result[Option[Window], AppError]:
+        return self.app.wait_next_close_requested_window :: :: method
+
+    fn wait_next_close_requested_window_snapshot(edit self) -> Result[Option[WindowSnapshot], AppError]:
+        return self.app.wait_next_close_requested_window_snapshot :: :: method
+
+    fn wait_next_connected_monitor(edit self) -> Result[Option[Monitor], AppError]:
+        return self.app.wait_next_connected_monitor :: :: method
+
+    fn wait_next_connected_monitor_snapshot(edit self) -> Result[Option[MonitorSnapshot], AppError]:
+        return self.app.wait_next_connected_monitor_snapshot :: :: method
+
+    fn wait_next_connected_joystick(edit self) -> Result[Option[Joystick], AppError]:
+        return self.app.wait_next_connected_joystick :: :: method
+
+    fn wait_next_connected_joystick_snapshot(edit self) -> Result[Option[JoystickSnapshot], AppError]:
+        return self.app.wait_next_connected_joystick_snapshot :: :: method
+
+    fn wait_next_created_window_for(edit self, id: WindowId) -> Result[Option[Window], AppError]:
+        return self.app.wait_next_created_window_for :: id :: method
+
+    fn wait_next_created_window_snapshot_for(edit self, id: WindowId) -> Result[Option[WindowSnapshot], AppError]:
+        return self.app.wait_next_created_window_snapshot_for :: id :: method
+
+    fn wait_next_close_requested_window_for(edit self, id: WindowId) -> Result[Option[Window], AppError]:
+        return self.app.wait_next_close_requested_window_for :: id :: method
+
+    fn wait_next_close_requested_window_snapshot_for(edit self, id: WindowId) -> Result[Option[WindowSnapshot], AppError]:
+        return self.app.wait_next_close_requested_window_snapshot_for :: id :: method
+
+    fn wait_next_connected_monitor_for(edit self, id: MonitorId) -> Result[Option[Monitor], AppError]:
+        return self.app.wait_next_connected_monitor_for :: id :: method
+
+    fn wait_next_connected_monitor_snapshot_for(edit self, id: MonitorId) -> Result[Option[MonitorSnapshot], AppError]:
+        return self.app.wait_next_connected_monitor_snapshot_for :: id :: method
+
+    fn wait_next_connected_joystick_for(edit self, id: JoystickId) -> Result[Option[Joystick], AppError]:
+        return self.app.wait_next_connected_joystick_for :: id :: method
+
+    fn wait_next_connected_joystick_snapshot_for(edit self, id: JoystickId) -> Result[Option[JoystickSnapshot], AppError]:
+        return self.app.wait_next_connected_joystick_snapshot_for :: id :: method
+
+    fn wait_next_moved_data(edit self) -> Result[Option[WindowMoveData], AppError]:
+        return self.app.wait_next_moved_data_for :: self.window.id :: method
+
+    fn wait_next_resized_data(edit self) -> Result[Option[WindowSizeData], AppError]:
+        return self.app.wait_next_resized_data_for :: self.window.id :: method
+
+    fn wait_next_framebuffer_resized_data(edit self) -> Result[Option[WindowSizeData], AppError]:
+        return self.app.wait_next_framebuffer_resized_data_for :: self.window.id :: method
+
+    fn wait_next_content_scale_data(edit self) -> Result[Option[WindowScaleData], AppError]:
+        return self.app.wait_next_content_scale_data_for :: self.window.id :: method
+
+    fn wait_next_focus_state(edit self) -> Result[Option[Bool], AppError]:
+        return self.app.wait_next_focus_state_for :: self.window.id :: method
+
+    fn wait_next_iconified_state(edit self) -> Result[Option[Bool], AppError]:
+        return self.app.wait_next_iconified_state_for :: self.window.id :: method
+
+    fn wait_next_maximized_state(edit self) -> Result[Option[Bool], AppError]:
+        return self.app.wait_next_maximized_state_for :: self.window.id :: method
+
+    fn wait_next_cursor_entered_state(edit self) -> Result[Option[Bool], AppError]:
+        return self.app.wait_next_cursor_entered_state_for :: self.window.id :: method
+
+    fn wait_next_moved_data_for(edit self, id: WindowId) -> Result[Option[WindowMoveData], AppError]:
+        return self.app.wait_next_moved_data_for :: id :: method
+
+    fn wait_next_resized_data_for(edit self, id: WindowId) -> Result[Option[WindowSizeData], AppError]:
+        return self.app.wait_next_resized_data_for :: id :: method
+
+    fn wait_next_framebuffer_resized_data_for(edit self, id: WindowId) -> Result[Option[WindowSizeData], AppError]:
+        return self.app.wait_next_framebuffer_resized_data_for :: id :: method
+
+    fn wait_next_content_scale_data_for(edit self, id: WindowId) -> Result[Option[WindowScaleData], AppError]:
+        return self.app.wait_next_content_scale_data_for :: id :: method
+
+    fn wait_next_focus_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
+        return self.app.wait_next_focus_state_for :: id :: method
+
+    fn wait_next_iconified_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
+        return self.app.wait_next_iconified_state_for :: id :: method
+
+    fn wait_next_maximized_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
+        return self.app.wait_next_maximized_state_for :: id :: method
+
+    fn wait_next_cursor_entered_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
+        return self.app.wait_next_cursor_entered_state_for :: id :: method
+
+    fn wait_monitor_events(edit self) -> List[MonitorEvent]:
+        return self.app.wait_monitor_events :: :: method
+
+    fn wait_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        return self.app.wait_monitor_events_for :: id :: method
+
+    fn wait_connected_monitor_ids(edit self) -> List[MonitorId]:
+        return self.app.wait_connected_monitor_ids :: :: method
+
+    fn wait_connected_monitors(edit self) -> List[Monitor]:
+        return self.app.wait_connected_monitors :: :: method
+
+    fn wait_connected_monitor_snapshots(edit self) -> List[MonitorSnapshot]:
+        return self.app.wait_connected_monitor_snapshots :: :: method
+
+    fn wait_connected_monitors_for(edit self, id: MonitorId) -> List[Monitor]:
+        return self.app.wait_connected_monitors_for :: id :: method
+
+    fn wait_connected_monitor_snapshots_for(edit self, id: MonitorId) -> List[MonitorSnapshot]:
+        return self.app.wait_connected_monitor_snapshots_for :: id :: method
+
+    fn wait_connected_monitor_events(edit self) -> List[MonitorEvent]:
+        return self.app.wait_connected_monitor_events :: :: method
+
+    fn wait_connected_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        return self.app.wait_connected_monitor_events_for :: id :: method
+
+    fn wait_disconnected_monitor_ids(edit self) -> List[MonitorId]:
+        return self.app.wait_disconnected_monitor_ids :: :: method
+
+    fn wait_disconnected_monitor_events(edit self) -> List[MonitorEvent]:
+        return self.app.wait_disconnected_monitor_events :: :: method
+
+    fn wait_disconnected_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        return self.app.wait_disconnected_monitor_events_for :: id :: method
+
+    fn wait_joystick_events(edit self) -> List[JoystickEvent]:
+        return self.app.wait_joystick_events :: :: method
+
+    fn wait_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        return self.app.wait_joystick_events_for :: id :: method
+
+    fn wait_connected_joystick_events(edit self) -> List[JoystickEvent]:
+        return self.app.wait_connected_joystick_events :: :: method
+
+    fn wait_connected_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        return self.app.wait_connected_joystick_events_for :: id :: method
+
+    fn wait_connected_joystick_ids(edit self) -> List[JoystickId]:
+        return self.app.wait_connected_joystick_ids :: :: method
+
+    fn wait_connected_joysticks(edit self) -> List[Joystick]:
+        return self.app.wait_connected_joysticks :: :: method
+
+    fn wait_connected_joystick_snapshots(edit self) -> List[JoystickSnapshot]:
+        return self.app.wait_connected_joystick_snapshots :: :: method
+
+    fn wait_connected_joysticks_for(edit self, id: JoystickId) -> List[Joystick]:
+        return self.app.wait_connected_joysticks_for :: id :: method
+
+    fn wait_connected_joystick_snapshots_for(edit self, id: JoystickId) -> List[JoystickSnapshot]:
+        return self.app.wait_connected_joystick_snapshots_for :: id :: method
+
+    fn wait_disconnected_joystick_ids(edit self) -> List[JoystickId]:
+        return self.app.wait_disconnected_joystick_ids :: :: method
+
+    fn wait_disconnected_joystick_events(edit self) -> List[JoystickEvent]:
+        return self.app.wait_disconnected_joystick_events :: :: method
+
+    fn wait_disconnected_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        return self.app.wait_disconnected_joystick_events_for :: id :: method
+
+    fn wait_user_events(edit self) -> List[UserEvent]:
+        return self.app.wait_user_events :: :: method
+
+    fn wait_user_events_for(edit self, id: UserEventId) -> List[UserEvent]:
+        return self.app.wait_user_events_for :: id :: method
+
+    fn wait_user_ids(edit self) -> List[UserEventId]:
+        return self.app.wait_user_ids :: :: method
+
+    fn wait_timeout_window_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_window_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_window_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_window_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_window_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_window_events_for :: id, timeout :: method
+
+    fn wait_timeout_window_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_window_event_for :: id, timeout :: method
+
+    fn wait_timeout_created_window_ids(edit self, timeout: F64) -> List[WindowId]:
+        return self.app.wait_timeout_created_window_ids :: timeout :: method
+
+    fn wait_timeout_created_windows(edit self, timeout: F64) -> List[Window]:
+        return self.app.wait_timeout_created_windows :: timeout :: method
+
+    fn wait_timeout_created_window_snapshots(edit self, timeout: F64) -> List[WindowSnapshot]:
+        return self.app.wait_timeout_created_window_snapshots :: timeout :: method
+
+    fn wait_timeout_created_windows_for(edit self, id: WindowId, timeout: F64) -> List[Window]:
+        return self.app.wait_timeout_created_windows_for :: id, timeout :: method
+
+    fn wait_timeout_created_window_snapshots_for(edit self, id: WindowId, timeout: F64) -> List[WindowSnapshot]:
+        return self.app.wait_timeout_created_window_snapshots_for :: id, timeout :: method
+
+    fn wait_timeout_created_window_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_created_window_events :: timeout :: method
+
+    fn wait_timeout_created_window_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_created_window_events_for :: id, timeout :: method
+
+    fn wait_timeout_destroyed_window_ids(edit self, timeout: F64) -> List[WindowId]:
+        return self.app.wait_timeout_destroyed_window_ids :: timeout :: method
+
+    fn wait_timeout_destroyed_window_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_destroyed_window_events :: timeout :: method
+
+    fn wait_timeout_destroyed_window_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_destroyed_window_events_for :: id, timeout :: method
+
+    fn wait_timeout_close_requested_window_ids(edit self, timeout: F64) -> List[WindowId]:
+        return self.app.wait_timeout_close_requested_window_ids :: timeout :: method
+
+    fn wait_timeout_close_requested_windows(edit self, timeout: F64) -> List[Window]:
+        return self.app.wait_timeout_close_requested_windows :: timeout :: method
+
+    fn wait_timeout_close_requested_window_snapshots(edit self, timeout: F64) -> List[WindowSnapshot]:
+        return self.app.wait_timeout_close_requested_window_snapshots :: timeout :: method
+
+    fn wait_timeout_close_requested_windows_for(edit self, id: WindowId, timeout: F64) -> List[Window]:
+        return self.app.wait_timeout_close_requested_windows_for :: id, timeout :: method
+
+    fn wait_timeout_close_requested_window_snapshots_for(edit self, id: WindowId, timeout: F64) -> List[WindowSnapshot]:
+        return self.app.wait_timeout_close_requested_window_snapshots_for :: id, timeout :: method
+
+    fn wait_timeout_close_requested_window_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_close_requested_window_events :: timeout :: method
+
+    fn wait_timeout_close_requested_window_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_close_requested_window_events_for :: id, timeout :: method
+
+    fn wait_timeout_monitor_event(edit self, timeout: F64) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.wait_timeout_monitor_event :: timeout :: method
+
+    fn wait_timeout_monitor_event_for(edit self, id: MonitorId, timeout: F64) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.wait_timeout_monitor_event_for :: id, timeout :: method
+
+    fn wait_timeout_joystick_event(edit self, timeout: F64) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.wait_timeout_joystick_event :: timeout :: method
+
+    fn wait_timeout_joystick_event_for(edit self, id: JoystickId, timeout: F64) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.wait_timeout_joystick_event_for :: id, timeout :: method
+
+    fn wait_timeout_user_event(edit self, timeout: F64) -> Result[Option[UserEvent], AppError]:
+        return self.app.wait_timeout_user_event :: timeout :: method
+
+    fn wait_timeout_user_event_for(edit self, id: UserEventId, timeout: F64) -> Result[Option[UserEvent], AppError]:
+        return self.app.wait_timeout_user_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_cursor_data(edit self, timeout: F64) -> Result[Option[WindowCursorData], AppError]:
+        return self.app.wait_timeout_next_cursor_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_scroll_data(edit self, timeout: F64) -> Result[Option[WindowScrollData], AppError]:
+        return self.app.wait_timeout_next_scroll_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_key_data(edit self, timeout: F64) -> Result[Option[WindowKeyData], AppError]:
+        return self.app.wait_timeout_next_key_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_character_data(edit self, timeout: F64) -> Result[Option[WindowCharacterData], AppError]:
+        return self.app.wait_timeout_next_character_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_character_mods_data(edit self, timeout: F64) -> Result[Option[WindowCharacterModsData], AppError]:
+        return self.app.wait_timeout_next_character_mods_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_mouse_button_data(edit self, timeout: F64) -> Result[Option[WindowMouseButtonData], AppError]:
+        return self.app.wait_timeout_next_mouse_button_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_dropped_paths_list(edit self, timeout: F64) -> Result[Option[List[Str]], AppError]:
+        return self.app.wait_timeout_next_dropped_paths_list_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_cursor_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowCursorData], AppError]:
+        return self.app.wait_timeout_next_cursor_data_for :: id, timeout :: method
+
+    fn wait_timeout_next_scroll_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowScrollData], AppError]:
+        return self.app.wait_timeout_next_scroll_data_for :: id, timeout :: method
+
+    fn wait_timeout_next_key_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowKeyData], AppError]:
+        return self.app.wait_timeout_next_key_data_for :: id, timeout :: method
+
+    fn wait_timeout_next_character_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowCharacterData], AppError]:
+        return self.app.wait_timeout_next_character_data_for :: id, timeout :: method
+
+    fn wait_timeout_next_character_mods_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowCharacterModsData], AppError]:
+        return self.app.wait_timeout_next_character_mods_data_for :: id, timeout :: method
+
+    fn wait_timeout_next_mouse_button_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowMouseButtonData], AppError]:
+        return self.app.wait_timeout_next_mouse_button_data_for :: id, timeout :: method
+
+    fn wait_timeout_next_dropped_paths_list_for(edit self, id: WindowId, timeout: F64) -> Result[Option[List[Str]], AppError]:
+        return self.app.wait_timeout_next_dropped_paths_list_for :: id, timeout :: method
+
+    fn wait_timeout_next_key_changed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_key_changed_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_character_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_character_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_character_mods_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_character_mods_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_mouse_button_changed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_mouse_button_changed_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_cursor_moved_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_cursor_moved_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_scrolled_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_scrolled_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_dropped_path_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_dropped_path_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_key_changed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_key_changed_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_character_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_character_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_character_mods_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_character_mods_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_mouse_button_changed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_mouse_button_changed_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_cursor_moved_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_cursor_moved_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_scrolled_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_scrolled_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_dropped_path_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_dropped_path_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_refreshed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_refreshed_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_moved_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_moved_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_resized_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_resized_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_framebuffer_resized_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_framebuffer_resized_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_content_scale_changed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_content_scale_changed_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_focus_changed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_focus_changed_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_iconified_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_iconified_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_maximized_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_maximized_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_cursor_entered_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_cursor_entered_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_refreshed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_refreshed_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_moved_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_moved_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_resized_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_resized_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_framebuffer_resized_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_framebuffer_resized_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_content_scale_changed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_content_scale_changed_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_focus_changed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_focus_changed_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_iconified_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_iconified_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_maximized_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_maximized_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_cursor_entered_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_cursor_entered_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_created_window_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_created_window_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_destroyed_window_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_destroyed_window_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_close_requested_window_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_close_requested_window_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_created_window_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_created_window_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_destroyed_window_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_destroyed_window_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_close_requested_window_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_close_requested_window_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_connected_monitor_event(edit self, timeout: F64) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.wait_timeout_next_connected_monitor_event :: timeout :: method
+
+    fn wait_timeout_next_disconnected_monitor_event(edit self, timeout: F64) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.wait_timeout_next_disconnected_monitor_event :: timeout :: method
+
+    fn wait_timeout_next_connected_monitor_event_for(edit self, id: MonitorId, timeout: F64) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.wait_timeout_next_connected_monitor_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_disconnected_monitor_event_for(edit self, id: MonitorId, timeout: F64) -> Result[Option[MonitorEvent], AppError]:
+        return self.app.wait_timeout_next_disconnected_monitor_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_connected_joystick_event(edit self, timeout: F64) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.wait_timeout_next_connected_joystick_event :: timeout :: method
+
+    fn wait_timeout_next_disconnected_joystick_event(edit self, timeout: F64) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.wait_timeout_next_disconnected_joystick_event :: timeout :: method
+
+    fn wait_timeout_next_connected_joystick_event_for(edit self, id: JoystickId, timeout: F64) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.wait_timeout_next_connected_joystick_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_disconnected_joystick_event_for(edit self, id: JoystickId, timeout: F64) -> Result[Option[JoystickEvent], AppError]:
+        return self.app.wait_timeout_next_disconnected_joystick_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_created_window_id(edit self, timeout: F64) -> Result[Option[WindowId], AppError]:
+        return self.app.wait_timeout_next_created_window_id :: timeout :: method
+
+    fn wait_timeout_next_destroyed_window_id(edit self, timeout: F64) -> Result[Option[WindowId], AppError]:
+        return self.app.wait_timeout_next_destroyed_window_id :: timeout :: method
+
+    fn wait_timeout_next_close_requested_window_id(edit self, timeout: F64) -> Result[Option[WindowId], AppError]:
+        return self.app.wait_timeout_next_close_requested_window_id :: timeout :: method
+
+    fn wait_timeout_next_connected_monitor_id(edit self, timeout: F64) -> Result[Option[MonitorId], AppError]:
+        return self.app.wait_timeout_next_connected_monitor_id :: timeout :: method
+
+    fn wait_timeout_next_disconnected_monitor_id(edit self, timeout: F64) -> Result[Option[MonitorId], AppError]:
+        return self.app.wait_timeout_next_disconnected_monitor_id :: timeout :: method
+
+    fn wait_timeout_next_connected_joystick_id(edit self, timeout: F64) -> Result[Option[JoystickId], AppError]:
+        return self.app.wait_timeout_next_connected_joystick_id :: timeout :: method
+
+    fn wait_timeout_next_disconnected_joystick_id(edit self, timeout: F64) -> Result[Option[JoystickId], AppError]:
+        return self.app.wait_timeout_next_disconnected_joystick_id :: timeout :: method
+
+    fn wait_timeout_next_created_window(edit self, timeout: F64) -> Result[Option[Window], AppError]:
+        return self.app.wait_timeout_next_created_window :: timeout :: method
+
+    fn wait_timeout_next_created_window_snapshot(edit self, timeout: F64) -> Result[Option[WindowSnapshot], AppError]:
+        return self.app.wait_timeout_next_created_window_snapshot :: timeout :: method
+
+    fn wait_timeout_next_close_requested_window(edit self, timeout: F64) -> Result[Option[Window], AppError]:
+        return self.app.wait_timeout_next_close_requested_window :: timeout :: method
+
+    fn wait_timeout_next_close_requested_window_snapshot(edit self, timeout: F64) -> Result[Option[WindowSnapshot], AppError]:
+        return self.app.wait_timeout_next_close_requested_window_snapshot :: timeout :: method
+
+    fn wait_timeout_next_connected_monitor(edit self, timeout: F64) -> Result[Option[Monitor], AppError]:
+        return self.app.wait_timeout_next_connected_monitor :: timeout :: method
+
+    fn wait_timeout_next_connected_monitor_snapshot(edit self, timeout: F64) -> Result[Option[MonitorSnapshot], AppError]:
+        return self.app.wait_timeout_next_connected_monitor_snapshot :: timeout :: method
+
+    fn wait_timeout_next_connected_joystick(edit self, timeout: F64) -> Result[Option[Joystick], AppError]:
+        return self.app.wait_timeout_next_connected_joystick :: timeout :: method
+
+    fn wait_timeout_next_connected_joystick_snapshot(edit self, timeout: F64) -> Result[Option[JoystickSnapshot], AppError]:
+        return self.app.wait_timeout_next_connected_joystick_snapshot :: timeout :: method
+
+    fn wait_timeout_next_created_window_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Window], AppError]:
+        return self.app.wait_timeout_next_created_window_for :: id, timeout :: method
+
+    fn wait_timeout_next_created_window_snapshot_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowSnapshot], AppError]:
+        return self.app.wait_timeout_next_created_window_snapshot_for :: id, timeout :: method
+
+    fn wait_timeout_next_close_requested_window_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Window], AppError]:
+        return self.app.wait_timeout_next_close_requested_window_for :: id, timeout :: method
+
+    fn wait_timeout_next_close_requested_window_snapshot_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowSnapshot], AppError]:
+        return self.app.wait_timeout_next_close_requested_window_snapshot_for :: id, timeout :: method
+
+    fn wait_timeout_next_connected_monitor_for(edit self, id: MonitorId, timeout: F64) -> Result[Option[Monitor], AppError]:
+        return self.app.wait_timeout_next_connected_monitor_for :: id, timeout :: method
+
+    fn wait_timeout_next_connected_monitor_snapshot_for(edit self, id: MonitorId, timeout: F64) -> Result[Option[MonitorSnapshot], AppError]:
+        return self.app.wait_timeout_next_connected_monitor_snapshot_for :: id, timeout :: method
+
+    fn wait_timeout_next_connected_joystick_for(edit self, id: JoystickId, timeout: F64) -> Result[Option[Joystick], AppError]:
+        return self.app.wait_timeout_next_connected_joystick_for :: id, timeout :: method
+
+    fn wait_timeout_next_connected_joystick_snapshot_for(edit self, id: JoystickId, timeout: F64) -> Result[Option[JoystickSnapshot], AppError]:
+        return self.app.wait_timeout_next_connected_joystick_snapshot_for :: id, timeout :: method
+
+    fn wait_timeout_next_moved_data(edit self, timeout: F64) -> Result[Option[WindowMoveData], AppError]:
+        return self.app.wait_timeout_next_moved_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_resized_data(edit self, timeout: F64) -> Result[Option[WindowSizeData], AppError]:
+        return self.app.wait_timeout_next_resized_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_framebuffer_resized_data(edit self, timeout: F64) -> Result[Option[WindowSizeData], AppError]:
+        return self.app.wait_timeout_next_framebuffer_resized_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_content_scale_data(edit self, timeout: F64) -> Result[Option[WindowScaleData], AppError]:
+        return self.app.wait_timeout_next_content_scale_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_focus_state(edit self, timeout: F64) -> Result[Option[Bool], AppError]:
+        return self.app.wait_timeout_next_focus_state_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_iconified_state(edit self, timeout: F64) -> Result[Option[Bool], AppError]:
+        return self.app.wait_timeout_next_iconified_state_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_maximized_state(edit self, timeout: F64) -> Result[Option[Bool], AppError]:
+        return self.app.wait_timeout_next_maximized_state_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_cursor_entered_state(edit self, timeout: F64) -> Result[Option[Bool], AppError]:
+        return self.app.wait_timeout_next_cursor_entered_state_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_moved_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowMoveData], AppError]:
+        return self.app.wait_timeout_next_moved_data_for :: id, timeout :: method
+
+    fn wait_timeout_next_resized_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowSizeData], AppError]:
+        return self.app.wait_timeout_next_resized_data_for :: id, timeout :: method
+
+    fn wait_timeout_next_framebuffer_resized_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowSizeData], AppError]:
+        return self.app.wait_timeout_next_framebuffer_resized_data_for :: id, timeout :: method
+
+    fn wait_timeout_next_content_scale_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowScaleData], AppError]:
+        return self.app.wait_timeout_next_content_scale_data_for :: id, timeout :: method
+
+    fn wait_timeout_next_focus_state_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Bool], AppError]:
+        return self.app.wait_timeout_next_focus_state_for :: id, timeout :: method
+
+    fn wait_timeout_next_iconified_state_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Bool], AppError]:
+        return self.app.wait_timeout_next_iconified_state_for :: id, timeout :: method
+
+    fn wait_timeout_next_maximized_state_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Bool], AppError]:
+        return self.app.wait_timeout_next_maximized_state_for :: id, timeout :: method
+
+    fn wait_timeout_next_cursor_entered_state_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Bool], AppError]:
+        return self.app.wait_timeout_next_cursor_entered_state_for :: id, timeout :: method
+
+    fn wait_timeout_monitor_events(edit self, timeout: F64) -> List[MonitorEvent]:
+        return self.app.wait_timeout_monitor_events :: timeout :: method
+
+    fn wait_timeout_monitor_events_for(edit self, id: MonitorId, timeout: F64) -> List[MonitorEvent]:
+        return self.app.wait_timeout_monitor_events_for :: id, timeout :: method
+
+    fn wait_timeout_connected_monitor_ids(edit self, timeout: F64) -> List[MonitorId]:
+        return self.app.wait_timeout_connected_monitor_ids :: timeout :: method
+
+    fn wait_timeout_connected_monitors(edit self, timeout: F64) -> List[Monitor]:
+        return self.app.wait_timeout_connected_monitors :: timeout :: method
+
+    fn wait_timeout_connected_monitor_snapshots(edit self, timeout: F64) -> List[MonitorSnapshot]:
+        return self.app.wait_timeout_connected_monitor_snapshots :: timeout :: method
+
+    fn wait_timeout_connected_monitors_for(edit self, id: MonitorId, timeout: F64) -> List[Monitor]:
+        return self.app.wait_timeout_connected_monitors_for :: id, timeout :: method
+
+    fn wait_timeout_connected_monitor_snapshots_for(edit self, id: MonitorId, timeout: F64) -> List[MonitorSnapshot]:
+        return self.app.wait_timeout_connected_monitor_snapshots_for :: id, timeout :: method
+
+    fn wait_timeout_connected_monitor_events(edit self, timeout: F64) -> List[MonitorEvent]:
+        return self.app.wait_timeout_connected_monitor_events :: timeout :: method
+
+    fn wait_timeout_connected_monitor_events_for(edit self, id: MonitorId, timeout: F64) -> List[MonitorEvent]:
+        return self.app.wait_timeout_connected_monitor_events_for :: id, timeout :: method
+
+    fn wait_timeout_disconnected_monitor_ids(edit self, timeout: F64) -> List[MonitorId]:
+        return self.app.wait_timeout_disconnected_monitor_ids :: timeout :: method
+
+    fn wait_timeout_disconnected_monitor_events(edit self, timeout: F64) -> List[MonitorEvent]:
+        return self.app.wait_timeout_disconnected_monitor_events :: timeout :: method
+
+    fn wait_timeout_disconnected_monitor_events_for(edit self, id: MonitorId, timeout: F64) -> List[MonitorEvent]:
+        return self.app.wait_timeout_disconnected_monitor_events_for :: id, timeout :: method
+
+    fn wait_timeout_joystick_events(edit self, timeout: F64) -> List[JoystickEvent]:
+        return self.app.wait_timeout_joystick_events :: timeout :: method
+
+    fn wait_timeout_joystick_events_for(edit self, id: JoystickId, timeout: F64) -> List[JoystickEvent]:
+        return self.app.wait_timeout_joystick_events_for :: id, timeout :: method
+
+    fn wait_timeout_connected_joystick_events(edit self, timeout: F64) -> List[JoystickEvent]:
+        return self.app.wait_timeout_connected_joystick_events :: timeout :: method
+
+    fn wait_timeout_connected_joystick_events_for(edit self, id: JoystickId, timeout: F64) -> List[JoystickEvent]:
+        return self.app.wait_timeout_connected_joystick_events_for :: id, timeout :: method
+
+    fn wait_timeout_connected_joystick_ids(edit self, timeout: F64) -> List[JoystickId]:
+        return self.app.wait_timeout_connected_joystick_ids :: timeout :: method
+
+    fn wait_timeout_connected_joysticks(edit self, timeout: F64) -> List[Joystick]:
+        return self.app.wait_timeout_connected_joysticks :: timeout :: method
+
+    fn wait_timeout_connected_joystick_snapshots(edit self, timeout: F64) -> List[JoystickSnapshot]:
+        return self.app.wait_timeout_connected_joystick_snapshots :: timeout :: method
+
+    fn wait_timeout_connected_joysticks_for(edit self, id: JoystickId, timeout: F64) -> List[Joystick]:
+        return self.app.wait_timeout_connected_joysticks_for :: id, timeout :: method
+
+    fn wait_timeout_connected_joystick_snapshots_for(edit self, id: JoystickId, timeout: F64) -> List[JoystickSnapshot]:
+        return self.app.wait_timeout_connected_joystick_snapshots_for :: id, timeout :: method
+
+    fn wait_timeout_disconnected_joystick_ids(edit self, timeout: F64) -> List[JoystickId]:
+        return self.app.wait_timeout_disconnected_joystick_ids :: timeout :: method
+
+    fn wait_timeout_disconnected_joystick_events(edit self, timeout: F64) -> List[JoystickEvent]:
+        return self.app.wait_timeout_disconnected_joystick_events :: timeout :: method
+
+    fn wait_timeout_disconnected_joystick_events_for(edit self, id: JoystickId, timeout: F64) -> List[JoystickEvent]:
+        return self.app.wait_timeout_disconnected_joystick_events_for :: id, timeout :: method
+
+    fn wait_timeout_user_events(edit self, timeout: F64) -> List[UserEvent]:
+        return self.app.wait_timeout_user_events :: timeout :: method
+
+    fn wait_timeout_user_events_for(edit self, id: UserEventId, timeout: F64) -> List[UserEvent]:
+        return self.app.wait_timeout_user_events_for :: id, timeout :: method
+
+    fn wait_timeout_user_ids(edit self, timeout: F64) -> List[UserEventId]:
+        return self.app.wait_timeout_user_ids :: timeout :: method
+
+    fn pending_window_event_count(edit self) -> Index:
+        return self.app.pending_window_event_count :: :: method
+
+    fn pending_monitor_event_count(edit self) -> Index:
+        return self.app.pending_monitor_event_count :: :: method
+
+    fn pending_joystick_event_count(edit self) -> Index:
+        return self.app.pending_joystick_event_count :: :: method
+
+    fn pending_user_event_count(edit self) -> Index:
+        return self.app.pending_user_event_count :: :: method
+
+    fn has_pending_window_events(edit self) -> Bool:
+        return self.app.has_pending_window_events :: :: method
+
+    fn has_pending_monitor_events(edit self) -> Bool:
+        return self.app.has_pending_monitor_events :: :: method
+
+    fn has_pending_joystick_events(edit self) -> Bool:
+        return self.app.has_pending_joystick_events :: :: method
+
+    fn has_pending_user_events(edit self) -> Bool:
+        return self.app.has_pending_user_events :: :: method
+
+    fn pending_window_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_window_events :: :: method
+
+    fn pending_monitor_events(edit self) -> List[MonitorEvent]:
+        return self.app.pending_monitor_events :: :: method
+
+    fn pending_joystick_events(edit self) -> List[JoystickEvent]:
+        return self.app.pending_joystick_events :: :: method
+
+    fn pending_user_events(edit self) -> List[UserEvent]:
+        return self.app.pending_user_events :: :: method
+
+    fn pending_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_window_events_for :: id :: method
+
+    fn pending_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        return self.app.pending_monitor_events_for :: id :: method
+
+    fn pending_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        return self.app.pending_joystick_events_for :: id :: method
+
+    fn pending_user_events_for(edit self, id: UserEventId) -> List[UserEvent]:
+        return self.app.pending_user_events_for :: id :: method
+
+    fn pending_created_window_ids(edit self) -> List[WindowId]:
+        return self.app.pending_created_window_ids :: :: method
+
+    fn pending_created_windows(edit self) -> List[Window]:
+        return self.app.pending_created_windows :: :: method
+
+    fn pending_created_window_snapshots(edit self) -> List[WindowSnapshot]:
+        return self.app.pending_created_window_snapshots :: :: method
+
+    fn pending_created_windows_for(edit self, id: WindowId) -> List[Window]:
+        return self.app.pending_created_windows_for :: id :: method
+
+    fn pending_created_window_snapshots_for(edit self, id: WindowId) -> List[WindowSnapshot]:
+        return self.app.pending_created_window_snapshots_for :: id :: method
+
+    fn pending_created_window_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_created_window_events :: :: method
+
+    fn pending_created_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_created_window_events_for :: id :: method
+
+    fn pending_destroyed_window_ids(edit self) -> List[WindowId]:
+        return self.app.pending_destroyed_window_ids :: :: method
+
+    fn pending_destroyed_window_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_destroyed_window_events :: :: method
+
+    fn pending_destroyed_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_destroyed_window_events_for :: id :: method
+
+    fn pending_close_requested_window_ids(edit self) -> List[WindowId]:
+        return self.app.pending_close_requested_window_ids :: :: method
+
+    fn pending_close_requested_windows(edit self) -> List[Window]:
+        return self.app.pending_close_requested_windows :: :: method
+
+    fn pending_close_requested_window_snapshots(edit self) -> List[WindowSnapshot]:
+        return self.app.pending_close_requested_window_snapshots :: :: method
+
+    fn pending_close_requested_windows_for(edit self, id: WindowId) -> List[Window]:
+        return self.app.pending_close_requested_windows_for :: id :: method
+
+    fn pending_close_requested_window_snapshots_for(edit self, id: WindowId) -> List[WindowSnapshot]:
+        return self.app.pending_close_requested_window_snapshots_for :: id :: method
+
+    fn pending_close_requested_window_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_close_requested_window_events :: :: method
+
+    fn pending_close_requested_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_close_requested_window_events_for :: id :: method
+
+    fn pending_connected_monitor_ids(edit self) -> List[MonitorId]:
+        return self.app.pending_connected_monitor_ids :: :: method
+
+    fn pending_connected_monitors(edit self) -> List[Monitor]:
+        return self.app.pending_connected_monitors :: :: method
+
+    fn pending_connected_monitor_snapshots(edit self) -> List[MonitorSnapshot]:
+        return self.app.pending_connected_monitor_snapshots :: :: method
+
+    fn pending_connected_monitors_for(edit self, id: MonitorId) -> List[Monitor]:
+        return self.app.pending_connected_monitors_for :: id :: method
+
+    fn pending_connected_monitor_snapshots_for(edit self, id: MonitorId) -> List[MonitorSnapshot]:
+        return self.app.pending_connected_monitor_snapshots_for :: id :: method
+
+    fn pending_connected_monitor_events(edit self) -> List[MonitorEvent]:
+        return self.app.pending_connected_monitor_events :: :: method
+
+    fn pending_connected_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        return self.app.pending_connected_monitor_events_for :: id :: method
+
+    fn pending_disconnected_monitor_ids(edit self) -> List[MonitorId]:
+        return self.app.pending_disconnected_monitor_ids :: :: method
+
+    fn pending_disconnected_monitor_events(edit self) -> List[MonitorEvent]:
+        return self.app.pending_disconnected_monitor_events :: :: method
+
+    fn pending_disconnected_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        return self.app.pending_disconnected_monitor_events_for :: id :: method
+
+    fn pending_connected_joystick_events(edit self) -> List[JoystickEvent]:
+        return self.app.pending_connected_joystick_events :: :: method
+
+    fn pending_connected_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        return self.app.pending_connected_joystick_events_for :: id :: method
+
+    fn pending_connected_joystick_ids(edit self) -> List[JoystickId]:
+        return self.app.pending_connected_joystick_ids :: :: method
+
+    fn pending_connected_joysticks(edit self) -> List[Joystick]:
+        return self.app.pending_connected_joysticks :: :: method
+
+    fn pending_connected_joystick_snapshots(edit self) -> List[JoystickSnapshot]:
+        return self.app.pending_connected_joystick_snapshots :: :: method
+
+    fn pending_connected_joysticks_for(edit self, id: JoystickId) -> List[Joystick]:
+        return self.app.pending_connected_joysticks_for :: id :: method
+
+    fn pending_connected_joystick_snapshots_for(edit self, id: JoystickId) -> List[JoystickSnapshot]:
+        return self.app.pending_connected_joystick_snapshots_for :: id :: method
+
+    fn pending_disconnected_joystick_ids(edit self) -> List[JoystickId]:
+        return self.app.pending_disconnected_joystick_ids :: :: method
+
+    fn pending_disconnected_joystick_events(edit self) -> List[JoystickEvent]:
+        return self.app.pending_disconnected_joystick_events :: :: method
+
+    fn pending_disconnected_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        return self.app.pending_disconnected_joystick_events_for :: id :: method
+
+    fn pending_window_ids(edit self) -> List[WindowId]:
+        return self.app.pending_window_ids :: :: method
+
+    fn pending_monitor_ids(edit self) -> List[MonitorId]:
+        return self.app.pending_monitor_ids :: :: method
+
+    fn pending_joystick_ids(edit self) -> List[JoystickId]:
+        return self.app.pending_joystick_ids :: :: method
+
+    fn pending_user_ids(edit self) -> List[UserEventId]:
+        return self.app.pending_user_ids :: :: method
+
+    fn pending_refreshed_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_refreshed_events_for :: self.window.id :: method
+
+    fn pending_moved_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_moved_events_for :: self.window.id :: method
+
+    fn pending_resized_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_resized_events_for :: self.window.id :: method
+
+    fn pending_framebuffer_resized_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_framebuffer_resized_events_for :: self.window.id :: method
+
+    fn pending_content_scale_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_content_scale_changed_events_for :: self.window.id :: method
+
+    fn pending_focus_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_focus_changed_events_for :: self.window.id :: method
+
+    fn pending_iconified_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_iconified_events_for :: self.window.id :: method
+
+    fn pending_maximized_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_maximized_events_for :: self.window.id :: method
+
+    fn pending_cursor_entered_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_cursor_entered_events_for :: self.window.id :: method
+
+    fn pending_refreshed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_refreshed_events_for :: id :: method
+
+    fn pending_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_moved_events_for :: id :: method
+
+    fn pending_resized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_resized_events_for :: id :: method
+
+    fn pending_framebuffer_resized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_framebuffer_resized_events_for :: id :: method
+
+    fn pending_content_scale_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_content_scale_changed_events_for :: id :: method
+
+    fn pending_focus_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_focus_changed_events_for :: id :: method
+
+    fn pending_iconified_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_iconified_events_for :: id :: method
+
+    fn pending_maximized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_maximized_events_for :: id :: method
+
+    fn pending_cursor_entered_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_cursor_entered_events_for :: id :: method
+
+    fn pending_moved_data(edit self) -> List[WindowMoveData]:
+        return self.app.pending_moved_data_for :: self.window.id :: method
+
+    fn pending_resized_data(edit self) -> List[WindowSizeData]:
+        return self.app.pending_resized_data_for :: self.window.id :: method
+
+    fn pending_framebuffer_resized_data(edit self) -> List[WindowSizeData]:
+        return self.app.pending_framebuffer_resized_data_for :: self.window.id :: method
+
+    fn pending_content_scale_data(edit self) -> List[WindowScaleData]:
+        return self.app.pending_content_scale_data_for :: self.window.id :: method
+
+    fn pending_focus_states(edit self) -> List[Bool]:
+        return self.app.pending_focus_states_for :: self.window.id :: method
+
+    fn pending_iconified_states(edit self) -> List[Bool]:
+        return self.app.pending_iconified_states_for :: self.window.id :: method
+
+    fn pending_maximized_states(edit self) -> List[Bool]:
+        return self.app.pending_maximized_states_for :: self.window.id :: method
+
+    fn pending_cursor_entered_states(edit self) -> List[Bool]:
+        return self.app.pending_cursor_entered_states_for :: self.window.id :: method
+
+    fn pending_moved_data_for(edit self, id: WindowId) -> List[WindowMoveData]:
+        return self.app.pending_moved_data_for :: id :: method
+
+    fn pending_resized_data_for(edit self, id: WindowId) -> List[WindowSizeData]:
+        return self.app.pending_resized_data_for :: id :: method
+
+    fn pending_framebuffer_resized_data_for(edit self, id: WindowId) -> List[WindowSizeData]:
+        return self.app.pending_framebuffer_resized_data_for :: id :: method
+
+    fn pending_content_scale_data_for(edit self, id: WindowId) -> List[WindowScaleData]:
+        return self.app.pending_content_scale_data_for :: id :: method
+
+    fn pending_focus_states_for(edit self, id: WindowId) -> List[Bool]:
+        return self.app.pending_focus_states_for :: id :: method
+
+    fn pending_iconified_states_for(edit self, id: WindowId) -> List[Bool]:
+        return self.app.pending_iconified_states_for :: id :: method
+
+    fn pending_maximized_states_for(edit self, id: WindowId) -> List[Bool]:
+        return self.app.pending_maximized_states_for :: id :: method
+
+    fn pending_cursor_entered_states_for(edit self, id: WindowId) -> List[Bool]:
+        return self.app.pending_cursor_entered_states_for :: id :: method
+
+    fn pending_key_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_key_changed_events_for :: self.window.id :: method
+
+    fn pending_character_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_character_events_for :: self.window.id :: method
+
+    fn pending_character_mods_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_character_mods_events_for :: self.window.id :: method
+
+    fn pending_mouse_button_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_mouse_button_changed_events_for :: self.window.id :: method
+
+    fn pending_cursor_moved_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_cursor_moved_events_for :: self.window.id :: method
+
+    fn pending_scrolled_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_scrolled_events_for :: self.window.id :: method
+
+    fn pending_key_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_key_changed_events_for :: id :: method
+
+    fn pending_character_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_character_events_for :: id :: method
+
+    fn pending_character_mods_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_character_mods_events_for :: id :: method
+
+    fn pending_mouse_button_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_mouse_button_changed_events_for :: id :: method
+
+    fn pending_cursor_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_cursor_moved_events_for :: id :: method
+
+    fn pending_scrolled_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_scrolled_events_for :: id :: method
+
+    fn pending_cursor_data(edit self) -> List[WindowCursorData]:
+        return self.app.pending_cursor_data_for :: self.window.id :: method
+
+    fn pending_scroll_data(edit self) -> List[WindowScrollData]:
+        return self.app.pending_scroll_data_for :: self.window.id :: method
+
+    fn pending_key_data(edit self) -> List[WindowKeyData]:
+        return self.app.pending_key_data_for :: self.window.id :: method
+
+    fn pending_character_data(edit self) -> List[WindowCharacterData]:
+        return self.app.pending_character_data_for :: self.window.id :: method
+
+    fn pending_character_mods_data(edit self) -> List[WindowCharacterModsData]:
+        return self.app.pending_character_mods_data_for :: self.window.id :: method
+
+    fn pending_mouse_button_data(edit self) -> List[WindowMouseButtonData]:
+        return self.app.pending_mouse_button_data_for :: self.window.id :: method
+
+    fn pending_cursor_data_for(edit self, id: WindowId) -> List[WindowCursorData]:
+        return self.app.pending_cursor_data_for :: id :: method
+
+    fn pending_scroll_data_for(edit self, id: WindowId) -> List[WindowScrollData]:
+        return self.app.pending_scroll_data_for :: id :: method
+
+    fn pending_key_data_for(edit self, id: WindowId) -> List[WindowKeyData]:
+        return self.app.pending_key_data_for :: id :: method
+
+    fn pending_character_data_for(edit self, id: WindowId) -> List[WindowCharacterData]:
+        return self.app.pending_character_data_for :: id :: method
+
+    fn pending_character_mods_data_for(edit self, id: WindowId) -> List[WindowCharacterModsData]:
+        return self.app.pending_character_mods_data_for :: id :: method
+
+    fn pending_mouse_button_data_for(edit self, id: WindowId) -> List[WindowMouseButtonData]:
+        return self.app.pending_mouse_button_data_for :: id :: method
+
+    fn poll_cursor_data(edit self) -> List[WindowCursorData]:
+        return self.app.poll_cursor_data_for :: self.window.id :: method
+
+    fn poll_scroll_data(edit self) -> List[WindowScrollData]:
+        return self.app.poll_scroll_data_for :: self.window.id :: method
+
+    fn poll_key_data(edit self) -> List[WindowKeyData]:
+        return self.app.poll_key_data_for :: self.window.id :: method
+
+    fn poll_character_data(edit self) -> List[WindowCharacterData]:
+        return self.app.poll_character_data_for :: self.window.id :: method
+
+    fn poll_character_mods_data(edit self) -> List[WindowCharacterModsData]:
+        return self.app.poll_character_mods_data_for :: self.window.id :: method
+
+    fn poll_mouse_button_data(edit self) -> List[WindowMouseButtonData]:
+        return self.app.poll_mouse_button_data_for :: self.window.id :: method
+
+    fn poll_dropped_paths_lists(edit self) -> List[List[Str]]:
+        return self.app.poll_dropped_paths_lists_for :: self.window.id :: method
+
+    fn poll_cursor_data_for(edit self, id: WindowId) -> List[WindowCursorData]:
+        return self.app.poll_cursor_data_for :: id :: method
+
+    fn poll_scroll_data_for(edit self, id: WindowId) -> List[WindowScrollData]:
+        return self.app.poll_scroll_data_for :: id :: method
+
+    fn poll_key_data_for(edit self, id: WindowId) -> List[WindowKeyData]:
+        return self.app.poll_key_data_for :: id :: method
+
+    fn poll_character_data_for(edit self, id: WindowId) -> List[WindowCharacterData]:
+        return self.app.poll_character_data_for :: id :: method
+
+    fn poll_character_mods_data_for(edit self, id: WindowId) -> List[WindowCharacterModsData]:
+        return self.app.poll_character_mods_data_for :: id :: method
+
+    fn poll_mouse_button_data_for(edit self, id: WindowId) -> List[WindowMouseButtonData]:
+        return self.app.poll_mouse_button_data_for :: id :: method
+
+    fn poll_dropped_paths_lists_for(edit self, id: WindowId) -> List[List[Str]]:
+        return self.app.poll_dropped_paths_lists_for :: id :: method
+
+    fn poll_refreshed_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_refreshed_events_for :: self.window.id :: method
+
+    fn poll_moved_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_moved_events_for :: self.window.id :: method
+
+    fn poll_resized_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_resized_events_for :: self.window.id :: method
+
+    fn poll_framebuffer_resized_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_framebuffer_resized_events_for :: self.window.id :: method
+
+    fn poll_content_scale_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_content_scale_changed_events_for :: self.window.id :: method
+
+    fn poll_focus_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_focus_changed_events_for :: self.window.id :: method
+
+    fn poll_iconified_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_iconified_events_for :: self.window.id :: method
+
+    fn poll_maximized_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_maximized_events_for :: self.window.id :: method
+
+    fn poll_cursor_entered_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_cursor_entered_events_for :: self.window.id :: method
+
+    fn poll_refreshed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_refreshed_events_for :: id :: method
+
+    fn poll_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_moved_events_for :: id :: method
+
+    fn poll_resized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_resized_events_for :: id :: method
+
+    fn poll_framebuffer_resized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_framebuffer_resized_events_for :: id :: method
+
+    fn poll_content_scale_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_content_scale_changed_events_for :: id :: method
+
+    fn poll_focus_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_focus_changed_events_for :: id :: method
+
+    fn poll_iconified_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_iconified_events_for :: id :: method
+
+    fn poll_maximized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_maximized_events_for :: id :: method
+
+    fn poll_cursor_entered_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_cursor_entered_events_for :: id :: method
+
+    fn poll_moved_data(edit self) -> List[WindowMoveData]:
+        return self.app.poll_moved_data_for :: self.window.id :: method
+
+    fn poll_resized_data(edit self) -> List[WindowSizeData]:
+        return self.app.poll_resized_data_for :: self.window.id :: method
+
+    fn poll_framebuffer_resized_data(edit self) -> List[WindowSizeData]:
+        return self.app.poll_framebuffer_resized_data_for :: self.window.id :: method
+
+    fn poll_content_scale_data(edit self) -> List[WindowScaleData]:
+        return self.app.poll_content_scale_data_for :: self.window.id :: method
+
+    fn poll_focus_states(edit self) -> List[Bool]:
+        return self.app.poll_focus_states_for :: self.window.id :: method
+
+    fn poll_iconified_states(edit self) -> List[Bool]:
+        return self.app.poll_iconified_states_for :: self.window.id :: method
+
+    fn poll_maximized_states(edit self) -> List[Bool]:
+        return self.app.poll_maximized_states_for :: self.window.id :: method
+
+    fn poll_cursor_entered_states(edit self) -> List[Bool]:
+        return self.app.poll_cursor_entered_states_for :: self.window.id :: method
+
+    fn poll_moved_data_for(edit self, id: WindowId) -> List[WindowMoveData]:
+        return self.app.poll_moved_data_for :: id :: method
+
+    fn poll_resized_data_for(edit self, id: WindowId) -> List[WindowSizeData]:
+        return self.app.poll_resized_data_for :: id :: method
+
+    fn poll_framebuffer_resized_data_for(edit self, id: WindowId) -> List[WindowSizeData]:
+        return self.app.poll_framebuffer_resized_data_for :: id :: method
+
+    fn poll_content_scale_data_for(edit self, id: WindowId) -> List[WindowScaleData]:
+        return self.app.poll_content_scale_data_for :: id :: method
+
+    fn poll_focus_states_for(edit self, id: WindowId) -> List[Bool]:
+        return self.app.poll_focus_states_for :: id :: method
+
+    fn poll_iconified_states_for(edit self, id: WindowId) -> List[Bool]:
+        return self.app.poll_iconified_states_for :: id :: method
+
+    fn poll_maximized_states_for(edit self, id: WindowId) -> List[Bool]:
+        return self.app.poll_maximized_states_for :: id :: method
+
+    fn poll_cursor_entered_states_for(edit self, id: WindowId) -> List[Bool]:
+        return self.app.poll_cursor_entered_states_for :: id :: method
+
+    fn poll_key_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_key_changed_events_for :: self.window.id :: method
+
+    fn poll_character_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_character_events_for :: self.window.id :: method
+
+    fn poll_character_mods_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_character_mods_events_for :: self.window.id :: method
+
+    fn poll_mouse_button_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_mouse_button_changed_events_for :: self.window.id :: method
+
+    fn poll_cursor_moved_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_cursor_moved_events_for :: self.window.id :: method
+
+    fn poll_scrolled_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_scrolled_events_for :: self.window.id :: method
+
+    fn poll_dropped_path_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_dropped_path_events_for :: self.window.id :: method
+
+    fn poll_key_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_key_changed_events_for :: id :: method
+
+    fn poll_character_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_character_events_for :: id :: method
+
+    fn poll_character_mods_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_character_mods_events_for :: id :: method
+
+    fn poll_mouse_button_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_mouse_button_changed_events_for :: id :: method
+
+    fn poll_cursor_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_cursor_moved_events_for :: id :: method
+
+    fn poll_scrolled_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_scrolled_events_for :: id :: method
+
+    fn poll_dropped_path_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_dropped_path_events_for :: id :: method
+
+    fn wait_cursor_data(edit self) -> List[WindowCursorData]:
+        return self.app.wait_cursor_data_for :: self.window.id :: method
+
+    fn wait_scroll_data(edit self) -> List[WindowScrollData]:
+        return self.app.wait_scroll_data_for :: self.window.id :: method
+
+    fn wait_key_data(edit self) -> List[WindowKeyData]:
+        return self.app.wait_key_data_for :: self.window.id :: method
+
+    fn wait_character_data(edit self) -> List[WindowCharacterData]:
+        return self.app.wait_character_data_for :: self.window.id :: method
+
+    fn wait_character_mods_data(edit self) -> List[WindowCharacterModsData]:
+        return self.app.wait_character_mods_data_for :: self.window.id :: method
+
+    fn wait_mouse_button_data(edit self) -> List[WindowMouseButtonData]:
+        return self.app.wait_mouse_button_data_for :: self.window.id :: method
+
+    fn wait_dropped_paths_lists(edit self) -> List[List[Str]]:
+        return self.app.wait_dropped_paths_lists_for :: self.window.id :: method
+
+    fn wait_cursor_data_for(edit self, id: WindowId) -> List[WindowCursorData]:
+        return self.app.wait_cursor_data_for :: id :: method
+
+    fn wait_scroll_data_for(edit self, id: WindowId) -> List[WindowScrollData]:
+        return self.app.wait_scroll_data_for :: id :: method
+
+    fn wait_key_data_for(edit self, id: WindowId) -> List[WindowKeyData]:
+        return self.app.wait_key_data_for :: id :: method
+
+    fn wait_character_data_for(edit self, id: WindowId) -> List[WindowCharacterData]:
+        return self.app.wait_character_data_for :: id :: method
+
+    fn wait_character_mods_data_for(edit self, id: WindowId) -> List[WindowCharacterModsData]:
+        return self.app.wait_character_mods_data_for :: id :: method
+
+    fn wait_mouse_button_data_for(edit self, id: WindowId) -> List[WindowMouseButtonData]:
+        return self.app.wait_mouse_button_data_for :: id :: method
+
+    fn wait_dropped_paths_lists_for(edit self, id: WindowId) -> List[List[Str]]:
+        return self.app.wait_dropped_paths_lists_for :: id :: method
+
+    fn wait_refreshed_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_refreshed_events_for :: self.window.id :: method
+
+    fn wait_moved_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_moved_events_for :: self.window.id :: method
+
+    fn wait_resized_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_resized_events_for :: self.window.id :: method
+
+    fn wait_framebuffer_resized_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_framebuffer_resized_events_for :: self.window.id :: method
+
+    fn wait_content_scale_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_content_scale_changed_events_for :: self.window.id :: method
+
+    fn wait_focus_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_focus_changed_events_for :: self.window.id :: method
+
+    fn wait_iconified_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_iconified_events_for :: self.window.id :: method
+
+    fn wait_maximized_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_maximized_events_for :: self.window.id :: method
+
+    fn wait_cursor_entered_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_cursor_entered_events_for :: self.window.id :: method
+
+    fn wait_refreshed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_refreshed_events_for :: id :: method
+
+    fn wait_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_moved_events_for :: id :: method
+
+    fn wait_resized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_resized_events_for :: id :: method
+
+    fn wait_framebuffer_resized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_framebuffer_resized_events_for :: id :: method
+
+    fn wait_content_scale_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_content_scale_changed_events_for :: id :: method
+
+    fn wait_focus_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_focus_changed_events_for :: id :: method
+
+    fn wait_iconified_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_iconified_events_for :: id :: method
+
+    fn wait_maximized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_maximized_events_for :: id :: method
+
+    fn wait_cursor_entered_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_cursor_entered_events_for :: id :: method
+
+    fn wait_moved_data(edit self) -> List[WindowMoveData]:
+        return self.app.wait_moved_data_for :: self.window.id :: method
+
+    fn wait_resized_data(edit self) -> List[WindowSizeData]:
+        return self.app.wait_resized_data_for :: self.window.id :: method
+
+    fn wait_framebuffer_resized_data(edit self) -> List[WindowSizeData]:
+        return self.app.wait_framebuffer_resized_data_for :: self.window.id :: method
+
+    fn wait_content_scale_data(edit self) -> List[WindowScaleData]:
+        return self.app.wait_content_scale_data_for :: self.window.id :: method
+
+    fn wait_focus_states(edit self) -> List[Bool]:
+        return self.app.wait_focus_states_for :: self.window.id :: method
+
+    fn wait_iconified_states(edit self) -> List[Bool]:
+        return self.app.wait_iconified_states_for :: self.window.id :: method
+
+    fn wait_maximized_states(edit self) -> List[Bool]:
+        return self.app.wait_maximized_states_for :: self.window.id :: method
+
+    fn wait_cursor_entered_states(edit self) -> List[Bool]:
+        return self.app.wait_cursor_entered_states_for :: self.window.id :: method
+
+    fn wait_moved_data_for(edit self, id: WindowId) -> List[WindowMoveData]:
+        return self.app.wait_moved_data_for :: id :: method
+
+    fn wait_resized_data_for(edit self, id: WindowId) -> List[WindowSizeData]:
+        return self.app.wait_resized_data_for :: id :: method
+
+    fn wait_framebuffer_resized_data_for(edit self, id: WindowId) -> List[WindowSizeData]:
+        return self.app.wait_framebuffer_resized_data_for :: id :: method
+
+    fn wait_content_scale_data_for(edit self, id: WindowId) -> List[WindowScaleData]:
+        return self.app.wait_content_scale_data_for :: id :: method
+
+    fn wait_focus_states_for(edit self, id: WindowId) -> List[Bool]:
+        return self.app.wait_focus_states_for :: id :: method
+
+    fn wait_iconified_states_for(edit self, id: WindowId) -> List[Bool]:
+        return self.app.wait_iconified_states_for :: id :: method
+
+    fn wait_maximized_states_for(edit self, id: WindowId) -> List[Bool]:
+        return self.app.wait_maximized_states_for :: id :: method
+
+    fn wait_cursor_entered_states_for(edit self, id: WindowId) -> List[Bool]:
+        return self.app.wait_cursor_entered_states_for :: id :: method
+
+    fn wait_key_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_key_changed_events_for :: self.window.id :: method
+
+    fn wait_character_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_character_events_for :: self.window.id :: method
+
+    fn wait_character_mods_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_character_mods_events_for :: self.window.id :: method
+
+    fn wait_mouse_button_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_mouse_button_changed_events_for :: self.window.id :: method
+
+    fn wait_cursor_moved_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_cursor_moved_events_for :: self.window.id :: method
+
+    fn wait_scrolled_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_scrolled_events_for :: self.window.id :: method
+
+    fn wait_dropped_path_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_dropped_path_events_for :: self.window.id :: method
+
+    fn wait_key_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_key_changed_events_for :: id :: method
+
+    fn wait_character_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_character_events_for :: id :: method
+
+    fn wait_character_mods_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_character_mods_events_for :: id :: method
+
+    fn wait_mouse_button_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_mouse_button_changed_events_for :: id :: method
+
+    fn wait_cursor_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_cursor_moved_events_for :: id :: method
+
+    fn wait_scrolled_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_scrolled_events_for :: id :: method
+
+    fn wait_dropped_path_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_dropped_path_events_for :: id :: method
+
+    fn wait_timeout_cursor_data(edit self, timeout: F64) -> List[WindowCursorData]:
+        return self.app.wait_timeout_cursor_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_scroll_data(edit self, timeout: F64) -> List[WindowScrollData]:
+        return self.app.wait_timeout_scroll_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_key_data(edit self, timeout: F64) -> List[WindowKeyData]:
+        return self.app.wait_timeout_key_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_character_data(edit self, timeout: F64) -> List[WindowCharacterData]:
+        return self.app.wait_timeout_character_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_character_mods_data(edit self, timeout: F64) -> List[WindowCharacterModsData]:
+        return self.app.wait_timeout_character_mods_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_mouse_button_data(edit self, timeout: F64) -> List[WindowMouseButtonData]:
+        return self.app.wait_timeout_mouse_button_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_dropped_paths_lists(edit self, timeout: F64) -> List[List[Str]]:
+        return self.app.wait_timeout_dropped_paths_lists_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_cursor_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowCursorData]:
+        return self.app.wait_timeout_cursor_data_for :: id, timeout :: method
+
+    fn wait_timeout_scroll_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowScrollData]:
+        return self.app.wait_timeout_scroll_data_for :: id, timeout :: method
+
+    fn wait_timeout_key_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowKeyData]:
+        return self.app.wait_timeout_key_data_for :: id, timeout :: method
+
+    fn wait_timeout_character_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowCharacterData]:
+        return self.app.wait_timeout_character_data_for :: id, timeout :: method
+
+    fn wait_timeout_character_mods_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowCharacterModsData]:
+        return self.app.wait_timeout_character_mods_data_for :: id, timeout :: method
+
+    fn wait_timeout_mouse_button_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowMouseButtonData]:
+        return self.app.wait_timeout_mouse_button_data_for :: id, timeout :: method
+
+    fn wait_timeout_dropped_paths_lists_for(edit self, id: WindowId, timeout: F64) -> List[List[Str]]:
+        return self.app.wait_timeout_dropped_paths_lists_for :: id, timeout :: method
+
+    fn wait_timeout_refreshed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_refreshed_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_moved_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_moved_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_resized_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_resized_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_framebuffer_resized_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_framebuffer_resized_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_content_scale_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_content_scale_changed_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_focus_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_focus_changed_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_iconified_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_iconified_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_maximized_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_maximized_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_cursor_entered_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_cursor_entered_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_refreshed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_refreshed_events_for :: id, timeout :: method
+
+    fn wait_timeout_moved_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_moved_events_for :: id, timeout :: method
+
+    fn wait_timeout_resized_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_resized_events_for :: id, timeout :: method
+
+    fn wait_timeout_framebuffer_resized_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_framebuffer_resized_events_for :: id, timeout :: method
+
+    fn wait_timeout_content_scale_changed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_content_scale_changed_events_for :: id, timeout :: method
+
+    fn wait_timeout_focus_changed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_focus_changed_events_for :: id, timeout :: method
+
+    fn wait_timeout_iconified_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_iconified_events_for :: id, timeout :: method
+
+    fn wait_timeout_maximized_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_maximized_events_for :: id, timeout :: method
+
+    fn wait_timeout_cursor_entered_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_cursor_entered_events_for :: id, timeout :: method
+
+    fn wait_timeout_moved_data(edit self, timeout: F64) -> List[WindowMoveData]:
+        return self.app.wait_timeout_moved_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_resized_data(edit self, timeout: F64) -> List[WindowSizeData]:
+        return self.app.wait_timeout_resized_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_framebuffer_resized_data(edit self, timeout: F64) -> List[WindowSizeData]:
+        return self.app.wait_timeout_framebuffer_resized_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_content_scale_data(edit self, timeout: F64) -> List[WindowScaleData]:
+        return self.app.wait_timeout_content_scale_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_focus_states(edit self, timeout: F64) -> List[Bool]:
+        return self.app.wait_timeout_focus_states_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_iconified_states(edit self, timeout: F64) -> List[Bool]:
+        return self.app.wait_timeout_iconified_states_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_maximized_states(edit self, timeout: F64) -> List[Bool]:
+        return self.app.wait_timeout_maximized_states_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_cursor_entered_states(edit self, timeout: F64) -> List[Bool]:
+        return self.app.wait_timeout_cursor_entered_states_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_moved_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowMoveData]:
+        return self.app.wait_timeout_moved_data_for :: id, timeout :: method
+
+    fn wait_timeout_resized_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowSizeData]:
+        return self.app.wait_timeout_resized_data_for :: id, timeout :: method
+
+    fn wait_timeout_framebuffer_resized_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowSizeData]:
+        return self.app.wait_timeout_framebuffer_resized_data_for :: id, timeout :: method
+
+    fn wait_timeout_content_scale_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowScaleData]:
+        return self.app.wait_timeout_content_scale_data_for :: id, timeout :: method
+
+    fn wait_timeout_focus_states_for(edit self, id: WindowId, timeout: F64) -> List[Bool]:
+        return self.app.wait_timeout_focus_states_for :: id, timeout :: method
+
+    fn wait_timeout_iconified_states_for(edit self, id: WindowId, timeout: F64) -> List[Bool]:
+        return self.app.wait_timeout_iconified_states_for :: id, timeout :: method
+
+    fn wait_timeout_maximized_states_for(edit self, id: WindowId, timeout: F64) -> List[Bool]:
+        return self.app.wait_timeout_maximized_states_for :: id, timeout :: method
+
+    fn wait_timeout_cursor_entered_states_for(edit self, id: WindowId, timeout: F64) -> List[Bool]:
+        return self.app.wait_timeout_cursor_entered_states_for :: id, timeout :: method
+
+    fn wait_timeout_key_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_key_changed_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_character_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_character_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_character_mods_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_character_mods_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_mouse_button_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_mouse_button_changed_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_cursor_moved_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_cursor_moved_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_scrolled_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_scrolled_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_dropped_path_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_dropped_path_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_key_changed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_key_changed_events_for :: id, timeout :: method
+
+    fn wait_timeout_character_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_character_events_for :: id, timeout :: method
+
+    fn wait_timeout_character_mods_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_character_mods_events_for :: id, timeout :: method
+
+    fn wait_timeout_mouse_button_changed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_mouse_button_changed_events_for :: id, timeout :: method
+
+    fn wait_timeout_cursor_moved_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_cursor_moved_events_for :: id, timeout :: method
+
+    fn wait_timeout_scrolled_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_scrolled_events_for :: id, timeout :: method
+
+    fn wait_timeout_dropped_path_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_dropped_path_events_for :: id, timeout :: method

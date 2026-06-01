@@ -1,0 +1,437 @@
+use std.{Option, Result}
+use event.WindowEvent
+use runtime.{App, AppError}
+use window.WindowId
+
+impl App:
+    fn next_refreshed_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_refreshed_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_moved_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_moved_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_resized_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_resized_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_framebuffer_resized_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_framebuffer_resized_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_content_scale_changed_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_content_scale_changed_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_focus_changed_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_focus_changed_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_iconified_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_iconified_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_maximized_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_maximized_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_cursor_entered_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_cursor_entered_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_refreshed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_refreshed_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_moved_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_moved_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_resized_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_resized_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_framebuffer_resized_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_framebuffer_resized_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_content_scale_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_content_scale_changed_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_focus_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_focus_changed_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_iconified_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_iconified_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_maximized_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_maximized_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_cursor_entered_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_cursor_entered_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn poll_next_refreshed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_refreshed_event :: :: method :: call
+
+    fn poll_next_moved_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_moved_event :: :: method :: call
+
+    fn poll_next_resized_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_resized_event :: :: method :: call
+
+    fn poll_next_framebuffer_resized_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_framebuffer_resized_event :: :: method :: call
+
+    fn poll_next_content_scale_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_content_scale_changed_event :: :: method :: call
+
+    fn poll_next_focus_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_focus_changed_event :: :: method :: call
+
+    fn poll_next_iconified_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_iconified_event :: :: method :: call
+
+    fn poll_next_maximized_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_maximized_event :: :: method :: call
+
+    fn poll_next_cursor_entered_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_cursor_entered_event :: :: method :: call
+
+    fn poll_next_refreshed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_refreshed_event_for :: id :: method :: call
+
+    fn poll_next_moved_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_moved_event_for :: id :: method :: call
+
+    fn poll_next_resized_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_resized_event_for :: id :: method :: call
+
+    fn poll_next_framebuffer_resized_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_framebuffer_resized_event_for :: id :: method :: call
+
+    fn poll_next_content_scale_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_content_scale_changed_event_for :: id :: method :: call
+
+    fn poll_next_focus_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_focus_changed_event_for :: id :: method :: call
+
+    fn poll_next_iconified_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_iconified_event_for :: id :: method :: call
+
+    fn poll_next_maximized_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_maximized_event_for :: id :: method :: call
+
+    fn poll_next_cursor_entered_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_cursor_entered_event_for :: id :: method :: call
+
+    fn wait_next_refreshed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_refreshed_event :: :: method :: call
+
+    fn wait_next_moved_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_moved_event :: :: method :: call
+
+    fn wait_next_resized_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_resized_event :: :: method :: call
+
+    fn wait_next_framebuffer_resized_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_framebuffer_resized_event :: :: method :: call
+
+    fn wait_next_content_scale_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_content_scale_changed_event :: :: method :: call
+
+    fn wait_next_focus_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_focus_changed_event :: :: method :: call
+
+    fn wait_next_iconified_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_iconified_event :: :: method :: call
+
+    fn wait_next_maximized_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_maximized_event :: :: method :: call
+
+    fn wait_next_cursor_entered_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_cursor_entered_event :: :: method :: call
+
+    fn wait_next_refreshed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_refreshed_event_for :: id :: method :: call
+
+    fn wait_next_moved_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_moved_event_for :: id :: method :: call
+
+    fn wait_next_resized_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_resized_event_for :: id :: method :: call
+
+    fn wait_next_framebuffer_resized_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_framebuffer_resized_event_for :: id :: method :: call
+
+    fn wait_next_content_scale_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_content_scale_changed_event_for :: id :: method :: call
+
+    fn wait_next_focus_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_focus_changed_event_for :: id :: method :: call
+
+    fn wait_next_iconified_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_iconified_event_for :: id :: method :: call
+
+    fn wait_next_maximized_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_maximized_event_for :: id :: method :: call
+
+    fn wait_next_cursor_entered_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_cursor_entered_event_for :: id :: method :: call
+
+    fn wait_timeout_next_refreshed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_refreshed_event :: :: method :: call
+
+    fn wait_timeout_next_moved_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_moved_event :: :: method :: call
+
+    fn wait_timeout_next_resized_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_resized_event :: :: method :: call
+
+    fn wait_timeout_next_framebuffer_resized_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_framebuffer_resized_event :: :: method :: call
+
+    fn wait_timeout_next_content_scale_changed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_content_scale_changed_event :: :: method :: call
+
+    fn wait_timeout_next_focus_changed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_focus_changed_event :: :: method :: call
+
+    fn wait_timeout_next_iconified_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_iconified_event :: :: method :: call
+
+    fn wait_timeout_next_maximized_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_maximized_event :: :: method :: call
+
+    fn wait_timeout_next_cursor_entered_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_cursor_entered_event :: :: method :: call
+
+    fn wait_timeout_next_refreshed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_refreshed_event_for :: id :: method :: call
+
+    fn wait_timeout_next_moved_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_moved_event_for :: id :: method :: call
+
+    fn wait_timeout_next_resized_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_resized_event_for :: id :: method :: call
+
+    fn wait_timeout_next_framebuffer_resized_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_framebuffer_resized_event_for :: id :: method :: call
+
+    fn wait_timeout_next_content_scale_changed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_content_scale_changed_event_for :: id :: method :: call
+
+    fn wait_timeout_next_focus_changed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_focus_changed_event_for :: id :: method :: call
+
+    fn wait_timeout_next_iconified_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_iconified_event_for :: id :: method :: call
+
+    fn wait_timeout_next_maximized_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_maximized_event_for :: id :: method :: call
+
+    fn wait_timeout_next_cursor_entered_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_cursor_entered_event_for :: id :: method :: call

@@ -1,0 +1,55 @@
+use std.{List, Option}
+use runa_app.{Joystick, JoystickId, JoystickSnapshot}
+use present.VulkanPresentApp
+
+impl VulkanPresentApp:
+    fn connected_joystick_count(read self) -> Index:
+        return self.app.connected_joystick_count :: :: method
+
+    fn connected_joystick_ids(read self) -> List[JoystickId]:
+        return self.app.connected_joystick_ids :: :: method
+
+    fn joystick_option(read self, id: JoystickId) -> Option[Joystick]:
+        return self.app.joystick_option :: id :: method
+
+    fn joystick_snapshot_option(read self, id: JoystickId) -> Option[JoystickSnapshot]:
+        return self.app.joystick_snapshot_option :: id :: method
+
+    fn joystick(read self, id: JoystickId) -> Joystick:
+        return self.app.joystick :: id :: method
+
+    fn joystick_snapshot(read self, id: JoystickId) -> JoystickSnapshot:
+        return self.app.joystick_snapshot :: id :: method
+
+    fn gamepad(read self, id: JoystickId) -> Option[Joystick]:
+        return self.app.gamepad :: id :: method
+
+    fn gamepad_snapshot(read self, id: JoystickId) -> Option[JoystickSnapshot]:
+        return self.app.gamepad_snapshot :: id :: method
+
+    fn gamepad_index(read self, id: JoystickId) -> Option[Index]:
+        return self.app.gamepad_index :: id :: method
+
+    fn has_gamepad(read self, id: JoystickId) -> Bool:
+        return self.app.has_gamepad :: id :: method
+
+    fn gamepad_count(read self) -> Index:
+        return self.app.gamepad_count :: :: method
+
+    fn has_gamepads(read self) -> Bool:
+        return self.app.has_gamepads :: :: method
+
+    fn gamepad_ids(read self) -> List[JoystickId]:
+        return self.app.gamepad_ids :: :: method
+
+    fn connected_joysticks(read self) -> List[Joystick]:
+        return self.app.connected_joysticks :: :: method
+
+    fn joystick_snapshots(read self) -> List[JoystickSnapshot]:
+        return self.app.joystick_snapshots :: :: method
+
+    fn gamepads(read self) -> List[Joystick]:
+        return self.app.gamepads :: :: method
+
+    fn gamepad_snapshots(read self) -> List[JoystickSnapshot]:
+        return self.app.gamepad_snapshots :: :: method

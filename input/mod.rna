@@ -1,0 +1,218 @@
+use std.Option
+use core.{GlfwCursor, GlfwCursorRaw, GlfwWindow, GlfwWindowRaw}
+use core.glfw_cint_is_true
+use window.GlfwImage
+
+pub struct GlfwCursorPos:
+    pub x: F64
+    pub y: F64
+
+impl GlfwCursorPos:
+    fn x_value(read self) -> F64:
+        return self.x
+
+    fn y_value(read self) -> F64:
+        return self.y
+
+pub fn glfw_cursor_pos_x(read pos: GlfwCursorPos) -> F64:
+    return pos.x
+
+pub fn glfw_cursor_pos_y(read pos: GlfwCursorPos) -> F64:
+    return pos.y
+
+pub type GlfwCursorEnterCallback = extern["c"] fn(*edit GlfwWindowRaw, CInt) -> CVoid
+pub type GlfwKeyCallback = extern["c"] fn(*edit GlfwWindowRaw, CInt, CInt, CInt, CInt) -> CVoid
+pub type GlfwCharCallback = extern["c"] fn(*edit GlfwWindowRaw, CUInt) -> CVoid
+pub type GlfwCharModsCallback = extern["c"] fn(*edit GlfwWindowRaw, CUInt, CInt) -> CVoid
+pub type GlfwMouseButtonCallback = extern["c"] fn(*edit GlfwWindowRaw, CInt, CInt, CInt) -> CVoid
+pub type GlfwCursorPosCallback = extern["c"] fn(*edit GlfwWindowRaw, F64, F64) -> CVoid
+pub type GlfwScrollCallback = extern["c"] fn(*edit GlfwWindowRaw, F64, F64) -> CVoid
+pub type GlfwDropCallback = extern["c"] fn(*edit GlfwWindowRaw, CInt, *read *read CChar) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetInputMode(window: *edit GlfwWindowRaw, mode: CInt) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetInputMode(window: *edit GlfwWindowRaw, mode: CInt, value: CInt) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwRawMouseMotionSupported() -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetKeyName(key: CInt, scancode: CInt) -> *read CChar
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetKeyScancode(key: CInt) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetKey(window: *edit GlfwWindowRaw, key: CInt) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetMouseButton(window: *edit GlfwWindowRaw, button: CInt) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetCursorPos(window: *edit GlfwWindowRaw, x: *edit F64, y: *edit F64) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetCursorPos(window: *edit GlfwWindowRaw, x: F64, y: F64) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwCreateCursor(image: *read GlfwImage, xhot: CInt, yhot: CInt) -> *edit GlfwCursorRaw
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwCreateStandardCursor(shape: CInt) -> *edit GlfwCursorRaw
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwDestroyCursor(cursor: *edit GlfwCursorRaw) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetCursor(window: *edit GlfwWindowRaw, cursor: *edit GlfwCursorRaw) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetCursorEnterCallback(window: *edit GlfwWindowRaw, take callback: Option[GlfwCursorEnterCallback]) -> Option[GlfwCursorEnterCallback]
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetKeyCallback(window: *edit GlfwWindowRaw, take callback: Option[GlfwKeyCallback]) -> Option[GlfwKeyCallback]
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetCharCallback(window: *edit GlfwWindowRaw, take callback: Option[GlfwCharCallback]) -> Option[GlfwCharCallback]
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetCharModsCallback(window: *edit GlfwWindowRaw, take callback: Option[GlfwCharModsCallback]) -> Option[GlfwCharModsCallback]
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetMouseButtonCallback(window: *edit GlfwWindowRaw, take callback: Option[GlfwMouseButtonCallback]) -> Option[GlfwMouseButtonCallback]
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetCursorPosCallback(window: *edit GlfwWindowRaw, take callback: Option[GlfwCursorPosCallback]) -> Option[GlfwCursorPosCallback]
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetScrollCallback(window: *edit GlfwWindowRaw, take callback: Option[GlfwScrollCallback]) -> Option[GlfwScrollCallback]
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetDropCallback(window: *edit GlfwWindowRaw, take callback: Option[GlfwDropCallback]) -> Option[GlfwDropCallback]
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetClipboardString(window: *edit GlfwWindowRaw, string: *read CChar) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetClipboardString(window: *edit GlfwWindowRaw) -> *read CChar
+
+pub fn glfw_raw_mouse_motion_supported() -> Bool:
+    let supported: CInt = #unsafe glfwRawMouseMotionSupported :: :: call
+    return glfw_cint_is_true :: supported :: call
+
+pub fn glfw_get_key_name(key: CInt, scancode: CInt) -> *read CChar:
+    return #unsafe glfwGetKeyName :: key, scancode :: call
+
+pub fn glfw_get_key_scancode(key: CInt) -> CInt:
+    return #unsafe glfwGetKeyScancode :: key :: call
+
+pub fn glfw_create_standard_cursor(shape: CInt) -> Option[GlfwCursor]:
+    let raw: *edit GlfwCursorRaw = #unsafe glfwCreateStandardCursor :: shape :: call
+    select:
+        when raw.is_null :: :: method => return Option.None
+        else =>
+            let cursor = GlfwCursor :: raw :: call
+            return Option.Some :: cursor :: call
+
+pub fn glfw_create_cursor(read image: GlfwImage, xhot: CInt, yhot: CInt) -> Option[GlfwCursor]:
+    let image_ptr: *read GlfwImage = #unsafe &raw read image
+    let raw: *edit GlfwCursorRaw = #unsafe glfwCreateCursor :: image_ptr, xhot, yhot :: call
+    select:
+        when raw.is_null :: :: method => return Option.None
+        else =>
+            let cursor = GlfwCursor :: raw :: call
+            return Option.Some :: cursor :: call
+
+impl GlfwCursor:
+    fn destroy(take self) -> Unit:
+        select:
+            when self.raw.is_null :: :: method => return
+            else =>
+                #unsafe glfwDestroyCursor :: self.raw :: call
+                return
+
+impl GlfwWindow:
+    fn input_mode(read self, mode: CInt) -> CInt:
+        return #unsafe glfwGetInputMode :: self.raw, mode :: call
+
+    fn set_input_mode(read self, mode: CInt, value: CInt) -> Unit:
+        #unsafe glfwSetInputMode :: self.raw, mode, value :: call
+        return
+
+    fn key(read self, key: CInt) -> CInt:
+        return #unsafe glfwGetKey :: self.raw, key :: call
+
+    fn mouse_button(read self, button: CInt) -> CInt:
+        return #unsafe glfwGetMouseButton :: self.raw, button :: call
+
+    fn cursor_pos(read self) -> GlfwCursorPos:
+        let x: F64 = 0.0
+        let y: F64 = 0.0
+        let x_ptr: *edit F64 = #unsafe &raw edit x
+        let y_ptr: *edit F64 = #unsafe &raw edit y
+        #unsafe glfwGetCursorPos :: self.raw, x_ptr, y_ptr :: call
+        return GlfwCursorPos :: x, y :: call
+
+    fn set_cursor_pos(read self, x: F64, y: F64) -> Unit:
+        #unsafe glfwSetCursorPos :: self.raw, x, y :: call
+        return
+
+    fn set_cursor(read self, read cursor: GlfwCursor) -> Unit:
+        #unsafe glfwSetCursor :: self.raw, cursor.raw :: call
+        return
+
+    fn set_cursor_enter_callback(read self, take callback: Option[GlfwCursorEnterCallback]) -> Option[GlfwCursorEnterCallback]:
+        return #unsafe glfwSetCursorEnterCallback :: self.raw, callback :: call
+
+    fn set_key_callback(read self, take callback: Option[GlfwKeyCallback]) -> Option[GlfwKeyCallback]:
+        return #unsafe glfwSetKeyCallback :: self.raw, callback :: call
+
+    fn set_char_callback(read self, take callback: Option[GlfwCharCallback]) -> Option[GlfwCharCallback]:
+        return #unsafe glfwSetCharCallback :: self.raw, callback :: call
+
+    fn set_char_mods_callback(read self, take callback: Option[GlfwCharModsCallback]) -> Option[GlfwCharModsCallback]:
+        return #unsafe glfwSetCharModsCallback :: self.raw, callback :: call
+
+    fn set_mouse_button_callback(read self, take callback: Option[GlfwMouseButtonCallback]) -> Option[GlfwMouseButtonCallback]:
+        return #unsafe glfwSetMouseButtonCallback :: self.raw, callback :: call
+
+    fn set_cursor_pos_callback(read self, take callback: Option[GlfwCursorPosCallback]) -> Option[GlfwCursorPosCallback]:
+        return #unsafe glfwSetCursorPosCallback :: self.raw, callback :: call
+
+    fn set_scroll_callback(read self, take callback: Option[GlfwScrollCallback]) -> Option[GlfwScrollCallback]:
+        return #unsafe glfwSetScrollCallback :: self.raw, callback :: call
+
+    fn set_drop_callback(read self, take callback: Option[GlfwDropCallback]) -> Option[GlfwDropCallback]:
+        return #unsafe glfwSetDropCallback :: self.raw, callback :: call
+
+    fn set_clipboard_string(read self, string: *read CChar) -> Unit:
+        #unsafe glfwSetClipboardString :: self.raw, string :: call
+        return
+
+    fn clipboard_string(read self) -> *read CChar:
+        return #unsafe glfwGetClipboardString :: self.raw :: call

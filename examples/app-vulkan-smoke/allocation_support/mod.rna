@@ -1,0 +1,62 @@
+use std.{Option, Result}
+
+use runa_app_vulkan.{VulkanPresentApp, VulkanPresentSnapshot}
+
+pub fn check_vulkan_allocation_helpers(read present_app: VulkanPresentApp, read present_snapshot: VulkanPresentSnapshot) -> I32:
+    let memory_properties = present_snapshot.memory_properties :: :: method
+    select present_app.surface_transfer_source_buffer_requirements :: :: method:
+        when Result.Ok(requirements) =>
+            select:
+                when requirements.size == 0U64 => return 1
+                when requirements.alignment == 0U64 => return 2
+                when requirements.memory_type_bits == 0 => return 3
+                when requirements.compatible_memory_type_count :: memory_properties :: method == 0 => return 4
+                else => ()
+            select present_app.surface_staging_allocation_plan :: :: method:
+                when Result.Ok(app_plan) =>
+                    select present_snapshot.staging_allocation_plan :: requirements :: method:
+                        when Option.Some(snapshot_plan) =>
+                            select:
+                                when app_plan.size :: :: method != requirements.size => return 5
+                                when app_plan.alignment :: :: method != requirements.alignment => return 6
+                                when app_plan.memory_type_bits :: :: method != requirements.memory_type_bits => return 7
+                                when !app_plan.host_visible :: :: method => return 8
+                                when !app_plan.host_coherent :: :: method => return 9
+                                when !app_plan.staging_compatible :: :: method => return 10
+                                when snapshot_plan.memory_type_index != app_plan.memory_type_index => return 11
+                                when snapshot_plan.memory_type.property_flags != app_plan.memory_type.property_flags => return 12
+                                when snapshot_plan.memory_heap.flags != app_plan.memory_heap.flags => return 13
+                                when snapshot_plan.memory_heap.size != app_plan.memory_heap.size => return 14
+                                when !present_snapshot.memory_type_supported :: app_plan.memory_type_index, requirements.memory_type_bits :: method => return 15
+                                else => ()
+                        when Option.None => return 16
+                when Result.Err(_) => return 17
+            select present_app.staging_allocation_plan :: requirements :: method:
+                when Option.Some(staging_plan) =>
+                    select:
+                        when !staging_plan.staging_compatible :: :: method => return 18
+                        else => ()
+                when Option.None => return 19
+            select present_app.host_visible_allocation_plan :: requirements :: method:
+                when Option.Some(host_visible_plan) =>
+                    select:
+                        when !host_visible_plan.host_visible :: :: method => return 20
+                        when host_visible_plan.memory_type_bits :: :: method != requirements.memory_type_bits => return 21
+                        else => ()
+                when Option.None => return 22
+            select present_app.host_coherent_allocation_plan :: requirements :: method:
+                when Option.Some(host_coherent_plan) =>
+                    select:
+                        when !host_coherent_plan.host_coherent :: :: method => return 23
+                        when host_coherent_plan.memory_type_bits :: :: method != requirements.memory_type_bits => return 24
+                        else => ()
+                when Option.None => return 25
+            select present_snapshot.device_local_allocation_plan :: requirements :: method:
+                when Option.Some(device_local_plan) =>
+                    select:
+                        when !device_local_plan.device_local :: :: method => return 26
+                        when device_local_plan.memory_type_bits :: :: method != requirements.memory_type_bits => return 27
+                        else => ()
+                when Option.None => ()
+            return 0
+        when Result.Err(_) => return 28

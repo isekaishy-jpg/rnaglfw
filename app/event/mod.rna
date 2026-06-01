@@ -1,0 +1,2789 @@
+use input.{InputAction, KeyCode, Modifiers, MouseButton, RawKeyCode, ScanCode}
+use input.{input_action_from_raw, input_action_raw, key_from_raw, key_raw}
+use input.{modifiers_from_raw, mouse_button_from_raw, mouse_button_raw}
+use std.{List, Option, Result, Str}
+use window.WindowId
+
+pub type MonitorId = USize
+pub type JoystickId = CInt
+pub type UserEventId = USize
+
+pub struct AppEventBatch:
+    pub(package) events: List[AppEvent]
+
+pub enum WindowEventKind:
+    Created
+    Destroyed
+    CloseRequested
+    Refreshed
+    Moved
+    Resized
+    FramebufferResized
+    ContentScaleChanged
+    FocusChanged
+    Iconified
+    Maximized
+    CursorEntered
+    CursorMoved
+    Scrolled
+    KeyChanged
+    Character
+    CharacterMods
+    MouseButtonChanged
+    DroppedPaths
+
+pub struct WindowMoveData:
+    pub x: CInt
+    pub y: CInt
+
+pub struct WindowSizeData:
+    pub width: CInt
+    pub height: CInt
+
+pub struct WindowScaleData:
+    pub x: F32
+    pub y: F32
+
+pub struct WindowCursorData:
+    pub x: F64
+    pub y: F64
+
+pub struct WindowScrollData:
+    pub x: F64
+    pub y: F64
+
+pub struct WindowKeyData:
+    pub key: KeyCode
+    pub scancode: ScanCode
+    pub action: InputAction
+    pub mods: Modifiers
+
+pub struct WindowCharacterData:
+    pub codepoint: CUInt
+
+pub struct WindowCharacterModsData:
+    pub codepoint: CUInt
+    pub mods: Modifiers
+
+pub struct WindowMouseButtonData:
+    pub button: MouseButton
+    pub action: InputAction
+    pub mods: Modifiers
+
+pub enum WindowEvent:
+    Created:
+        pub id: WindowId
+    Destroyed:
+        pub id: WindowId
+    CloseRequested:
+        pub id: WindowId
+    Refreshed:
+        pub id: WindowId
+    Moved:
+        pub id: WindowId
+        pub x: CInt
+        pub y: CInt
+    Resized:
+        pub id: WindowId
+        pub width: CInt
+        pub height: CInt
+    FramebufferResized:
+        pub id: WindowId
+        pub width: CInt
+        pub height: CInt
+    ContentScaleChanged:
+        pub id: WindowId
+        pub x: F32
+        pub y: F32
+    FocusChanged:
+        pub id: WindowId
+        pub focused: Bool
+    Iconified:
+        pub id: WindowId
+        pub iconified: Bool
+    Maximized:
+        pub id: WindowId
+        pub maximized: Bool
+    CursorEntered:
+        pub id: WindowId
+        pub entered: Bool
+    CursorMoved:
+        pub id: WindowId
+        pub x: F64
+        pub y: F64
+    Scrolled:
+        pub id: WindowId
+        pub x: F64
+        pub y: F64
+    KeyChanged:
+        pub id: WindowId
+        pub key: KeyCode
+        pub scancode: ScanCode
+        pub action: InputAction
+        pub mods: Modifiers
+    Character:
+        pub id: WindowId
+        pub codepoint: CUInt
+    CharacterMods:
+        pub id: WindowId
+        pub codepoint: CUInt
+        pub mods: Modifiers
+    MouseButtonChanged:
+        pub id: WindowId
+        pub button: MouseButton
+        pub action: InputAction
+        pub mods: Modifiers
+    DroppedPaths:
+        pub id: WindowId
+        pub paths: List[Str]
+
+pub enum MonitorEventKind:
+    Connected
+    Disconnected
+
+pub enum MonitorEvent:
+    Connected:
+        pub id: MonitorId
+    Disconnected:
+        pub id: MonitorId
+
+pub enum JoystickEventKind:
+    Connected
+    Disconnected
+
+pub enum JoystickEvent:
+    Connected:
+        pub id: JoystickId
+        pub gamepad: Bool
+    Disconnected:
+        pub id: JoystickId
+
+pub enum UserEventKind:
+    Signaled
+
+pub enum UserEvent:
+    Signaled:
+        pub id: UserEventId
+
+pub enum AppEventKind:
+    Window
+    Monitor
+    Joystick
+    User
+
+pub enum AppEvent:
+    Window(WindowEvent)
+    Monitor(MonitorEvent)
+    Joystick(JoystickEvent)
+    User(UserEvent)
+
+pub fn app_event_batch() -> AppEventBatch:
+    let events = List[AppEvent] :: :: call
+    return AppEventBatch :: :: call
+        events = events
+
+pub fn app_event_batch_from_events(take events: List[AppEvent]) -> AppEventBatch:
+    return split_app_events :: events :: call
+
+pub(package) fn split_app_events(take events: List[AppEvent]) -> AppEventBatch:
+    return AppEventBatch :: :: call
+        events = events
+
+fn batch_push_window(edit events: List[AppEvent], event: WindowEvent) -> Unit:
+    let wrapped = AppEvent.Window :: event :: call
+    events.push :: wrapped :: method
+    return
+
+fn batch_push_monitor(edit events: List[AppEvent], event: MonitorEvent) -> Unit:
+    let wrapped = AppEvent.Monitor :: event :: call
+    events.push :: wrapped :: method
+    return
+
+fn batch_push_joystick(edit events: List[AppEvent], event: JoystickEvent) -> Unit:
+    let wrapped = AppEvent.Joystick :: event :: call
+    events.push :: wrapped :: method
+    return
+
+fn batch_push_user(edit events: List[AppEvent], event: UserEvent) -> Unit:
+    let wrapped = AppEvent.User :: event :: call
+    events.push :: wrapped :: method
+    return
+
+fn copy_monitor_event(read event: MonitorEvent) -> MonitorEvent:
+    select event:
+        when MonitorEvent.Connected(id = id) =>
+            return MonitorEvent.Connected :: :: call
+                id = id
+        when MonitorEvent.Disconnected(id = id) =>
+            return MonitorEvent.Disconnected :: :: call
+                id = id
+
+fn copy_joystick_event(read event: JoystickEvent) -> JoystickEvent:
+    select event:
+        when JoystickEvent.Connected(id = id, gamepad = gamepad) =>
+            return JoystickEvent.Connected :: :: call
+                id = id
+                gamepad = gamepad
+        when JoystickEvent.Disconnected(id = id) =>
+            return JoystickEvent.Disconnected :: :: call
+                id = id
+
+fn copy_user_event(read event: UserEvent) -> UserEvent:
+    select event:
+        when UserEvent.Signaled(id = id) =>
+            return UserEvent.Signaled :: :: call
+                id = id
+
+fn copy_modifiers(read mods: Modifiers) -> Modifiers:
+    let shift_mask: CInt = 0x0001
+    let control_mask: CInt = 0x0002
+    let alt_mask: CInt = 0x0004
+    let super_mask: CInt = 0x0008
+    let caps_lock_mask: CInt = 0x0010
+    let num_lock_mask: CInt = 0x0020
+    let raw: CInt = 0
+    select:
+        when mods.shift :: :: method => raw = raw | shift_mask
+        else => ()
+    select:
+        when mods.control :: :: method => raw = raw | control_mask
+        else => ()
+    select:
+        when mods.alt :: :: method => raw = raw | alt_mask
+        else => ()
+    select:
+        when mods.super_key :: :: method => raw = raw | super_mask
+        else => ()
+    select:
+        when mods.caps_lock :: :: method => raw = raw | caps_lock_mask
+        else => ()
+    select:
+        when mods.num_lock :: :: method => raw = raw | num_lock_mask
+        else => ()
+    return modifiers_from_raw :: raw :: call
+
+fn build_cursor_moved_window_event(id: WindowId, x: F64, y: F64) -> WindowEvent:
+    return WindowEvent.CursorMoved :: :: call
+        id = id
+        x = x
+        y = y
+
+fn build_scrolled_window_event(id: WindowId, x: F64, y: F64) -> WindowEvent:
+    return WindowEvent.Scrolled :: :: call
+        id = id
+        x = x
+        y = y
+
+fn build_key_changed_window_event(id: WindowId, raw_key: RawKeyCode, scancode: ScanCode, raw_action: CInt, read mods: Modifiers) -> WindowEvent:
+    let copied_mods = copy_modifiers :: mods :: call
+    return WindowEvent.KeyChanged :: :: call
+        id = id
+        key = key_from_raw :: raw_key :: call
+        scancode = scancode
+        action = input_action_from_raw :: raw_action :: call
+        mods = copied_mods
+
+fn build_character_window_event(id: WindowId, codepoint: CUInt) -> WindowEvent:
+    return WindowEvent.Character :: :: call
+        id = id
+        codepoint = codepoint
+
+fn build_character_mods_window_event(id: WindowId, codepoint: CUInt, read mods: Modifiers) -> WindowEvent:
+    let copied_mods = copy_modifiers :: mods :: call
+    return WindowEvent.CharacterMods :: :: call
+        id = id
+        codepoint = codepoint
+        mods = copied_mods
+
+fn build_mouse_button_changed_window_event(id: WindowId, raw_button: CInt, raw_action: CInt, read mods: Modifiers) -> WindowEvent:
+    let copied_mods = copy_modifiers :: mods :: call
+    return WindowEvent.MouseButtonChanged :: :: call
+        id = id
+        button = mouse_button_from_raw :: raw_button :: call
+        action = input_action_from_raw :: raw_action :: call
+        mods = copied_mods
+
+fn copy_window_cursor_data(read event: WindowEvent) -> Option[WindowCursorData]:
+    select event:
+        when WindowEvent.CursorMoved(id = _, x = x, y = y) =>
+            let data = WindowCursorData :: :: call
+                x = x
+                y = y
+            return Option.Some :: data :: call
+        when _ => return Option.None
+
+fn copy_window_scroll_data(read event: WindowEvent) -> Option[WindowScrollData]:
+    select event:
+        when WindowEvent.Scrolled(id = _, x = x, y = y) =>
+            let data = WindowScrollData :: :: call
+                x = x
+                y = y
+            return Option.Some :: data :: call
+        when _ => return Option.None
+
+fn copy_window_character_data(read event: WindowEvent) -> Option[WindowCharacterData]:
+    select event:
+        when WindowEvent.Character(id = _, codepoint = codepoint) =>
+            let data = WindowCharacterData :: :: call
+                codepoint = codepoint
+            return Option.Some :: data :: call
+        when _ => return Option.None
+
+impl WindowEvent:
+    fn kind(read self) -> WindowEventKind:
+        select self:
+            when WindowEvent.Created(id = _) => return WindowEventKind.Created
+            when WindowEvent.Destroyed(id = _) => return WindowEventKind.Destroyed
+            when WindowEvent.CloseRequested(id = _) => return WindowEventKind.CloseRequested
+            when WindowEvent.Refreshed(id = _) => return WindowEventKind.Refreshed
+            when WindowEvent.Moved(id = _, x = _, y = _) => return WindowEventKind.Moved
+            when WindowEvent.Resized(id = _, width = _, height = _) => return WindowEventKind.Resized
+            when WindowEvent.FramebufferResized(id = _, width = _, height = _) => return WindowEventKind.FramebufferResized
+            when WindowEvent.ContentScaleChanged(id = _, x = _, y = _) => return WindowEventKind.ContentScaleChanged
+            when WindowEvent.FocusChanged(id = _, focused = _) => return WindowEventKind.FocusChanged
+            when WindowEvent.Iconified(id = _, iconified = _) => return WindowEventKind.Iconified
+            when WindowEvent.Maximized(id = _, maximized = _) => return WindowEventKind.Maximized
+            when WindowEvent.CursorEntered(id = _, entered = _) => return WindowEventKind.CursorEntered
+            when WindowEvent.CursorMoved(id = _, x = _, y = _) => return WindowEventKind.CursorMoved
+            when WindowEvent.Scrolled(id = _, x = _, y = _) => return WindowEventKind.Scrolled
+            when WindowEvent.KeyChanged(id = _, key = _, scancode = _, action = _, mods = _) => return WindowEventKind.KeyChanged
+            when WindowEvent.Character(id = _, codepoint = _) => return WindowEventKind.Character
+            when WindowEvent.CharacterMods(id = _, codepoint = _, mods = _) => return WindowEventKind.CharacterMods
+            when WindowEvent.MouseButtonChanged(id = _, button = _, action = _, mods = _) => return WindowEventKind.MouseButtonChanged
+            when WindowEvent.DroppedPaths(id = _, paths = _) => return WindowEventKind.DroppedPaths
+
+    fn window_id(read self) -> WindowId:
+        select self:
+            when WindowEvent.Created(id = id) => return id
+            when WindowEvent.Destroyed(id = id) => return id
+            when WindowEvent.CloseRequested(id = id) => return id
+            when WindowEvent.Refreshed(id = id) => return id
+            when WindowEvent.Moved(id = id, x = _, y = _) => return id
+            when WindowEvent.Resized(id = id, width = _, height = _) => return id
+            when WindowEvent.FramebufferResized(id = id, width = _, height = _) => return id
+            when WindowEvent.ContentScaleChanged(id = id, x = _, y = _) => return id
+            when WindowEvent.FocusChanged(id = id, focused = _) => return id
+            when WindowEvent.Iconified(id = id, iconified = _) => return id
+            when WindowEvent.Maximized(id = id, maximized = _) => return id
+            when WindowEvent.CursorEntered(id = id, entered = _) => return id
+            when WindowEvent.CursorMoved(id = id, x = _, y = _) => return id
+            when WindowEvent.Scrolled(id = id, x = _, y = _) => return id
+            when WindowEvent.KeyChanged(id = id, key = _, scancode = _, action = _, mods = _) => return id
+            when WindowEvent.Character(id = id, codepoint = _) => return id
+            when WindowEvent.CharacterMods(id = id, codepoint = _, mods = _) => return id
+            when WindowEvent.MouseButtonChanged(id = id, button = _, action = _, mods = _) => return id
+            when WindowEvent.DroppedPaths(id = id, paths = _) => return id
+
+    fn moved_data(read self) -> Option[WindowMoveData]:
+        select self:
+            when WindowEvent.Moved(id = _, x = x, y = y) =>
+                let data = WindowMoveData :: :: call
+                    x = x
+                    y = y
+                return Option.Some :: data :: call
+            else => return Option.None
+
+    fn resized_data(read self) -> Option[WindowSizeData]:
+        select self:
+            when WindowEvent.Resized(id = _, width = width, height = height) =>
+                let data = WindowSizeData :: :: call
+                    width = width
+                    height = height
+                return Option.Some :: data :: call
+            else => return Option.None
+
+    fn framebuffer_resized_data(read self) -> Option[WindowSizeData]:
+        select self:
+            when WindowEvent.FramebufferResized(id = _, width = width, height = height) =>
+                let data = WindowSizeData :: :: call
+                    width = width
+                    height = height
+                return Option.Some :: data :: call
+            else => return Option.None
+
+    fn content_scale_data(read self) -> Option[WindowScaleData]:
+        select self:
+            when WindowEvent.ContentScaleChanged(id = _, x = x, y = y) =>
+                let data = WindowScaleData :: :: call
+                    x = x
+                    y = y
+                return Option.Some :: data :: call
+            else => return Option.None
+
+    fn focus_state(read self) -> Option[Bool]:
+        select self:
+            when WindowEvent.FocusChanged(id = _, focused = focused) => return Option.Some :: focused :: call
+            else => return Option.None
+
+    fn iconified_state(read self) -> Option[Bool]:
+        select self:
+            when WindowEvent.Iconified(id = _, iconified = iconified) => return Option.Some :: iconified :: call
+            else => return Option.None
+
+    fn maximized_state(read self) -> Option[Bool]:
+        select self:
+            when WindowEvent.Maximized(id = _, maximized = maximized) => return Option.Some :: maximized :: call
+            else => return Option.None
+
+    fn cursor_enter_state(read self) -> Option[Bool]:
+        select self:
+            when WindowEvent.CursorEntered(id = _, entered = entered) => return Option.Some :: entered :: call
+            else => return Option.None
+
+    fn cursor_data(read self) -> Option[WindowCursorData]:
+        select self:
+            when WindowEvent.CursorMoved(id = _, x = x, y = y) =>
+                let data = WindowCursorData :: :: call
+                    x = x
+                    y = y
+                return Option.Some :: data :: call
+            else => return Option.None
+
+    fn scroll_data(read self) -> Option[WindowScrollData]:
+        select self:
+            when WindowEvent.Scrolled(id = _, x = x, y = y) =>
+                let data = WindowScrollData :: :: call
+                    x = x
+                    y = y
+                return Option.Some :: data :: call
+            else => return Option.None
+
+    fn key_data(take self) -> Option[WindowKeyData]:
+        select self:
+            when WindowEvent.KeyChanged(id = _, key = key, scancode = scancode, action = action, mods = mods) =>
+                let data = WindowKeyData :: :: call
+                    key = key
+                    scancode = scancode
+                    action = action
+                    mods = mods
+                return Option.Some :: data :: call
+            else => return Option.None
+
+    fn character_data(read self) -> Option[WindowCharacterData]:
+        select self:
+            when WindowEvent.Character(id = _, codepoint = codepoint) =>
+                let data = WindowCharacterData :: :: call
+                    codepoint = codepoint
+                return Option.Some :: data :: call
+            else => return Option.None
+
+    fn character_mods_data(take self) -> Option[WindowCharacterModsData]:
+        select self:
+            when WindowEvent.CharacterMods(id = _, codepoint = codepoint, mods = mods) =>
+                let data = WindowCharacterModsData :: :: call
+                    codepoint = codepoint
+                    mods = mods
+                return Option.Some :: data :: call
+            else => return Option.None
+
+    fn mouse_button_data(take self) -> Option[WindowMouseButtonData]:
+        select self:
+            when WindowEvent.MouseButtonChanged(id = _, button = button, action = action, mods = mods) =>
+                let data = WindowMouseButtonData :: :: call
+                    button = button
+                    action = action
+                    mods = mods
+                return Option.Some :: data :: call
+            else => return Option.None
+
+    fn dropped_path_count(take self) -> Option[Index]:
+        select self:
+            when WindowEvent.DroppedPaths(id = _, paths = paths) =>
+                let count = paths.count :: :: method
+                return Option.Some :: count :: call
+            else => return Option.None
+
+    fn take_dropped_paths(take self) -> Option[List[Str]]:
+        select self:
+            when WindowEvent.DroppedPaths(id = _, paths = paths) => return Option.Some :: paths :: call
+            else => return Option.None
+
+impl MonitorEvent:
+    fn kind(read self) -> MonitorEventKind:
+        select self:
+            when MonitorEvent.Connected(id = _) => return MonitorEventKind.Connected
+            when MonitorEvent.Disconnected(id = _) => return MonitorEventKind.Disconnected
+
+    fn monitor_id(read self) -> MonitorId:
+        select self:
+            when MonitorEvent.Connected(id = id) => return id
+            when MonitorEvent.Disconnected(id = id) => return id
+
+    fn connected(read self) -> Bool:
+        select self:
+            when MonitorEvent.Connected(id = _) => return true
+            when MonitorEvent.Disconnected(id = _) => return false
+
+impl JoystickEvent:
+    fn kind(read self) -> JoystickEventKind:
+        select self:
+            when JoystickEvent.Connected(id = _, gamepad = _) => return JoystickEventKind.Connected
+            when JoystickEvent.Disconnected(id = _) => return JoystickEventKind.Disconnected
+
+    fn joystick_id(read self) -> JoystickId:
+        select self:
+            when JoystickEvent.Connected(id = id, gamepad = _) => return id
+            when JoystickEvent.Disconnected(id = id) => return id
+
+    fn connected(read self) -> Bool:
+        select self:
+            when JoystickEvent.Connected(id = _, gamepad = _) => return true
+            when JoystickEvent.Disconnected(id = _) => return false
+
+    fn gamepad(read self) -> Option[Bool]:
+        select self:
+            when JoystickEvent.Connected(id = _, gamepad = gamepad) => return Option.Some :: gamepad :: call
+            when JoystickEvent.Disconnected(id = _) => return Option.None
+
+impl UserEvent:
+    fn kind(read self) -> UserEventKind:
+        select self:
+            when UserEvent.Signaled(id = _) => return UserEventKind.Signaled
+
+    fn user_id(read self) -> UserEventId:
+        select self:
+            when UserEvent.Signaled(id = id) => return id
+
+impl AppEvent:
+    fn kind(read self) -> AppEventKind:
+        select self:
+            when AppEvent.Window(_) => return AppEventKind.Window
+            when AppEvent.Monitor(_) => return AppEventKind.Monitor
+            when AppEvent.Joystick(_) => return AppEventKind.Joystick
+            when AppEvent.User(_) => return AppEventKind.User
+
+    fn is_window(read self) -> Bool:
+        select self:
+            when AppEvent.Window(_) => return true
+            else => return false
+
+    fn is_monitor(read self) -> Bool:
+        select self:
+            when AppEvent.Monitor(_) => return true
+            else => return false
+
+    fn is_joystick(read self) -> Bool:
+        select self:
+            when AppEvent.Joystick(_) => return true
+            else => return false
+
+    fn is_user(read self) -> Bool:
+        select self:
+            when AppEvent.User(_) => return true
+            else => return false
+
+    fn window_id(take self) -> Option[WindowId]:
+        select self:
+            when AppEvent.Window(window_event) =>
+                let id = window_event.window_id :: :: method
+                return Option.Some :: id :: call
+            else => return Option.None
+
+    fn monitor_id(take self) -> Option[MonitorId]:
+        select self:
+            when AppEvent.Monitor(monitor_event) =>
+                let id = monitor_event.monitor_id :: :: method
+                return Option.Some :: id :: call
+            else => return Option.None
+
+    fn joystick_id(take self) -> Option[JoystickId]:
+        select self:
+            when AppEvent.Joystick(joystick_event) =>
+                let id = joystick_event.joystick_id :: :: method
+                return Option.Some :: id :: call
+            else => return Option.None
+
+    fn user_id(take self) -> Option[UserEventId]:
+        select self:
+            when AppEvent.User(user_event) =>
+                let id = user_event.user_id :: :: method
+                return Option.Some :: id :: call
+            else => return Option.None
+
+    fn window_event_kind(take self) -> Option[WindowEventKind]:
+        select self:
+            when AppEvent.Window(window_event) =>
+                let kind = window_event.kind :: :: method
+                return Option.Some :: kind :: call
+            else => return Option.None
+
+    fn monitor_event_kind(take self) -> Option[MonitorEventKind]:
+        select self:
+            when AppEvent.Monitor(monitor_event) =>
+                let kind = monitor_event.kind :: :: method
+                return Option.Some :: kind :: call
+            else => return Option.None
+
+    fn joystick_event_kind(take self) -> Option[JoystickEventKind]:
+        select self:
+            when AppEvent.Joystick(joystick_event) =>
+                let kind = joystick_event.kind :: :: method
+                return Option.Some :: kind :: call
+            else => return Option.None
+
+    fn user_event_kind(take self) -> Option[UserEventKind]:
+        select self:
+            when AppEvent.User(user_event) =>
+                let kind = user_event.kind :: :: method
+                return Option.Some :: kind :: call
+            else => return Option.None
+
+    fn moved_data(take self) -> Option[WindowMoveData]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.moved_data :: :: method
+            else => return Option.None
+
+    fn resized_data(take self) -> Option[WindowSizeData]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.resized_data :: :: method
+            else => return Option.None
+
+    fn framebuffer_resized_data(take self) -> Option[WindowSizeData]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.framebuffer_resized_data :: :: method
+            else => return Option.None
+
+    fn content_scale_data(take self) -> Option[WindowScaleData]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.content_scale_data :: :: method
+            else => return Option.None
+
+    fn focus_state(take self) -> Option[Bool]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.focus_state :: :: method
+            else => return Option.None
+
+    fn iconified_state(take self) -> Option[Bool]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.iconified_state :: :: method
+            else => return Option.None
+
+    fn maximized_state(take self) -> Option[Bool]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.maximized_state :: :: method
+            else => return Option.None
+
+    fn cursor_enter_state(take self) -> Option[Bool]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.cursor_enter_state :: :: method
+            else => return Option.None
+
+    fn cursor_data(take self) -> Option[WindowCursorData]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.cursor_data :: :: method
+            else => return Option.None
+
+    fn scroll_data(take self) -> Option[WindowScrollData]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.scroll_data :: :: method
+            else => return Option.None
+
+    fn key_data(take self) -> Option[WindowKeyData]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.key_data :: :: method
+            else => return Option.None
+
+    fn character_data(take self) -> Option[WindowCharacterData]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.character_data :: :: method
+            else => return Option.None
+
+    fn character_mods_data(take self) -> Option[WindowCharacterModsData]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.character_mods_data :: :: method
+            else => return Option.None
+
+    fn mouse_button_data(take self) -> Option[WindowMouseButtonData]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.mouse_button_data :: :: method
+            else => return Option.None
+
+    fn dropped_path_count(take self) -> Option[Index]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.dropped_path_count :: :: method
+            else => return Option.None
+
+    fn take_dropped_paths(take self) -> Option[List[Str]]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.take_dropped_paths :: :: method
+            else => return Option.None
+
+    fn monitor_connected(take self) -> Option[Bool]:
+        select self:
+            when AppEvent.Monitor(monitor_event) =>
+                let connected = monitor_event.connected :: :: method
+                return Option.Some :: connected :: call
+            else => return Option.None
+
+    fn joystick_connected(take self) -> Option[Bool]:
+        select self:
+            when AppEvent.Joystick(joystick_event) =>
+                let connected = joystick_event.connected :: :: method
+                return Option.Some :: connected :: call
+            else => return Option.None
+
+    fn joystick_gamepad(take self) -> Option[Bool]:
+        select self:
+            when AppEvent.Joystick(joystick_event) => return joystick_event.gamepad :: :: method
+            else => return Option.None
+
+    fn take_window_event(take self) -> Option[WindowEvent]:
+        select self:
+            when AppEvent.Window(window_event) => return Option.Some :: window_event :: call
+            else => return Option.None
+
+    fn take_monitor_event(take self) -> Option[MonitorEvent]:
+        select self:
+            when AppEvent.Monitor(monitor_event) => return Option.Some :: monitor_event :: call
+            else => return Option.None
+
+    fn take_joystick_event(take self) -> Option[JoystickEvent]:
+        select self:
+            when AppEvent.Joystick(joystick_event) => return Option.Some :: joystick_event :: call
+            else => return Option.None
+
+    fn take_user_event(take self) -> Option[UserEvent]:
+        select self:
+            when AppEvent.User(user_event) => return Option.Some :: user_event :: call
+            else => return Option.None
+
+impl AppEventBatch:
+    fn event_count(read self) -> Index:
+        return self.events.count :: :: method
+
+    fn window_count(read self) -> Index:
+        let total: CInt = 0
+        let count = self.events.count :: :: method
+        let Result.Ok(limit) = count as Maybe[CInt] else => return 0
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = scan as Maybe[Index] else => break
+            select self.events[index].kind :: :: method:
+                when AppEventKind.Window => total = total + 1
+                when _ => ()
+            scan = scan + 1
+        let Result.Ok(result) = total as Maybe[Index] else => return 0
+        return result
+
+    fn monitor_count(read self) -> Index:
+        let total: CInt = 0
+        let count = self.events.count :: :: method
+        let Result.Ok(limit) = count as Maybe[CInt] else => return 0
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = scan as Maybe[Index] else => break
+            select self.events[index].kind :: :: method:
+                when AppEventKind.Monitor => total = total + 1
+                when _ => ()
+            scan = scan + 1
+        let Result.Ok(result) = total as Maybe[Index] else => return 0
+        return result
+
+    fn joystick_count(read self) -> Index:
+        let total: CInt = 0
+        let count = self.events.count :: :: method
+        let Result.Ok(limit) = count as Maybe[CInt] else => return 0
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = scan as Maybe[Index] else => break
+            select self.events[index].kind :: :: method:
+                when AppEventKind.Joystick => total = total + 1
+                when _ => ()
+            scan = scan + 1
+        let Result.Ok(result) = total as Maybe[Index] else => return 0
+        return result
+
+    fn user_count(read self) -> Index:
+        let total: CInt = 0
+        let count = self.events.count :: :: method
+        let Result.Ok(limit) = count as Maybe[CInt] else => return 0
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = scan as Maybe[Index] else => break
+            select self.events[index].kind :: :: method:
+                when AppEventKind.User => total = total + 1
+                when _ => ()
+            scan = scan + 1
+        let Result.Ok(result) = total as Maybe[Index] else => return 0
+        return result
+
+    fn is_empty(read self) -> Bool:
+        return self.events.is_empty :: :: method
+
+    fn has_window_events(read self) -> Bool:
+        return self.window_count :: :: method != 0
+
+    fn has_monitor_events(read self) -> Bool:
+        return self.monitor_count :: :: method != 0
+
+    fn has_joystick_events(read self) -> Bool:
+        return self.joystick_count :: :: method != 0
+
+    fn has_user_events(read self) -> Bool:
+        return self.user_count :: :: method != 0
+
+    fn window_ids(edit self) -> List[WindowId]:
+        let ids = List[WindowId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let id = window_event.window_id :: :: method
+                    ids.push :: id :: method
+                    batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn monitor_ids(edit self) -> List[MonitorId]:
+        let ids = List[MonitorId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) =>
+                    let id = monitor_event.monitor_id :: :: method
+                    ids.push :: id :: method
+                    batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn joystick_ids(edit self) -> List[JoystickId]:
+        let ids = List[JoystickId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) =>
+                    let id = joystick_event.joystick_id :: :: method
+                    ids.push :: id :: method
+                    batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn user_ids(edit self) -> List[UserEventId]:
+        let ids = List[UserEventId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) =>
+                    let id = user_event.user_id :: :: method
+                    ids.push :: id :: method
+                    batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn created_window_ids(edit self) -> List[WindowId]:
+        let ids = List[WindowId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event.kind :: :: method:
+                        when WindowEventKind.Created =>
+                            let id = window_event.window_id :: :: method
+                            ids.push :: id :: method
+                        when _ => ()
+                    batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn destroyed_window_ids(edit self) -> List[WindowId]:
+        let ids = List[WindowId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event.kind :: :: method:
+                        when WindowEventKind.Destroyed =>
+                            let id = window_event.window_id :: :: method
+                            ids.push :: id :: method
+                        when _ => ()
+                    batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn close_requested_window_ids(edit self) -> List[WindowId]:
+        let ids = List[WindowId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event.kind :: :: method:
+                        when WindowEventKind.CloseRequested =>
+                            let id = window_event.window_id :: :: method
+                            ids.push :: id :: method
+                        when _ => ()
+                    batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn created_window_events(edit self) -> List[WindowEvent]:
+        let matched = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let kind = window_event.kind :: :: method
+                    let id = window_event.window_id :: :: method
+                    select kind:
+                        when WindowEventKind.Created =>
+                            let copied = WindowEvent.Created :: :: call
+                                id = id
+                            matched.push :: copied :: method
+                        else => ()
+                    batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn destroyed_window_events(edit self) -> List[WindowEvent]:
+        let matched = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let kind = window_event.kind :: :: method
+                    let id = window_event.window_id :: :: method
+                    select kind:
+                        when WindowEventKind.Destroyed =>
+                            let copied = WindowEvent.Destroyed :: :: call
+                                id = id
+                            matched.push :: copied :: method
+                        else => ()
+                    batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn close_requested_window_events(edit self) -> List[WindowEvent]:
+        let matched = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let kind = window_event.kind :: :: method
+                    let id = window_event.window_id :: :: method
+                    select kind:
+                        when WindowEventKind.CloseRequested =>
+                            let copied = WindowEvent.CloseRequested :: :: call
+                                id = id
+                            matched.push :: copied :: method
+                        else => ()
+                    batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn key_changed_events(edit self) -> List[WindowEvent]:
+        let events = self.take_key_changed_events :: :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.KeyChanged(id = id, key = key, scancode = scancode, action = action, mods = mods) =>
+                    let raw_key = key_raw :: key :: call
+                    let raw_action = input_action_raw :: action :: call
+                    let copied = build_key_changed_window_event :: id, raw_key, scancode, raw_action, mods :: call
+                    let restored = build_key_changed_window_event :: id, raw_key, scancode, raw_action, mods :: call
+                    matched.push :: copied :: method
+                    batch_push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn character_events(edit self) -> List[WindowEvent]:
+        let events = self.take_character_events :: :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.Character(id = id, codepoint = codepoint) =>
+                    let copied = build_character_window_event :: id, codepoint :: call
+                    let restored = build_character_window_event :: id, codepoint :: call
+                    matched.push :: copied :: method
+                    batch_push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn character_mods_events(edit self) -> List[WindowEvent]:
+        let events = self.take_character_mods_events :: :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.CharacterMods(id = id, codepoint = codepoint, mods = mods) =>
+                    let copied = build_character_mods_window_event :: id, codepoint, mods :: call
+                    let restored = build_character_mods_window_event :: id, codepoint, mods :: call
+                    matched.push :: copied :: method
+                    batch_push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn mouse_button_changed_events(edit self) -> List[WindowEvent]:
+        let events = self.take_mouse_button_changed_events :: :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.MouseButtonChanged(id = id, button = button, action = action, mods = mods) =>
+                    let raw_button = mouse_button_raw :: button :: call
+                    let raw_action = input_action_raw :: action :: call
+                    let copied = build_mouse_button_changed_window_event :: id, raw_button, raw_action, mods :: call
+                    let restored = build_mouse_button_changed_window_event :: id, raw_button, raw_action, mods :: call
+                    matched.push :: copied :: method
+                    batch_push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn cursor_moved_events(edit self) -> List[WindowEvent]:
+        let events = self.take_cursor_moved_events :: :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.CursorMoved(id = id, x = x, y = y) =>
+                    let copied = build_cursor_moved_window_event :: id, x, y :: call
+                    let restored = build_cursor_moved_window_event :: id, x, y :: call
+                    matched.push :: copied :: method
+                    batch_push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn scrolled_events(edit self) -> List[WindowEvent]:
+        let events = self.take_scrolled_events :: :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.Scrolled(id = id, x = x, y = y) =>
+                    let copied = build_scrolled_window_event :: id, x, y :: call
+                    let restored = build_scrolled_window_event :: id, x, y :: call
+                    matched.push :: copied :: method
+                    batch_push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn connected_monitor_ids(edit self) -> List[MonitorId]:
+        let ids = List[MonitorId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) =>
+                    select monitor_event.connected :: :: method:
+                        when true =>
+                            let id = monitor_event.monitor_id :: :: method
+                            ids.push :: id :: method
+                        when false => ()
+                    batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn disconnected_monitor_ids(edit self) -> List[MonitorId]:
+        let ids = List[MonitorId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) =>
+                    select monitor_event.connected :: :: method:
+                        when true => ()
+                        when false =>
+                            let id = monitor_event.monitor_id :: :: method
+                            ids.push :: id :: method
+                    batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn connected_joystick_ids(edit self) -> List[JoystickId]:
+        let ids = List[JoystickId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) =>
+                    select joystick_event.connected :: :: method:
+                        when true =>
+                            let id = joystick_event.joystick_id :: :: method
+                            ids.push :: id :: method
+                        when false => ()
+                    batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn disconnected_joystick_ids(edit self) -> List[JoystickId]:
+        let ids = List[JoystickId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) =>
+                    select joystick_event.connected :: :: method:
+                        when true => ()
+                        when false =>
+                            let id = joystick_event.joystick_id :: :: method
+                            ids.push :: id :: method
+                    batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn monitors(edit self) -> List[MonitorEvent]:
+        let matched = List[MonitorEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) =>
+                    let copied = copy_monitor_event :: monitor_event :: call
+                    matched.push :: copied :: method
+                    batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn joysticks(edit self) -> List[JoystickEvent]:
+        let matched = List[JoystickEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) =>
+                    let copied = copy_joystick_event :: joystick_event :: call
+                    matched.push :: copied :: method
+                    batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn users(edit self) -> List[UserEvent]:
+        let matched = List[UserEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) =>
+                    let copied = copy_user_event :: user_event :: call
+                    matched.push :: copied :: method
+                    batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        let matched = List[MonitorEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) =>
+                    let event_id = monitor_event.monitor_id :: :: method
+                    select:
+                        when event_id == id =>
+                            let copied = copy_monitor_event :: monitor_event :: call
+                            matched.push :: copied :: method
+                        else => ()
+                    batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        let matched = List[JoystickEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) =>
+                    let event_id = joystick_event.joystick_id :: :: method
+                    select:
+                        when event_id == id =>
+                            let copied = copy_joystick_event :: joystick_event :: call
+                            matched.push :: copied :: method
+                        else => ()
+                    batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn user_events_for(edit self, id: UserEventId) -> List[UserEvent]:
+        let matched = List[UserEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) =>
+                    let event_id = user_event.user_id :: :: method
+                    select:
+                        when event_id == id =>
+                            let copied = copy_user_event :: user_event :: call
+                            matched.push :: copied :: method
+                        else => ()
+                    batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn key_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = self.take_key_changed_events_for :: id :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.KeyChanged(id = event_id, key = key, scancode = scancode, action = action, mods = mods) =>
+                    let raw_key = key_raw :: key :: call
+                    let raw_action = input_action_raw :: action :: call
+                    let copied = build_key_changed_window_event :: event_id, raw_key, scancode, raw_action, mods :: call
+                    let restored = build_key_changed_window_event :: event_id, raw_key, scancode, raw_action, mods :: call
+                    matched.push :: copied :: method
+                    batch_push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn character_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = self.take_character_events_for :: id :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.Character(id = event_id, codepoint = codepoint) =>
+                    let copied = build_character_window_event :: event_id, codepoint :: call
+                    let restored = build_character_window_event :: event_id, codepoint :: call
+                    matched.push :: copied :: method
+                    batch_push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn character_mods_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = self.take_character_mods_events_for :: id :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.CharacterMods(id = event_id, codepoint = codepoint, mods = mods) =>
+                    let copied = build_character_mods_window_event :: event_id, codepoint, mods :: call
+                    let restored = build_character_mods_window_event :: event_id, codepoint, mods :: call
+                    matched.push :: copied :: method
+                    batch_push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn mouse_button_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = self.take_mouse_button_changed_events_for :: id :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.MouseButtonChanged(id = event_id, button = button, action = action, mods = mods) =>
+                    let raw_button = mouse_button_raw :: button :: call
+                    let raw_action = input_action_raw :: action :: call
+                    let copied = build_mouse_button_changed_window_event :: event_id, raw_button, raw_action, mods :: call
+                    let restored = build_mouse_button_changed_window_event :: event_id, raw_button, raw_action, mods :: call
+                    matched.push :: copied :: method
+                    batch_push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn cursor_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = self.take_cursor_moved_events_for :: id :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.CursorMoved(id = event_id, x = x, y = y) =>
+                    let copied = build_cursor_moved_window_event :: event_id, x, y :: call
+                    let restored = build_cursor_moved_window_event :: event_id, x, y :: call
+                    matched.push :: copied :: method
+                    batch_push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn scrolled_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = self.take_scrolled_events_for :: id :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.Scrolled(id = event_id, x = x, y = y) =>
+                    let copied = build_scrolled_window_event :: event_id, x, y :: call
+                    let restored = build_scrolled_window_event :: event_id, x, y :: call
+                    matched.push :: copied :: method
+                    batch_push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn cursor_data(edit self) -> List[WindowCursorData]:
+        let matched = List[WindowCursorData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select copy_window_cursor_data :: window_event :: call:
+                        when Option.Some(data) => matched.push :: data :: method
+                        when Option.None => ()
+                    batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn scroll_data(edit self) -> List[WindowScrollData]:
+        let matched = List[WindowScrollData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select copy_window_scroll_data :: window_event :: call:
+                        when Option.Some(data) => matched.push :: data :: method
+                        when Option.None => ()
+                    batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn key_data(edit self) -> List[WindowKeyData]:
+        let matched = List[WindowKeyData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.KeyChanged(id = id, key = key, scancode = scancode, action = action, mods = mods) =>
+                            let data = WindowKeyData :: :: call
+                                key = key
+                                scancode = scancode
+                                action = action
+                                mods = mods
+                            let raw_key = key_raw :: data.key :: call
+                            let raw_action = input_action_raw :: data.action :: call
+                            let copied_mods = copy_modifiers :: data.mods :: call
+                            matched.push :: data :: method
+                            let restored = WindowEvent.KeyChanged :: :: call
+                                id = id
+                                key = key_from_raw :: raw_key :: call
+                                scancode = scancode
+                                action = input_action_from_raw :: raw_action :: call
+                                mods = copied_mods
+                            batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn character_data(edit self) -> List[WindowCharacterData]:
+        let matched = List[WindowCharacterData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select copy_window_character_data :: window_event :: call:
+                        when Option.Some(data) => matched.push :: data :: method
+                        when Option.None => ()
+                    batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn character_mods_data(edit self) -> List[WindowCharacterModsData]:
+        let matched = List[WindowCharacterModsData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CharacterMods(id = id, codepoint = codepoint, mods = mods) =>
+                            let data = WindowCharacterModsData :: :: call
+                                codepoint = codepoint
+                                mods = mods
+                            let copied_mods = copy_modifiers :: data.mods :: call
+                            matched.push :: data :: method
+                            let restored = WindowEvent.CharacterMods :: :: call
+                                id = id
+                                codepoint = codepoint
+                                mods = copied_mods
+                            batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn mouse_button_data(edit self) -> List[WindowMouseButtonData]:
+        let matched = List[WindowMouseButtonData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.MouseButtonChanged(id = id, button = button, action = action, mods = mods) =>
+                            let data = WindowMouseButtonData :: :: call
+                                button = button
+                                action = action
+                                mods = mods
+                            let raw_button = mouse_button_raw :: data.button :: call
+                            let raw_action = input_action_raw :: data.action :: call
+                            let copied_mods = copy_modifiers :: data.mods :: call
+                            matched.push :: data :: method
+                            let restored = WindowEvent.MouseButtonChanged :: :: call
+                                id = id
+                                button = mouse_button_from_raw :: raw_button :: call
+                                action = input_action_from_raw :: raw_action :: call
+                                mods = copied_mods
+                            batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn cursor_data_for(edit self, id: WindowId) -> List[WindowCursorData]:
+        let matched = List[WindowCursorData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select:
+                        when window_event.window_id :: :: method == id =>
+                            select copy_window_cursor_data :: window_event :: call:
+                                when Option.Some(data) => matched.push :: data :: method
+                                when Option.None => ()
+                        else => ()
+                    batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn scroll_data_for(edit self, id: WindowId) -> List[WindowScrollData]:
+        let matched = List[WindowScrollData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select:
+                        when window_event.window_id :: :: method == id =>
+                            select copy_window_scroll_data :: window_event :: call:
+                                when Option.Some(data) => matched.push :: data :: method
+                                when Option.None => ()
+                        else => ()
+                    batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn key_data_for(edit self, id: WindowId) -> List[WindowKeyData]:
+        let matched = List[WindowKeyData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.KeyChanged(id = event_id, key = key, scancode = scancode, action = action, mods = mods) =>
+                            select:
+                                when event_id == id =>
+                                    let data = WindowKeyData :: :: call
+                                        key = key
+                                        scancode = scancode
+                                        action = action
+                                        mods = mods
+                                    let raw_key = key_raw :: data.key :: call
+                                    let raw_action = input_action_raw :: data.action :: call
+                                    let copied_mods = copy_modifiers :: data.mods :: call
+                                    matched.push :: data :: method
+                                    let restored = WindowEvent.KeyChanged :: :: call
+                                        id = event_id
+                                        key = key_from_raw :: raw_key :: call
+                                        scancode = scancode
+                                        action = input_action_from_raw :: raw_action :: call
+                                        mods = copied_mods
+                                    batch_push_window :: remaining, restored :: call
+                                else =>
+                                    let restored = WindowEvent.KeyChanged :: :: call
+                                        id = event_id
+                                        key = key
+                                        scancode = scancode
+                                        action = action
+                                        mods = mods
+                                    batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn character_data_for(edit self, id: WindowId) -> List[WindowCharacterData]:
+        let matched = List[WindowCharacterData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select:
+                        when window_event.window_id :: :: method == id =>
+                            select copy_window_character_data :: window_event :: call:
+                                when Option.Some(data) => matched.push :: data :: method
+                                when Option.None => ()
+                        else => ()
+                    batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn character_mods_data_for(edit self, id: WindowId) -> List[WindowCharacterModsData]:
+        let matched = List[WindowCharacterModsData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CharacterMods(id = event_id, codepoint = codepoint, mods = mods) =>
+                            select:
+                                when event_id == id =>
+                                    let data = WindowCharacterModsData :: :: call
+                                        codepoint = codepoint
+                                        mods = mods
+                                    let copied_mods = copy_modifiers :: data.mods :: call
+                                    matched.push :: data :: method
+                                    let restored = WindowEvent.CharacterMods :: :: call
+                                        id = event_id
+                                        codepoint = codepoint
+                                        mods = copied_mods
+                                    batch_push_window :: remaining, restored :: call
+                                else =>
+                                    let restored = WindowEvent.CharacterMods :: :: call
+                                        id = event_id
+                                        codepoint = codepoint
+                                        mods = mods
+                                    batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn mouse_button_data_for(edit self, id: WindowId) -> List[WindowMouseButtonData]:
+        let matched = List[WindowMouseButtonData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.MouseButtonChanged(id = event_id, button = button, action = action, mods = mods) =>
+                            select:
+                                when event_id == id =>
+                                    let data = WindowMouseButtonData :: :: call
+                                        button = button
+                                        action = action
+                                        mods = mods
+                                    let raw_button = mouse_button_raw :: data.button :: call
+                                    let raw_action = input_action_raw :: data.action :: call
+                                    let copied_mods = copy_modifiers :: data.mods :: call
+                                    matched.push :: data :: method
+                                    let restored = WindowEvent.MouseButtonChanged :: :: call
+                                        id = event_id
+                                        button = mouse_button_from_raw :: raw_button :: call
+                                        action = input_action_from_raw :: raw_action :: call
+                                        mods = copied_mods
+                                    batch_push_window :: remaining, restored :: call
+                                else =>
+                                    let restored = WindowEvent.MouseButtonChanged :: :: call
+                                        id = event_id
+                                        button = button
+                                        action = action
+                                        mods = mods
+                                    batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn connected_monitor_events(edit self) -> List[MonitorEvent]:
+        let matched = List[MonitorEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) =>
+                    select monitor_event.connected :: :: method:
+                        when true =>
+                            let copied = copy_monitor_event :: monitor_event :: call
+                            matched.push :: copied :: method
+                        when false => ()
+                    batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn disconnected_monitor_events(edit self) -> List[MonitorEvent]:
+        let matched = List[MonitorEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) =>
+                    select monitor_event.connected :: :: method:
+                        when true => ()
+                        when false =>
+                            let copied = copy_monitor_event :: monitor_event :: call
+                            matched.push :: copied :: method
+                    batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn connected_joystick_events(edit self) -> List[JoystickEvent]:
+        let matched = List[JoystickEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) =>
+                    select joystick_event.connected :: :: method:
+                        when true =>
+                            let copied = copy_joystick_event :: joystick_event :: call
+                            matched.push :: copied :: method
+                        when false => ()
+                    batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn disconnected_joystick_events(edit self) -> List[JoystickEvent]:
+        let matched = List[JoystickEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) =>
+                    select joystick_event.connected :: :: method:
+                        when true => ()
+                        when false =>
+                            let copied = copy_joystick_event :: joystick_event :: call
+                            matched.push :: copied :: method
+                    batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn pop_window(edit self) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None => found = Option.Some :: window_event :: call
+                        when Option.Some(_) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return found
+
+    fn pop_monitor(edit self) -> Option[MonitorEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[MonitorEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) =>
+                    select found:
+                        when Option.None => found = Option.Some :: monitor_event :: call
+                        when Option.Some(_) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return found
+
+    fn pop_joystick(edit self) -> Option[JoystickEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[JoystickEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) =>
+                    select found:
+                        when Option.None => found = Option.Some :: joystick_event :: call
+                        when Option.Some(_) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return found
+
+    fn pop_user(edit self) -> Option[UserEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[UserEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) =>
+                    select found:
+                        when Option.None => found = Option.Some :: user_event :: call
+                        when Option.Some(_) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return found
+
+    fn pop_window_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let event_id = window_event.window_id :: :: method
+                    select found:
+                        when Option.None =>
+                            select:
+                                when event_id == id => found = Option.Some :: window_event :: call
+                                else => batch_push_window :: remaining, window_event :: call
+                        when Option.Some(_) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return found
+
+    fn pop_monitor_for(edit self, id: MonitorId) -> Option[MonitorEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[MonitorEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) =>
+                    let event_id = monitor_event.monitor_id :: :: method
+                    select found:
+                        when Option.None =>
+                            select:
+                                when event_id == id => found = Option.Some :: monitor_event :: call
+                                else => batch_push_monitor :: remaining, monitor_event :: call
+                        when Option.Some(_) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return found
+
+    fn pop_joystick_for(edit self, id: JoystickId) -> Option[JoystickEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[JoystickEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) =>
+                    let event_id = joystick_event.joystick_id :: :: method
+                    select found:
+                        when Option.None =>
+                            select:
+                                when event_id == id => found = Option.Some :: joystick_event :: call
+                                else => batch_push_joystick :: remaining, joystick_event :: call
+                        when Option.Some(_) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return found
+
+    fn pop_user_for(edit self, id: UserEventId) -> Option[UserEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[UserEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) =>
+                    let event_id = user_event.user_id :: :: method
+                    select found:
+                        when Option.None =>
+                            select:
+                                when event_id == id => found = Option.Some :: user_event :: call
+                                else => batch_push_user :: remaining, user_event :: call
+                        when Option.Some(_) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return found
+
+    fn take_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let matched = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let event_id = window_event.window_id :: :: method
+                    select:
+                        when event_id == id => matched.push :: window_event :: method
+                        else => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn take_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        let matched = List[MonitorEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) =>
+                    let event_id = monitor_event.monitor_id :: :: method
+                    select:
+                        when event_id == id => matched.push :: monitor_event :: method
+                        else => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn take_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        let matched = List[JoystickEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) =>
+                    let event_id = joystick_event.joystick_id :: :: method
+                    select:
+                        when event_id == id => matched.push :: joystick_event :: method
+                        else => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn take_user_events_for(edit self, id: UserEventId) -> List[UserEvent]:
+        let matched = List[UserEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) =>
+                    let event_id = user_event.user_id :: :: method
+                    select:
+                        when event_id == id => matched.push :: user_event :: method
+                        else => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn take_created_window_ids(edit self) -> List[WindowId]:
+        let ids = List[WindowId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.Created(id = id) => ids.push :: id :: method
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn take_destroyed_window_ids(edit self) -> List[WindowId]:
+        let ids = List[WindowId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.Destroyed(id = id) => ids.push :: id :: method
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn take_close_requested_window_ids(edit self) -> List[WindowId]:
+        let ids = List[WindowId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CloseRequested(id = id) => ids.push :: id :: method
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn take_created_window_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event.kind :: :: method:
+                        when WindowEventKind.Created => events.push :: window_event :: method
+                        else => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_destroyed_window_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event.kind :: :: method:
+                        when WindowEventKind.Destroyed => events.push :: window_event :: method
+                        else => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_close_requested_window_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event.kind :: :: method:
+                        when WindowEventKind.CloseRequested => events.push :: window_event :: method
+                        else => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_key_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.KeyChanged(id = event_id, key = key, scancode = scancode, action = action, mods = mods) =>
+                            let raw_key = key_raw :: key :: call
+                            let raw_action = input_action_raw :: action :: call
+                            select:
+                                when event_id == id =>
+                                    let copied = build_key_changed_window_event :: event_id, raw_key, scancode, raw_action, mods :: call
+                                    events.push :: copied :: method
+                                else =>
+                                    let restored = build_key_changed_window_event :: event_id, raw_key, scancode, raw_action, mods :: call
+                                    batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_character_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.Character(id = event_id, codepoint = codepoint) =>
+                            select:
+                                when event_id == id =>
+                                    let copied = build_character_window_event :: event_id, codepoint :: call
+                                    events.push :: copied :: method
+                                else =>
+                                    let restored = build_character_window_event :: event_id, codepoint :: call
+                                    batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_character_mods_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CharacterMods(id = event_id, codepoint = codepoint, mods = mods) =>
+                            select:
+                                when event_id == id =>
+                                    let copied = build_character_mods_window_event :: event_id, codepoint, mods :: call
+                                    events.push :: copied :: method
+                                else =>
+                                    let restored = build_character_mods_window_event :: event_id, codepoint, mods :: call
+                                    batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_mouse_button_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.MouseButtonChanged(id = event_id, button = button, action = action, mods = mods) =>
+                            let raw_button = mouse_button_raw :: button :: call
+                            let raw_action = input_action_raw :: action :: call
+                            select:
+                                when event_id == id =>
+                                    let copied = build_mouse_button_changed_window_event :: event_id, raw_button, raw_action, mods :: call
+                                    events.push :: copied :: method
+                                else =>
+                                    let restored = build_mouse_button_changed_window_event :: event_id, raw_button, raw_action, mods :: call
+                                    batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_cursor_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CursorMoved(id = event_id, x = x, y = y) =>
+                            select:
+                                when event_id == id =>
+                                    let copied = build_cursor_moved_window_event :: event_id, x, y :: call
+                                    events.push :: copied :: method
+                                else =>
+                                    let restored = build_cursor_moved_window_event :: event_id, x, y :: call
+                                    batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_scrolled_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.Scrolled(id = event_id, x = x, y = y) =>
+                            select:
+                                when event_id == id =>
+                                    let copied = build_scrolled_window_event :: event_id, x, y :: call
+                                    events.push :: copied :: method
+                                else =>
+                                    let restored = build_scrolled_window_event :: event_id, x, y :: call
+                                    batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_dropped_path_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.DroppedPaths(id = event_id, paths = paths) =>
+                            select:
+                                when event_id == id =>
+                                    let copied = WindowEvent.DroppedPaths :: :: call
+                                        id = event_id
+                                        paths = paths
+                                    events.push :: copied :: method
+                                else =>
+                                    let restored = WindowEvent.DroppedPaths :: :: call
+                                        id = event_id
+                                        paths = paths
+                                    batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_key_changed_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.KeyChanged(id = _, key = _, scancode = _, action = _, mods = _) =>
+                            events.push :: window_event :: method
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_character_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.Character(id = _, codepoint = _) => events.push :: window_event :: method
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_character_mods_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CharacterMods(id = _, codepoint = _, mods = _) => events.push :: window_event :: method
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_mouse_button_changed_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.MouseButtonChanged(id = _, button = _, action = _, mods = _) =>
+                            events.push :: window_event :: method
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_cursor_moved_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CursorMoved(id = _, x = _, y = _) => events.push :: window_event :: method
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_scrolled_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.Scrolled(id = _, x = _, y = _) => events.push :: window_event :: method
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_dropped_path_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.DroppedPaths(id = _, paths = _) => events.push :: window_event :: method
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_cursor_data(edit self) -> List[WindowCursorData]:
+        let events = self.take_cursor_moved_events :: :: method
+        let data = List[WindowCursorData] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.cursor_data :: :: method:
+                when Option.Some(value) => data.push :: value :: method
+                when Option.None => ()
+        return data
+
+    fn take_scroll_data(edit self) -> List[WindowScrollData]:
+        let events = self.take_scrolled_events :: :: method
+        let data = List[WindowScrollData] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.scroll_data :: :: method:
+                when Option.Some(value) => data.push :: value :: method
+                when Option.None => ()
+        return data
+
+    fn take_key_data(edit self) -> List[WindowKeyData]:
+        let events = self.take_key_changed_events :: :: method
+        let data = List[WindowKeyData] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.key_data :: :: method:
+                when Option.Some(value) => data.push :: value :: method
+                when Option.None => ()
+        return data
+
+    fn take_character_data(edit self) -> List[WindowCharacterData]:
+        let events = self.take_character_events :: :: method
+        let data = List[WindowCharacterData] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.character_data :: :: method:
+                when Option.Some(value) => data.push :: value :: method
+                when Option.None => ()
+        return data
+
+    fn take_character_mods_data(edit self) -> List[WindowCharacterModsData]:
+        let events = self.take_character_mods_events :: :: method
+        let data = List[WindowCharacterModsData] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.character_mods_data :: :: method:
+                when Option.Some(value) => data.push :: value :: method
+                when Option.None => ()
+        return data
+
+    fn take_mouse_button_data(edit self) -> List[WindowMouseButtonData]:
+        let events = self.take_mouse_button_changed_events :: :: method
+        let data = List[WindowMouseButtonData] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.mouse_button_data :: :: method:
+                when Option.Some(value) => data.push :: value :: method
+                when Option.None => ()
+        return data
+
+    fn take_dropped_paths_lists(edit self) -> List[List[Str]]:
+        let events = self.take_dropped_path_events :: :: method
+        let lists = List[List[Str]] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.take_dropped_paths :: :: method:
+                when Option.Some(value) => lists.push :: value :: method
+                when Option.None => ()
+        return lists
+
+    fn take_cursor_data_for(edit self, id: WindowId) -> List[WindowCursorData]:
+        let data = List[WindowCursorData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let event_id = window_event.window_id :: :: method
+                    select:
+                        when event_id == id =>
+                            select window_event.cursor_data :: :: method:
+                                when Option.Some(value) => data.push :: value :: method
+                                when Option.None => batch_push_window :: remaining, window_event :: call
+                        else => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return data
+
+    fn take_scroll_data_for(edit self, id: WindowId) -> List[WindowScrollData]:
+        let data = List[WindowScrollData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let event_id = window_event.window_id :: :: method
+                    select:
+                        when event_id == id =>
+                            select window_event.scroll_data :: :: method:
+                                when Option.Some(value) => data.push :: value :: method
+                                when Option.None => batch_push_window :: remaining, window_event :: call
+                        else => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return data
+
+    fn take_key_data_for(edit self, id: WindowId) -> List[WindowKeyData]:
+        let data = List[WindowKeyData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.KeyChanged(id = event_id, key = key, scancode = scancode, action = action, mods = mods) =>
+                            select:
+                                when event_id == id =>
+                                    let value = WindowKeyData :: :: call
+                                        key = key
+                                        scancode = scancode
+                                        action = action
+                                        mods = mods
+                                    data.push :: value :: method
+                                else =>
+                                    let restored = WindowEvent.KeyChanged :: :: call
+                                        id = event_id
+                                        key = key
+                                        scancode = scancode
+                                        action = action
+                                        mods = mods
+                                    batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return data
+
+    fn take_character_data_for(edit self, id: WindowId) -> List[WindowCharacterData]:
+        let data = List[WindowCharacterData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let event_id = window_event.window_id :: :: method
+                    select:
+                        when event_id == id =>
+                            select window_event.character_data :: :: method:
+                                when Option.Some(value) => data.push :: value :: method
+                                when Option.None => batch_push_window :: remaining, window_event :: call
+                        else => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return data
+
+    fn take_character_mods_data_for(edit self, id: WindowId) -> List[WindowCharacterModsData]:
+        let data = List[WindowCharacterModsData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CharacterMods(id = event_id, codepoint = codepoint, mods = mods) =>
+                            select:
+                                when event_id == id =>
+                                    let value = WindowCharacterModsData :: :: call
+                                        codepoint = codepoint
+                                        mods = mods
+                                    data.push :: value :: method
+                                else =>
+                                    let restored = WindowEvent.CharacterMods :: :: call
+                                        id = event_id
+                                        codepoint = codepoint
+                                        mods = mods
+                                    batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return data
+
+    fn take_mouse_button_data_for(edit self, id: WindowId) -> List[WindowMouseButtonData]:
+        let data = List[WindowMouseButtonData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.MouseButtonChanged(id = event_id, button = button, action = action, mods = mods) =>
+                            select:
+                                when event_id == id =>
+                                    let value = WindowMouseButtonData :: :: call
+                                        button = button
+                                        action = action
+                                        mods = mods
+                                    data.push :: value :: method
+                                else =>
+                                    let restored = WindowEvent.MouseButtonChanged :: :: call
+                                        id = event_id
+                                        button = button
+                                        action = action
+                                        mods = mods
+                                    batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return data
+
+    fn take_dropped_paths_lists_for(edit self, id: WindowId) -> List[List[Str]]:
+        let lists = List[List[Str]] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.DroppedPaths(id = event_id, paths = paths) =>
+                            select:
+                                when event_id == id => lists.push :: paths :: method
+                                else =>
+                                    let restored = WindowEvent.DroppedPaths :: :: call
+                                        id = event_id
+                                        paths = paths
+                                    batch_push_window :: remaining, restored :: call
+                        when _ => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return lists
+
+    fn take_connected_monitor_ids(edit self) -> List[MonitorId]:
+        let ids = List[MonitorId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) =>
+                    select monitor_event:
+                        when MonitorEvent.Connected(id = id) => ids.push :: id :: method
+                        when _ => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn take_disconnected_monitor_ids(edit self) -> List[MonitorId]:
+        let ids = List[MonitorId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) =>
+                    select monitor_event:
+                        when MonitorEvent.Disconnected(id = id) => ids.push :: id :: method
+                        when _ => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn take_connected_monitor_events(edit self) -> List[MonitorEvent]:
+        let matched = List[MonitorEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) =>
+                    select monitor_event:
+                        when MonitorEvent.Connected(id = _) => matched.push :: monitor_event :: method
+                        when _ => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn take_disconnected_monitor_events(edit self) -> List[MonitorEvent]:
+        let matched = List[MonitorEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) =>
+                    select monitor_event:
+                        when MonitorEvent.Disconnected(id = _) => matched.push :: monitor_event :: method
+                        when _ => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn take_connected_joystick_events(edit self) -> List[JoystickEvent]:
+        let matched = List[JoystickEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) =>
+                    select joystick_event:
+                        when JoystickEvent.Connected(id = _, gamepad = _) => matched.push :: joystick_event :: method
+                        when _ => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn take_connected_joystick_ids(edit self) -> List[JoystickId]:
+        let ids = List[JoystickId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) =>
+                    select joystick_event:
+                        when JoystickEvent.Connected(id = id, gamepad = _) => ids.push :: id :: method
+                        when _ => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn take_disconnected_joystick_ids(edit self) -> List[JoystickId]:
+        let ids = List[JoystickId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) =>
+                    select joystick_event:
+                        when JoystickEvent.Disconnected(id = id) => ids.push :: id :: method
+                        when _ => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return ids
+
+    fn take_disconnected_joystick_events(edit self) -> List[JoystickEvent]:
+        let matched = List[JoystickEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) =>
+                    select joystick_event:
+                        when JoystickEvent.Disconnected(id = _) => matched.push :: joystick_event :: method
+                        when _ => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn take_user_ids(edit self) -> List[UserEventId]:
+        let ids = List[UserEventId] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) =>
+                    let id = user_event.user_id :: :: method
+                    ids.push :: id :: method
+        self.events = remaining
+        return ids
+
+    fn take_windows(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => events.push :: window_event :: method
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_monitors(edit self) -> List[MonitorEvent]:
+        let events = List[MonitorEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => events.push :: monitor_event :: method
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_joysticks(edit self) -> List[JoystickEvent]:
+        let events = List[JoystickEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => events.push :: joystick_event :: method
+                when AppEvent.User(user_event) => batch_push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_users(edit self) -> List[UserEvent]:
+        let events = List[UserEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) => batch_push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => batch_push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => batch_push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => events.push :: user_event :: method
+        self.events = remaining
+        return events

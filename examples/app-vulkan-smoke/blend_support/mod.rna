@@ -1,0 +1,104 @@
+use std.Result
+
+use runa_app.{rgba_blend_source_over, rgba_color, solid_rgba_image}
+use runa_app_vulkan.{VulkanPixelFormat, vulkan_pixel_frame_with_color}
+
+pub fn check_rgba_blend_helpers() -> I32:
+    let blend_base = rgba_color :: 40U8, 80U8, 120U8, 128U8 :: call
+    let blend_overlay = rgba_color :: 200U8, 20U8, 10U8, 128U8 :: call
+    select rgba_blend_source_over :: blend_base, blend_overlay :: call:
+        when Result.Ok(expected_blend) =>
+            select solid_rgba_image :: 1, 1, blend_base :: call:
+                when Result.Ok(blend_target) =>
+                    select blend_target.blend_pixel :: 0, 0, blend_overlay :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) => return 1
+                    select blend_target.pixel :: 0, 0 :: method:
+                        when Result.Ok(blended_color) =>
+                            select:
+                                when blended_color.red != expected_blend.red => return 2
+                                when blended_color.green != expected_blend.green => return 3
+                                when blended_color.blue != expected_blend.blue => return 4
+                                when blended_color.alpha != expected_blend.alpha => return 5
+                                else => ()
+                        when Result.Err(_) => return 6
+                    select solid_rgba_image :: 1, 1, blend_overlay :: call:
+                        when Result.Ok(blend_source_image) =>
+                            select blend_target.clear :: blend_base :: method:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) => return 7
+                            select blend_target.blend_image :: 0, 0, blend_source_image :: method:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) => return 8
+                            select blend_target.pixel :: 0, 0 :: method:
+                                when Result.Ok(blended_color) =>
+                                    select:
+                                        when blended_color.red != expected_blend.red => return 9
+                                        when blended_color.green != expected_blend.green => return 10
+                                        when blended_color.blue != expected_blend.blue => return 11
+                                        when blended_color.alpha != expected_blend.alpha => return 12
+                                        else => ()
+                                when Result.Err(_) => return 13
+                        when Result.Err(_) => return 14
+                when Result.Err(_) => return 15
+        when Result.Err(_) => return 16
+    return 0
+
+pub fn check_vulkan_pixel_frame_blend_helpers() -> I32:
+    let blend_base = rgba_color :: 40U8, 80U8, 120U8, 128U8 :: call
+    let blend_overlay = rgba_color :: 200U8, 20U8, 10U8, 128U8 :: call
+    select rgba_blend_source_over :: blend_base, blend_overlay :: call:
+        when Result.Ok(expected_blend) =>
+            select vulkan_pixel_frame_with_color :: 1, 1, VulkanPixelFormat.Rgba8, blend_base :: call:
+                when Result.Ok(blend_target_frame) =>
+                    select blend_target_frame.blend_pixel :: 0, 0, blend_overlay :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) => return 17
+                    select blend_target_frame.pixel :: 0, 0 :: method:
+                        when Result.Ok(blended_color) =>
+                            select:
+                                when blended_color.red != expected_blend.red => return 18
+                                when blended_color.green != expected_blend.green => return 19
+                                when blended_color.blue != expected_blend.blue => return 20
+                                when blended_color.alpha != expected_blend.alpha => return 21
+                                else => ()
+                        when Result.Err(_) => return 22
+                    select solid_rgba_image :: 1, 1, blend_overlay :: call:
+                        when Result.Ok(blend_source_image) =>
+                            select blend_target_frame.clear :: blend_base :: method:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) => return 23
+                            select blend_target_frame.blend_image :: 0, 0, blend_source_image :: method:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) => return 24
+                            select blend_target_frame.pixel :: 0, 0 :: method:
+                                when Result.Ok(blended_color) =>
+                                    select:
+                                        when blended_color.red != expected_blend.red => return 25
+                                        when blended_color.green != expected_blend.green => return 26
+                                        when blended_color.blue != expected_blend.blue => return 27
+                                        when blended_color.alpha != expected_blend.alpha => return 28
+                                        else => ()
+                                when Result.Err(_) => return 29
+                        when Result.Err(_) => return 30
+                    select vulkan_pixel_frame_with_color :: 1, 1, VulkanPixelFormat.Bgra8, blend_overlay :: call:
+                        when Result.Ok(blend_source_frame) =>
+                            select blend_target_frame.clear :: blend_base :: method:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) => return 31
+                            select blend_target_frame.blend_frame :: 0, 0, blend_source_frame :: method:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) => return 32
+                            select blend_target_frame.pixel :: 0, 0 :: method:
+                                when Result.Ok(blended_color) =>
+                                    select:
+                                        when blended_color.red != expected_blend.red => return 33
+                                        when blended_color.green != expected_blend.green => return 34
+                                        when blended_color.blue != expected_blend.blue => return 35
+                                        when blended_color.alpha != expected_blend.alpha => return 36
+                                        else => ()
+                                when Result.Err(_) => return 37
+                        when Result.Err(_) => return 38
+                when Result.Err(_) => return 39
+        when Result.Err(_) => return 40
+    return 0

@@ -1,0 +1,317 @@
+use std.Result
+
+use runa_app.rgba_color
+use runa_app_vulkan.VulkanPresentApp
+
+pub fn check_vulkan_upload_plan_helpers(edit present_app: VulkanPresentApp) -> I32:
+    select present_app.surface_transfer_source_buffer_requirements :: :: method:
+        when Result.Ok(requirements) =>
+            select present_app.surface_staging_allocation_plan :: :: method:
+                when Result.Ok(allocation_plan) =>
+                    select present_app.surface_transfer_source_buffer_plan :: :: method:
+                        when Result.Ok(upload_plan) =>
+                            select present_app.surface_rgba_byte_count :: :: method:
+                                when Result.Ok(surface_byte_count) =>
+                                    select:
+                                        when upload_plan.byte_count != surface_byte_count => return 1
+                                        else => ()
+                                when Result.Err(_) => return 1
+                            select:
+                                when upload_plan.size :: :: method != requirements.size => return 2
+                                when upload_plan.alignment :: :: method != requirements.alignment => return 3
+                                when upload_plan.memory_type_bits :: :: method != requirements.memory_type_bits => return 4
+                                when upload_plan.allocation_size :: :: method != allocation_plan.size :: :: method => return 5
+                                when upload_plan.memory_type_index :: :: method != allocation_plan.memory_type_index => return 6
+                                when upload_plan.heap_index :: :: method != allocation_plan.heap_index :: :: method => return 7
+                                when !upload_plan.host_visible :: :: method => return 8
+                                when !upload_plan.host_coherent :: :: method => return 9
+                                when !upload_plan.staging_compatible :: :: method => return 10
+                                else => ()
+                            select present_app.transfer_source_buffer_plan :: upload_plan.byte_count :: method:
+                                when Result.Ok(rebuilt_plan) =>
+                                    select:
+                                        when rebuilt_plan.size :: :: method != upload_plan.size :: :: method => return 11
+                                        when rebuilt_plan.alignment :: :: method != upload_plan.alignment :: :: method => return 12
+                                        when rebuilt_plan.memory_type_index :: :: method != upload_plan.memory_type_index :: :: method => return 13
+                                        else => ()
+                                when Result.Err(_) => return 14
+                            select present_app.surface_transfer_source_buffer_empty :: :: method:
+                                when Result.Ok(empty_upload) =>
+                                    select:
+                                        when !empty_upload.valid :: :: method =>
+                                            present_app.destroy_transfer_source_buffer :: empty_upload :: method
+                                            return 70
+                                        when empty_upload.byte_count :: :: method != upload_plan.byte_count =>
+                                            present_app.destroy_transfer_source_buffer :: empty_upload :: method
+                                            return 71
+                                        when empty_upload.size :: :: method != upload_plan.size :: :: method =>
+                                            present_app.destroy_transfer_source_buffer :: empty_upload :: method
+                                            return 72
+                                        when empty_upload.memory_type_index :: :: method != upload_plan.memory_type_index :: :: method =>
+                                            present_app.destroy_transfer_source_buffer :: empty_upload :: method
+                                            return 73
+                                        else => ()
+                                    let empty_fill = rgba_color :: 18U8, 96U8, 210U8, 255U8 :: call
+                                    select present_app.surface_image :: empty_fill :: method:
+                                        when Result.Ok(empty_image) =>
+                                            select present_app.write_surface_transfer_source_buffer_from_image :: empty_upload, empty_image :: method:
+                                                when Result.Ok(_) =>
+                                                    select present_app.surface_transfer_source_buffer_image :: empty_upload :: method:
+                                                        when Result.Ok(empty_roundtrip) =>
+                                                            select empty_roundtrip.pixel :: 0, 0 :: method:
+                                                                when Result.Ok(empty_color) =>
+                                                                    select:
+                                                                        when empty_color.red != empty_fill.red =>
+                                                                            present_app.destroy_transfer_source_buffer :: empty_upload :: method
+                                                                            return 74
+                                                                        when empty_color.green != empty_fill.green =>
+                                                                            present_app.destroy_transfer_source_buffer :: empty_upload :: method
+                                                                            return 75
+                                                                        when empty_color.blue != empty_fill.blue =>
+                                                                            present_app.destroy_transfer_source_buffer :: empty_upload :: method
+                                                                            return 76
+                                                                        when empty_color.alpha != empty_fill.alpha =>
+                                                                            present_app.destroy_transfer_source_buffer :: empty_upload :: method
+                                                                            return 77
+                                                                        else => ()
+                                                                when Result.Err(_) =>
+                                                                    present_app.destroy_transfer_source_buffer :: empty_upload :: method
+                                                                    return 78
+                                                        when Result.Err(_) =>
+                                                            present_app.destroy_transfer_source_buffer :: empty_upload :: method
+                                                            return 79
+                                                when Result.Err(_) =>
+                                                    present_app.destroy_transfer_source_buffer :: empty_upload :: method
+                                                    return 80
+                                        when Result.Err(_) =>
+                                            present_app.destroy_transfer_source_buffer :: empty_upload :: method
+                                            return 81
+                                    select present_app.present_transfer_source_buffer :: empty_upload :: method:
+                                        when Result.Ok(_) => ()
+                                        when Result.Err(_) =>
+                                            present_app.destroy_transfer_source_buffer :: empty_upload :: method
+                                            return 82
+                                    present_app.destroy_transfer_source_buffer :: empty_upload :: method
+                                when Result.Err(_) => return 83
+                            let fill = rgba_color :: 24U8, 120U8, 220U8, 255U8 :: call
+                            select present_app.surface_image :: fill :: method:
+                                when Result.Ok(image) =>
+                                    select present_app.surface_transfer_source_buffer_from_image :: image :: method:
+                                        when Result.Ok(image_upload) =>
+                                            select:
+                                                when !image_upload.valid :: :: method =>
+                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                    return 18
+                                                when image_upload.buffer_handle :: :: method == 0U64 =>
+                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                    return 19
+                                                when image_upload.memory_handle :: :: method == 0U64 =>
+                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                    return 20
+                                                when image_upload.byte_count :: :: method != upload_plan.byte_count =>
+                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                    return 21
+                                                when image_upload.size :: :: method != upload_plan.size :: :: method =>
+                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                    return 22
+                                                when image_upload.memory_type_index :: :: method != upload_plan.memory_type_index :: :: method =>
+                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                    return 23
+                                                else => ()
+                                            select present_app.present_transfer_source_buffer :: image_upload :: method:
+                                                when Result.Ok(_) =>
+                                                    select present_app.present_transfer_source_buffer :: image_upload :: method:
+                                                        when Result.Ok(_) => ()
+                                                        when Result.Err(_) =>
+                                                            present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                            return 24
+                                                when Result.Err(_) =>
+                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                    return 25
+                                            select present_app.transfer_source_buffer_bytes :: image_upload :: method:
+                                                when Result.Ok(upload_pixels) =>
+                                                    select:
+                                                        when upload_pixels.byte_count :: :: method != upload_plan.byte_count =>
+                                                            present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                            return 36
+                                                        else => ()
+                                                    select present_app.write_surface_transfer_source_buffer :: image_upload, upload_pixels :: method:
+                                                        when Result.Ok(_) => ()
+                                                        when Result.Err(_) =>
+                                                            present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                            return 37
+                                                when Result.Err(_) =>
+                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                    return 38
+                                            select present_app.surface_transfer_source_buffer_pixel_frame :: image_upload :: method:
+                                                when Result.Ok(upload_frame) =>
+                                                    select upload_frame.pixel :: 0, 0 :: method:
+                                                        when Result.Ok(upload_color) =>
+                                                            select:
+                                                                when upload_color.red != fill.red =>
+                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                    return 39
+                                                                when upload_color.green != fill.green =>
+                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                    return 40
+                                                                when upload_color.blue != fill.blue =>
+                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                    return 41
+                                                                when upload_color.alpha != fill.alpha =>
+                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                    return 42
+                                                                else => ()
+                                                        when Result.Err(_) =>
+                                                            present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                            return 43
+                                                when Result.Err(_) =>
+                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                    return 44
+                                            select present_app.surface_transfer_source_buffer_image :: image_upload :: method:
+                                                when Result.Ok(roundtrip_image) =>
+                                                    select roundtrip_image.pixel :: 0, 0 :: method:
+                                                        when Result.Ok(roundtrip_color) =>
+                                                            select:
+                                                                when roundtrip_color.red != fill.red =>
+                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                    return 45
+                                                                when roundtrip_color.green != fill.green =>
+                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                    return 46
+                                                                when roundtrip_color.blue != fill.blue =>
+                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                    return 47
+                                                                when roundtrip_color.alpha != fill.alpha =>
+                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                    return 48
+                                                                else => ()
+                                                        when Result.Err(_) =>
+                                                            present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                            return 49
+                                                when Result.Err(_) =>
+                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                    return 50
+                                            let rewrite_fill = rgba_color :: 32U8, 200U8, 96U8, 255U8 :: call
+                                            select present_app.surface_image :: rewrite_fill :: method:
+                                                when Result.Ok(rewrite_image) =>
+                                                    select present_app.write_surface_transfer_source_buffer_from_image :: image_upload, rewrite_image :: method:
+                                                        when Result.Ok(_) =>
+                                                            select present_app.surface_transfer_source_buffer_image :: image_upload :: method:
+                                                                when Result.Ok(rewritten_image) =>
+                                                                    select rewritten_image.pixel :: 0, 0 :: method:
+                                                                        when Result.Ok(rewritten_color) =>
+                                                                            select:
+                                                                                when rewritten_color.red != rewrite_fill.red =>
+                                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                                    return 51
+                                                                                when rewritten_color.green != rewrite_fill.green =>
+                                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                                    return 52
+                                                                                when rewritten_color.blue != rewrite_fill.blue =>
+                                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                                    return 53
+                                                                                when rewritten_color.alpha != rewrite_fill.alpha =>
+                                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                                    return 54
+                                                                                else => ()
+                                                                        when Result.Err(_) =>
+                                                                            present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                            return 55
+                                                                when Result.Err(_) =>
+                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                    return 56
+                                                        when Result.Err(_) =>
+                                                            present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                            return 57
+                                                when Result.Err(_) =>
+                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                    return 58
+                                            let frame_fill = rgba_color :: 168U8, 44U8, 212U8, 255U8 :: call
+                                            select present_app.surface_pixel_frame :: frame_fill :: method:
+                                                when Result.Ok(rewrite_frame) =>
+                                                    select present_app.write_surface_transfer_source_buffer_from_pixel_frame :: image_upload, rewrite_frame :: method:
+                                                        when Result.Ok(_) =>
+                                                            select present_app.surface_transfer_source_buffer_pixel_frame :: image_upload :: method:
+                                                                when Result.Ok(rewritten_frame) =>
+                                                                    select rewritten_frame.pixel :: 0, 0 :: method:
+                                                                        when Result.Ok(rewritten_frame_color) =>
+                                                                            select:
+                                                                                when rewritten_frame_color.red != frame_fill.red =>
+                                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                                    return 59
+                                                                                when rewritten_frame_color.green != frame_fill.green =>
+                                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                                    return 60
+                                                                                when rewritten_frame_color.blue != frame_fill.blue =>
+                                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                                    return 61
+                                                                                when rewritten_frame_color.alpha != frame_fill.alpha =>
+                                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                                    return 62
+                                                                                else => ()
+                                                                        when Result.Err(_) =>
+                                                                            present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                            return 63
+                                                                when Result.Err(_) =>
+                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                    return 64
+                                                        when Result.Err(_) =>
+                                                            present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                            return 65
+                                                when Result.Err(_) =>
+                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                    return 66
+                                            select present_app.transfer_source_buffer_bytes :: image_upload :: method:
+                                                when Result.Ok(rewritten_pixels) =>
+                                                    select present_app.write_transfer_source_buffer :: image_upload, rewritten_pixels :: method:
+                                                        when Result.Ok(_) =>
+                                                            select present_app.present_transfer_source_buffer :: image_upload :: method:
+                                                                when Result.Ok(_) => ()
+                                                                when Result.Err(_) =>
+                                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                                    return 67
+                                                        when Result.Err(_) =>
+                                                            present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                            return 68
+                                                when Result.Err(_) =>
+                                                    present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                                    return 69
+                                            present_app.destroy_transfer_source_buffer :: image_upload :: method
+                                        when Result.Err(_) => return 26
+                                when Result.Err(_) => return 27
+                            select present_app.surface_pixel_frame :: fill :: method:
+                                when Result.Ok(frame) =>
+                                    select present_app.surface_transfer_source_buffer_from_pixel_frame :: frame :: method:
+                                        when Result.Ok(frame_upload) =>
+                                            select:
+                                                when !frame_upload.valid :: :: method =>
+                                                    present_app.destroy_transfer_source_buffer :: frame_upload :: method
+                                                    return 28
+                                                when frame_upload.byte_count :: :: method != upload_plan.byte_count =>
+                                                    present_app.destroy_transfer_source_buffer :: frame_upload :: method
+                                                    return 29
+                                                else => ()
+                                            present_app.destroy_transfer_source_buffer :: frame_upload :: method
+                                        when Result.Err(_) => return 30
+                                when Result.Err(_) => return 31
+                            let raw_fill = rgba_color :: 200U8, 48U8, 96U8, 255U8 :: call
+                            select present_app.surface_image :: raw_fill :: method:
+                                when Result.Ok(raw_image) =>
+                                    let raw_pixels = raw_image.take_pixels :: :: method
+                                    select present_app.surface_transfer_source_buffer :: raw_pixels :: method:
+                                        when Result.Ok(raw_upload) =>
+                                            select:
+                                                when !raw_upload.valid :: :: method =>
+                                                    present_app.destroy_transfer_source_buffer :: raw_upload :: method
+                                                    return 32
+                                                when raw_upload.byte_count :: :: method != upload_plan.byte_count =>
+                                                    present_app.destroy_transfer_source_buffer :: raw_upload :: method
+                                                    return 33
+                                                else => ()
+                                            present_app.destroy_transfer_source_buffer :: raw_upload :: method
+                                        when Result.Err(_) => return 34
+                                when Result.Err(_) => return 35
+                            return 0
+                        when Result.Err(_) => return 15
+                when Result.Err(_) => return 16
+        when Result.Err(_) => return 17

@@ -1,0 +1,121 @@
+use std.{Option, Result, Str}
+use bridge.{TextDecodeError, copy_c_string}
+use glfw.{GlfwVersion, glfw_error_code, glfw_error_description, glfw_get_error}
+use glfw.{glfw_platform, glfw_platform_supported, glfw_version}
+use glfw.{glfw_version_major, glfw_version_minor, glfw_version_revision}
+use glfw.glfw_version_string
+
+pub enum Platform:
+    Any
+    Win32
+    Cocoa
+    Wayland
+    X11
+    NullPlatform
+    Unknown(CInt)
+
+pub enum RuntimeErrorKind:
+    NotInitialized
+    NoCurrentContext
+    InvalidEnum
+    InvalidValue
+    OutOfMemory
+    ApiUnavailable
+    VersionUnavailable
+    PlatformError
+    FormatUnavailable
+    NoWindowContext
+    CursorUnavailable
+    FeatureUnavailable
+    FeatureUnimplemented
+    PlatformUnavailable
+    Unknown(CInt)
+
+pub struct VersionInfo:
+    pub major: CInt
+    pub minor: CInt
+    pub revision: CInt
+
+pub struct RuntimeErrorInfo:
+    pub code: CInt
+    pub kind: RuntimeErrorKind
+    pub description: Str
+
+pub fn runtime_platform_from_raw(raw: CInt) -> Platform:
+    select:
+        when raw == 0x00060000 => return Platform.Any
+        when raw == 0x00060001 => return Platform.Win32
+        when raw == 0x00060002 => return Platform.Cocoa
+        when raw == 0x00060003 => return Platform.Wayland
+        when raw == 0x00060004 => return Platform.X11
+        when raw == 0x00060005 => return Platform.NullPlatform
+        else => return Platform.Unknown :: raw :: call
+
+pub fn runtime_platform_raw(read platform: Platform) -> CInt:
+    select platform:
+        when Platform.Any => return 0x00060000
+        when Platform.Win32 => return 0x00060001
+        when Platform.Cocoa => return 0x00060002
+        when Platform.Wayland => return 0x00060003
+        when Platform.X11 => return 0x00060004
+        when Platform.NullPlatform => return 0x00060005
+        when Platform.Unknown(raw) => return raw
+    return 0x00060000
+
+fn runtime_error_kind_from_raw(raw: CInt) -> RuntimeErrorKind:
+    select:
+        when raw == 0x00010001 => return RuntimeErrorKind.NotInitialized
+        when raw == 0x00010002 => return RuntimeErrorKind.NoCurrentContext
+        when raw == 0x00010003 => return RuntimeErrorKind.InvalidEnum
+        when raw == 0x00010004 => return RuntimeErrorKind.InvalidValue
+        when raw == 0x00010005 => return RuntimeErrorKind.OutOfMemory
+        when raw == 0x00010006 => return RuntimeErrorKind.ApiUnavailable
+        when raw == 0x00010007 => return RuntimeErrorKind.VersionUnavailable
+        when raw == 0x00010008 => return RuntimeErrorKind.PlatformError
+        when raw == 0x00010009 => return RuntimeErrorKind.FormatUnavailable
+        when raw == 0x0001000A => return RuntimeErrorKind.NoWindowContext
+        when raw == 0x0001000B => return RuntimeErrorKind.CursorUnavailable
+        when raw == 0x0001000C => return RuntimeErrorKind.FeatureUnavailable
+        when raw == 0x0001000D => return RuntimeErrorKind.FeatureUnimplemented
+        when raw == 0x0001000E => return RuntimeErrorKind.PlatformUnavailable
+        else => return RuntimeErrorKind.Unknown :: raw :: call
+
+pub fn runtime_platform() -> Platform:
+    let raw = glfw_platform :: :: call
+    return runtime_platform_from_raw :: raw :: call
+
+pub fn runtime_platform_supported(read platform: Platform) -> Bool:
+    let raw = runtime_platform_raw :: platform :: call
+    return glfw_platform_supported :: raw :: call
+
+pub fn runtime_version() -> VersionInfo:
+    let raw: GlfwVersion = glfw_version :: :: call
+    let major = glfw_version_major :: raw :: call
+    let minor = glfw_version_minor :: raw :: call
+    let revision = glfw_version_revision :: raw :: call
+    return VersionInfo :: :: call
+        major = major
+        minor = minor
+        revision = revision
+
+pub fn runtime_version_string() -> Result[Str, TextDecodeError]:
+    let raw = glfw_version_string :: :: call
+    return copy_c_string :: raw :: call
+
+pub fn runtime_last_error() -> Result[Option[RuntimeErrorInfo], TextDecodeError]:
+    let report = glfw_get_error :: :: call
+    let code = glfw_error_code :: report :: call
+    select:
+        when code == 0 => return Result.Ok :: Option.None :: call
+        else => ()
+    let kind = runtime_error_kind_from_raw :: code :: call
+    let raw_description = glfw_error_description :: report :: call
+    select copy_c_string :: raw_description :: call:
+        when Result.Ok(description) =>
+            let info = RuntimeErrorInfo :: :: call
+                code = code
+                kind = kind
+                description = description
+            let wrapped: Option[RuntimeErrorInfo] = Option.Some :: info :: call
+            return Result.Ok :: wrapped :: call
+        when Result.Err(err) => return Result.Err :: err :: call

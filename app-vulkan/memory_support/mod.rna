@@ -1,0 +1,297 @@
+use std.{List, Option, Result}
+
+use present.{VkMemoryHeap, VkMemoryType, VkPhysicalDeviceMemoryProperties}
+use present.{VulkanPresentApp, VulkanPresentSnapshot}
+
+const MEMORY_PROPERTY_DEVICE_LOCAL_BIT: CUInt = 1
+const MEMORY_PROPERTY_HOST_VISIBLE_BIT: CUInt = 2
+const MEMORY_PROPERTY_HOST_COHERENT_BIT: CUInt = 4
+const MEMORY_HEAP_DEVICE_LOCAL_BIT: CUInt = 1
+
+impl VkMemoryType:
+    fn device_local(read self) -> Bool:
+        return (self.property_flags & MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0
+
+    fn host_visible(read self) -> Bool:
+        return (self.property_flags & MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0
+
+    fn host_coherent(read self) -> Bool:
+        return (self.property_flags & MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0
+
+    fn staging_compatible(read self) -> Bool:
+        return self.host_visible :: :: method && self.host_coherent :: :: method
+
+impl VkMemoryHeap:
+    fn device_local(read self) -> Bool:
+        return (self.flags & MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0
+
+impl VkPhysicalDeviceMemoryProperties:
+    fn memory_type(read self, index: CUInt) -> Option[VkMemoryType]:
+        select:
+            when index >= self.memory_type_count => return Option.None
+            else => ()
+        let Result.Ok(slot) = index as Maybe[Index] else => return Option.None
+        return Option.Some :: self.memory_types[slot] :: call
+
+    fn memory_heap(read self, index: CUInt) -> Option[VkMemoryHeap]:
+        select:
+            when index >= self.memory_heap_count => return Option.None
+            else => ()
+        let Result.Ok(slot) = index as Maybe[Index] else => return Option.None
+        return Option.Some :: self.memory_heaps[slot] :: call
+
+    fn host_visible_memory_type_count(read self) -> CUInt:
+        let total: CUInt = 0
+        let scan: CUInt = 0
+        repeat while scan < self.memory_type_count:
+            let Result.Ok(slot) = scan as Maybe[Index] else => break
+            select:
+                when self.memory_types[slot].host_visible :: :: method => total = total + 1
+                else => ()
+            scan = scan + 1
+        return total
+
+    fn host_coherent_memory_type_count(read self) -> CUInt:
+        let total: CUInt = 0
+        let scan: CUInt = 0
+        repeat while scan < self.memory_type_count:
+            let Result.Ok(slot) = scan as Maybe[Index] else => break
+            select:
+                when self.memory_types[slot].host_coherent :: :: method => total = total + 1
+                else => ()
+            scan = scan + 1
+        return total
+
+    fn staging_memory_type_count(read self) -> CUInt:
+        let total: CUInt = 0
+        let scan: CUInt = 0
+        repeat while scan < self.memory_type_count:
+            let Result.Ok(slot) = scan as Maybe[Index] else => break
+            select:
+                when self.memory_types[slot].staging_compatible :: :: method => total = total + 1
+                else => ()
+            scan = scan + 1
+        return total
+
+    fn device_local_memory_type_count(read self) -> CUInt:
+        let total: CUInt = 0
+        let scan: CUInt = 0
+        repeat while scan < self.memory_type_count:
+            let Result.Ok(slot) = scan as Maybe[Index] else => break
+            select:
+                when self.memory_types[slot].device_local :: :: method => total = total + 1
+                else => ()
+            scan = scan + 1
+        return total
+
+    fn device_local_memory_heap_count(read self) -> CUInt:
+        let total: CUInt = 0
+        let scan: CUInt = 0
+        repeat while scan < self.memory_heap_count:
+            let Result.Ok(slot) = scan as Maybe[Index] else => break
+            select:
+                when self.memory_heaps[slot].device_local :: :: method => total = total + 1
+                else => ()
+            scan = scan + 1
+        return total
+
+    fn has_staging_memory_type(read self) -> Bool:
+        return self.staging_memory_type_count :: :: method != 0
+
+    fn first_staging_memory_type_index(read self) -> Option[CUInt]:
+        let scan: CUInt = 0
+        repeat while scan < self.memory_type_count:
+            let Result.Ok(slot) = scan as Maybe[Index] else => break
+            select:
+                when self.memory_types[slot].staging_compatible :: :: method => return Option.Some :: scan :: call
+                else => ()
+            scan = scan + 1
+        return Option.None
+
+    fn memory_type_supported(read self, index: CUInt, memory_type_bits: CUInt) -> Bool:
+        select:
+            when index >= self.memory_type_count => return false
+            else => ()
+        let scan: CUInt = 0
+        let bitmask: CUInt = 1
+        repeat while scan < self.memory_type_count:
+            select:
+                when scan == index => return (memory_type_bits & bitmask) != 0
+                else => ()
+            bitmask = bitmask + bitmask
+            scan = scan + 1
+        return false
+
+    fn compatible_memory_type_indices(read self, memory_type_bits: CUInt) -> List[CUInt]:
+        let indices = List[CUInt] :: :: call
+        let scan: CUInt = 0
+        let bitmask: CUInt = 1
+        repeat while scan < self.memory_type_count:
+            select:
+                when (memory_type_bits & bitmask) != 0 => indices.push :: scan :: method
+                else => ()
+            bitmask = bitmask + bitmask
+            scan = scan + 1
+        return indices
+
+    fn host_visible_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
+        let scan: CUInt = 0
+        let bitmask: CUInt = 1
+        repeat while scan < self.memory_type_count:
+            let Result.Ok(slot) = scan as Maybe[Index] else => break
+            let supported = (memory_type_bits & bitmask) != 0
+            select:
+                when supported && self.memory_types[slot].host_visible :: :: method => return Option.Some :: scan :: call
+                else => ()
+            bitmask = bitmask + bitmask
+            scan = scan + 1
+        return Option.None
+
+    fn host_coherent_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
+        let scan: CUInt = 0
+        let bitmask: CUInt = 1
+        repeat while scan < self.memory_type_count:
+            let Result.Ok(slot) = scan as Maybe[Index] else => break
+            let supported = (memory_type_bits & bitmask) != 0
+            select:
+                when supported && self.memory_types[slot].host_coherent :: :: method => return Option.Some :: scan :: call
+                else => ()
+            bitmask = bitmask + bitmask
+            scan = scan + 1
+        return Option.None
+
+    fn staging_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
+        let scan: CUInt = 0
+        let bitmask: CUInt = 1
+        repeat while scan < self.memory_type_count:
+            let Result.Ok(slot) = scan as Maybe[Index] else => break
+            let supported = (memory_type_bits & bitmask) != 0
+            select:
+                when supported && self.memory_types[slot].staging_compatible :: :: method => return Option.Some :: scan :: call
+                else => ()
+            bitmask = bitmask + bitmask
+            scan = scan + 1
+        return Option.None
+
+    fn device_local_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
+        let scan: CUInt = 0
+        let bitmask: CUInt = 1
+        repeat while scan < self.memory_type_count:
+            let Result.Ok(slot) = scan as Maybe[Index] else => break
+            let supported = (memory_type_bits & bitmask) != 0
+            select:
+                when supported && self.memory_types[slot].device_local :: :: method => return Option.Some :: scan :: call
+                else => ()
+            bitmask = bitmask + bitmask
+            scan = scan + 1
+        return Option.None
+
+impl VulkanPresentApp:
+    fn memory_properties(read self) -> VkPhysicalDeviceMemoryProperties:
+        return self.context.memory_properties :: :: method
+
+    fn memory_type_count(read self) -> CUInt:
+        return self.context.memory_type_count :: :: method
+
+    fn memory_heap_count(read self) -> CUInt:
+        return self.context.memory_heap_count :: :: method
+
+    fn memory_type(read self, index: CUInt) -> Option[VkMemoryType]:
+        return self.context.memory_type :: index :: method
+
+    fn memory_heap(read self, index: CUInt) -> Option[VkMemoryHeap]:
+        return self.context.memory_heap :: index :: method
+
+    fn host_visible_memory_type_count(read self) -> CUInt:
+        return self.context.host_visible_memory_type_count :: :: method
+
+    fn host_coherent_memory_type_count(read self) -> CUInt:
+        return self.context.host_coherent_memory_type_count :: :: method
+
+    fn staging_memory_type_count(read self) -> CUInt:
+        return self.context.staging_memory_type_count :: :: method
+
+    fn device_local_memory_type_count(read self) -> CUInt:
+        return self.context.device_local_memory_type_count :: :: method
+
+    fn device_local_memory_heap_count(read self) -> CUInt:
+        return self.context.device_local_memory_heap_count :: :: method
+
+    fn has_staging_memory_type(read self) -> Bool:
+        return self.context.has_staging_memory_type :: :: method
+
+    fn first_staging_memory_type_index(read self) -> Option[CUInt]:
+        return self.context.first_staging_memory_type_index :: :: method
+
+    fn memory_type_supported(read self, index: CUInt, memory_type_bits: CUInt) -> Bool:
+        return self.context.memory_type_supported :: index, memory_type_bits :: method
+
+    fn compatible_memory_type_indices(read self, memory_type_bits: CUInt) -> List[CUInt]:
+        return self.context.compatible_memory_type_indices :: memory_type_bits :: method
+
+    fn host_visible_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
+        return self.context.host_visible_memory_type_index :: memory_type_bits :: method
+
+    fn host_coherent_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
+        return self.context.host_coherent_memory_type_index :: memory_type_bits :: method
+
+    fn staging_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
+        return self.context.staging_memory_type_index :: memory_type_bits :: method
+
+    fn device_local_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
+        return self.context.device_local_memory_type_index :: memory_type_bits :: method
+
+impl VulkanPresentSnapshot:
+    fn memory_properties(read self) -> VkPhysicalDeviceMemoryProperties:
+        return self.memory_properties
+
+    fn memory_type_count(read self) -> CUInt:
+        return self.memory_properties.memory_type_count
+
+    fn memory_heap_count(read self) -> CUInt:
+        return self.memory_properties.memory_heap_count
+
+    fn memory_type(read self, index: CUInt) -> Option[VkMemoryType]:
+        return self.memory_properties.memory_type :: index :: method
+
+    fn memory_heap(read self, index: CUInt) -> Option[VkMemoryHeap]:
+        return self.memory_properties.memory_heap :: index :: method
+
+    fn host_visible_memory_type_count(read self) -> CUInt:
+        return self.memory_properties.host_visible_memory_type_count :: :: method
+
+    fn host_coherent_memory_type_count(read self) -> CUInt:
+        return self.memory_properties.host_coherent_memory_type_count :: :: method
+
+    fn staging_memory_type_count(read self) -> CUInt:
+        return self.memory_properties.staging_memory_type_count :: :: method
+
+    fn device_local_memory_type_count(read self) -> CUInt:
+        return self.memory_properties.device_local_memory_type_count :: :: method
+
+    fn device_local_memory_heap_count(read self) -> CUInt:
+        return self.memory_properties.device_local_memory_heap_count :: :: method
+
+    fn has_staging_memory_type(read self) -> Bool:
+        return self.memory_properties.has_staging_memory_type :: :: method
+
+    fn first_staging_memory_type_index(read self) -> Option[CUInt]:
+        return self.memory_properties.first_staging_memory_type_index :: :: method
+
+    fn memory_type_supported(read self, index: CUInt, memory_type_bits: CUInt) -> Bool:
+        return self.memory_properties.memory_type_supported :: index, memory_type_bits :: method
+
+    fn compatible_memory_type_indices(read self, memory_type_bits: CUInt) -> List[CUInt]:
+        return self.memory_properties.compatible_memory_type_indices :: memory_type_bits :: method
+
+    fn host_visible_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
+        return self.memory_properties.host_visible_memory_type_index :: memory_type_bits :: method
+
+    fn host_coherent_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
+        return self.memory_properties.host_coherent_memory_type_index :: memory_type_bits :: method
+
+    fn staging_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
+        return self.memory_properties.staging_memory_type_index :: memory_type_bits :: method
+
+    fn device_local_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
+        return self.memory_properties.device_local_memory_type_index :: memory_type_bits :: method

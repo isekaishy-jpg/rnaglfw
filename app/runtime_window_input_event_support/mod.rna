@@ -1,0 +1,678 @@
+use std.{List, Option, Result, Str}
+use event.{WindowCharacterData, WindowCharacterModsData, WindowCursorData, WindowEvent}
+use event.{WindowKeyData, WindowMouseButtonData, WindowScrollData}
+use runtime.{App, AppError}
+use window.WindowId
+
+impl App:
+    fn next_cursor_data(edit self) -> Option[WindowCursorData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_cursor_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn next_scroll_data(edit self) -> Option[WindowScrollData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_scroll_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn next_key_data(edit self) -> Option[WindowKeyData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_key_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn next_character_data(edit self) -> Option[WindowCharacterData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_character_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn next_character_mods_data(edit self) -> Option[WindowCharacterModsData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_character_mods_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn next_mouse_button_data(edit self) -> Option[WindowMouseButtonData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_mouse_button_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn next_dropped_paths_list(edit self) -> Option[List[Str]]:
+        let batch = self.take_event_batch :: :: method
+        let value = batch.pop_dropped_paths_list :: :: method
+        self.pending = batch.events
+        return value
+
+    fn next_cursor_data_for(edit self, id: WindowId) -> Option[WindowCursorData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_cursor_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn next_scroll_data_for(edit self, id: WindowId) -> Option[WindowScrollData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_scroll_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn next_key_data_for(edit self, id: WindowId) -> Option[WindowKeyData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_key_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn next_character_data_for(edit self, id: WindowId) -> Option[WindowCharacterData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_character_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn next_character_mods_data_for(edit self, id: WindowId) -> Option[WindowCharacterModsData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_character_mods_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn next_mouse_button_data_for(edit self, id: WindowId) -> Option[WindowMouseButtonData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_mouse_button_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn next_dropped_paths_list_for(edit self, id: WindowId) -> Option[List[Str]]:
+        let batch = self.take_event_batch :: :: method
+        let value = batch.pop_dropped_paths_list_for :: id :: method
+        self.pending = batch.events
+        return value
+
+    fn next_key_changed_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_key_changed_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_character_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_character_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_character_mods_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_character_mods_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_mouse_button_changed_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_mouse_button_changed_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_cursor_moved_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_cursor_moved_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_scrolled_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_scrolled_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_dropped_path_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_dropped_path_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_key_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_key_changed_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_character_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_character_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_character_mods_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_character_mods_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_mouse_button_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_mouse_button_changed_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_cursor_moved_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_cursor_moved_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_scrolled_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_scrolled_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_dropped_path_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_dropped_path_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn poll_next_cursor_data(edit self) -> Result[Option[WindowCursorData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_cursor_data :: :: method :: call
+
+    fn poll_next_scroll_data(edit self) -> Result[Option[WindowScrollData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_scroll_data :: :: method :: call
+
+    fn poll_next_key_data(edit self) -> Result[Option[WindowKeyData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_key_data :: :: method :: call
+
+    fn poll_next_character_data(edit self) -> Result[Option[WindowCharacterData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_character_data :: :: method :: call
+
+    fn poll_next_character_mods_data(edit self) -> Result[Option[WindowCharacterModsData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_character_mods_data :: :: method :: call
+
+    fn poll_next_mouse_button_data(edit self) -> Result[Option[WindowMouseButtonData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_mouse_button_data :: :: method :: call
+
+    fn poll_next_dropped_paths_list(edit self) -> Result[Option[List[Str]], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_dropped_paths_list :: :: method :: call
+
+    fn poll_next_cursor_data_for(edit self, id: WindowId) -> Result[Option[WindowCursorData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_cursor_data_for :: id :: method :: call
+
+    fn poll_next_scroll_data_for(edit self, id: WindowId) -> Result[Option[WindowScrollData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_scroll_data_for :: id :: method :: call
+
+    fn poll_next_key_data_for(edit self, id: WindowId) -> Result[Option[WindowKeyData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_key_data_for :: id :: method :: call
+
+    fn poll_next_character_data_for(edit self, id: WindowId) -> Result[Option[WindowCharacterData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_character_data_for :: id :: method :: call
+
+    fn poll_next_character_mods_data_for(edit self, id: WindowId) -> Result[Option[WindowCharacterModsData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_character_mods_data_for :: id :: method :: call
+
+    fn poll_next_mouse_button_data_for(edit self, id: WindowId) -> Result[Option[WindowMouseButtonData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_mouse_button_data_for :: id :: method :: call
+
+    fn poll_next_dropped_paths_list_for(edit self, id: WindowId) -> Result[Option[List[Str]], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_dropped_paths_list_for :: id :: method :: call
+
+    fn poll_next_key_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_key_changed_event :: :: method :: call
+
+    fn poll_next_character_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_character_event :: :: method :: call
+
+    fn poll_next_character_mods_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_character_mods_event :: :: method :: call
+
+    fn poll_next_mouse_button_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_mouse_button_changed_event :: :: method :: call
+
+    fn poll_next_cursor_moved_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_cursor_moved_event :: :: method :: call
+
+    fn poll_next_scrolled_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_scrolled_event :: :: method :: call
+
+    fn poll_next_dropped_path_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_dropped_path_event :: :: method :: call
+
+    fn poll_next_key_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_key_changed_event_for :: id :: method :: call
+
+    fn poll_next_character_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_character_event_for :: id :: method :: call
+
+    fn poll_next_character_mods_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_character_mods_event_for :: id :: method :: call
+
+    fn poll_next_mouse_button_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_mouse_button_changed_event_for :: id :: method :: call
+
+    fn poll_next_cursor_moved_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_cursor_moved_event_for :: id :: method :: call
+
+    fn poll_next_scrolled_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_scrolled_event_for :: id :: method :: call
+
+    fn poll_next_dropped_path_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_dropped_path_event_for :: id :: method :: call
+
+    fn wait_next_cursor_data(edit self) -> Result[Option[WindowCursorData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_cursor_data :: :: method :: call
+
+    fn wait_next_scroll_data(edit self) -> Result[Option[WindowScrollData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_scroll_data :: :: method :: call
+
+    fn wait_next_key_data(edit self) -> Result[Option[WindowKeyData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_key_data :: :: method :: call
+
+    fn wait_next_character_data(edit self) -> Result[Option[WindowCharacterData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_character_data :: :: method :: call
+
+    fn wait_next_character_mods_data(edit self) -> Result[Option[WindowCharacterModsData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_character_mods_data :: :: method :: call
+
+    fn wait_next_mouse_button_data(edit self) -> Result[Option[WindowMouseButtonData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_mouse_button_data :: :: method :: call
+
+    fn wait_next_dropped_paths_list(edit self) -> Result[Option[List[Str]], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_dropped_paths_list :: :: method :: call
+
+    fn wait_next_cursor_data_for(edit self, id: WindowId) -> Result[Option[WindowCursorData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_cursor_data_for :: id :: method :: call
+
+    fn wait_next_scroll_data_for(edit self, id: WindowId) -> Result[Option[WindowScrollData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_scroll_data_for :: id :: method :: call
+
+    fn wait_next_key_data_for(edit self, id: WindowId) -> Result[Option[WindowKeyData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_key_data_for :: id :: method :: call
+
+    fn wait_next_character_data_for(edit self, id: WindowId) -> Result[Option[WindowCharacterData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_character_data_for :: id :: method :: call
+
+    fn wait_next_character_mods_data_for(edit self, id: WindowId) -> Result[Option[WindowCharacterModsData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_character_mods_data_for :: id :: method :: call
+
+    fn wait_next_mouse_button_data_for(edit self, id: WindowId) -> Result[Option[WindowMouseButtonData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_mouse_button_data_for :: id :: method :: call
+
+    fn wait_next_dropped_paths_list_for(edit self, id: WindowId) -> Result[Option[List[Str]], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_dropped_paths_list_for :: id :: method :: call
+
+    fn wait_next_key_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_key_changed_event :: :: method :: call
+
+    fn wait_next_character_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_character_event :: :: method :: call
+
+    fn wait_next_character_mods_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_character_mods_event :: :: method :: call
+
+    fn wait_next_mouse_button_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_mouse_button_changed_event :: :: method :: call
+
+    fn wait_next_cursor_moved_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_cursor_moved_event :: :: method :: call
+
+    fn wait_next_scrolled_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_scrolled_event :: :: method :: call
+
+    fn wait_next_dropped_path_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_dropped_path_event :: :: method :: call
+
+    fn wait_next_key_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_key_changed_event_for :: id :: method :: call
+
+    fn wait_next_character_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_character_event_for :: id :: method :: call
+
+    fn wait_next_character_mods_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_character_mods_event_for :: id :: method :: call
+
+    fn wait_next_mouse_button_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_mouse_button_changed_event_for :: id :: method :: call
+
+    fn wait_next_cursor_moved_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_cursor_moved_event_for :: id :: method :: call
+
+    fn wait_next_scrolled_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_scrolled_event_for :: id :: method :: call
+
+    fn wait_next_dropped_path_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_dropped_path_event_for :: id :: method :: call
+
+    fn wait_timeout_next_cursor_data(edit self, timeout: F64) -> Result[Option[WindowCursorData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_cursor_data :: :: method :: call
+
+    fn wait_timeout_next_scroll_data(edit self, timeout: F64) -> Result[Option[WindowScrollData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_scroll_data :: :: method :: call
+
+    fn wait_timeout_next_key_data(edit self, timeout: F64) -> Result[Option[WindowKeyData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_key_data :: :: method :: call
+
+    fn wait_timeout_next_character_data(edit self, timeout: F64) -> Result[Option[WindowCharacterData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_character_data :: :: method :: call
+
+    fn wait_timeout_next_character_mods_data(edit self, timeout: F64) -> Result[Option[WindowCharacterModsData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_character_mods_data :: :: method :: call
+
+    fn wait_timeout_next_mouse_button_data(edit self, timeout: F64) -> Result[Option[WindowMouseButtonData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_mouse_button_data :: :: method :: call
+
+    fn wait_timeout_next_dropped_paths_list(edit self, timeout: F64) -> Result[Option[List[Str]], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_dropped_paths_list :: :: method :: call
+
+    fn wait_timeout_next_cursor_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowCursorData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_cursor_data_for :: id :: method :: call
+
+    fn wait_timeout_next_scroll_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowScrollData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_scroll_data_for :: id :: method :: call
+
+    fn wait_timeout_next_key_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowKeyData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_key_data_for :: id :: method :: call
+
+    fn wait_timeout_next_character_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowCharacterData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_character_data_for :: id :: method :: call
+
+    fn wait_timeout_next_character_mods_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowCharacterModsData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_character_mods_data_for :: id :: method :: call
+
+    fn wait_timeout_next_mouse_button_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowMouseButtonData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_mouse_button_data_for :: id :: method :: call
+
+    fn wait_timeout_next_dropped_paths_list_for(edit self, id: WindowId, timeout: F64) -> Result[Option[List[Str]], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_dropped_paths_list_for :: id :: method :: call
+
+    fn wait_timeout_next_key_changed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_key_changed_event :: :: method :: call
+
+    fn wait_timeout_next_character_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_character_event :: :: method :: call
+
+    fn wait_timeout_next_character_mods_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_character_mods_event :: :: method :: call
+
+    fn wait_timeout_next_mouse_button_changed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_mouse_button_changed_event :: :: method :: call
+
+    fn wait_timeout_next_cursor_moved_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_cursor_moved_event :: :: method :: call
+
+    fn wait_timeout_next_scrolled_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_scrolled_event :: :: method :: call
+
+    fn wait_timeout_next_dropped_path_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_dropped_path_event :: :: method :: call
+
+    fn wait_timeout_next_key_changed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_key_changed_event_for :: id :: method :: call
+
+    fn wait_timeout_next_character_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_character_event_for :: id :: method :: call
+
+    fn wait_timeout_next_character_mods_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_character_mods_event_for :: id :: method :: call
+
+    fn wait_timeout_next_mouse_button_changed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_mouse_button_changed_event_for :: id :: method :: call
+
+    fn wait_timeout_next_cursor_moved_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_cursor_moved_event_for :: id :: method :: call
+
+    fn wait_timeout_next_scrolled_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_scrolled_event_for :: id :: method :: call
+
+    fn wait_timeout_next_dropped_path_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_dropped_path_event_for :: id :: method :: call

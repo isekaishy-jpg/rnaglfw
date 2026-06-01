@@ -1,0 +1,1471 @@
+use std.{List, Option, Result}
+use event.{JoystickEvent, JoystickId, MonitorEvent, MonitorId, WindowEvent}
+use runtime.{App, AppError, JoystickSnapshot, MonitorSnapshot, WindowSnapshot}
+use joystick.Joystick
+use window.{Monitor, Window}
+use window.WindowId
+
+fn windows_from_ids(read app: App, take ids: List[WindowId]) -> List[Window]:
+    let windows = List[Window] :: :: call
+    repeat while !ids.is_empty :: :: method:
+        let id = ids.remove :: 0 :: method
+        select app.window_option :: id :: method:
+            when Option.Some(window) => windows.push :: window :: method
+            when Option.None => ()
+    return windows
+
+fn window_snapshots_from_ids(read app: App, take ids: List[WindowId]) -> List[WindowSnapshot]:
+    let snapshots = List[WindowSnapshot] :: :: call
+    repeat while !ids.is_empty :: :: method:
+        let id = ids.remove :: 0 :: method
+        select app.window_snapshot_option :: id :: method:
+            when Option.Some(snapshot) => snapshots.push :: snapshot :: method
+            when Option.None => ()
+    return snapshots
+
+fn close_requested_windows_from_ids(read app: App, take ids: List[WindowId]) -> List[Window]:
+    let windows = List[Window] :: :: call
+    repeat while !ids.is_empty :: :: method:
+        let id = ids.remove :: 0 :: method
+        select app.close_requested_window :: id :: method:
+            when Option.Some(window) => windows.push :: window :: method
+            when Option.None => ()
+    return windows
+
+fn close_requested_window_snapshots_from_ids(read app: App, take ids: List[WindowId]) -> List[WindowSnapshot]:
+    let snapshots = List[WindowSnapshot] :: :: call
+    repeat while !ids.is_empty :: :: method:
+        let id = ids.remove :: 0 :: method
+        select app.close_requested_window_snapshot :: id :: method:
+            when Option.Some(snapshot) => snapshots.push :: snapshot :: method
+            when Option.None => ()
+    return snapshots
+
+fn monitors_from_ids(read app: App, take ids: List[MonitorId]) -> List[Monitor]:
+    let monitors = List[Monitor] :: :: call
+    repeat while !ids.is_empty :: :: method:
+        let id = ids.remove :: 0 :: method
+        select app.monitor_option :: id :: method:
+            when Option.Some(monitor) => monitors.push :: monitor :: method
+            when Option.None => ()
+    return monitors
+
+fn monitor_snapshots_from_ids(read app: App, take ids: List[MonitorId]) -> List[MonitorSnapshot]:
+    let snapshots = List[MonitorSnapshot] :: :: call
+    repeat while !ids.is_empty :: :: method:
+        let id = ids.remove :: 0 :: method
+        select app.monitor_snapshot_option :: id :: method:
+            when Option.Some(snapshot) => snapshots.push :: snapshot :: method
+            when Option.None => ()
+    return snapshots
+
+fn joysticks_from_ids(read app: App, take ids: List[JoystickId]) -> List[Joystick]:
+    let joysticks = List[Joystick] :: :: call
+    repeat while !ids.is_empty :: :: method:
+        let id = ids.remove :: 0 :: method
+        select app.joystick_option :: id :: method:
+            when Option.Some(joystick) => joysticks.push :: joystick :: method
+            when Option.None => ()
+    return joysticks
+
+fn joystick_snapshots_from_ids(read app: App, take ids: List[JoystickId]) -> List[JoystickSnapshot]:
+    let snapshots = List[JoystickSnapshot] :: :: call
+    repeat while !ids.is_empty :: :: method:
+        let id = ids.remove :: 0 :: method
+        select app.joystick_snapshot_option :: id :: method:
+            when Option.Some(snapshot) => snapshots.push :: snapshot :: method
+            when Option.None => ()
+    return snapshots
+
+fn windows_for_id_from_ids(read app: App, take ids: List[WindowId], target: WindowId) -> List[Window]:
+    let windows = List[Window] :: :: call
+    repeat while !ids.is_empty :: :: method:
+        let id = ids.remove :: 0 :: method
+        select:
+            when id != target => ()
+            else =>
+                select app.window_option :: id :: method:
+                    when Option.Some(window) => windows.push :: window :: method
+                    when Option.None => ()
+    return windows
+
+fn window_snapshots_for_id_from_ids(read app: App, take ids: List[WindowId], target: WindowId) -> List[WindowSnapshot]:
+    let snapshots = List[WindowSnapshot] :: :: call
+    repeat while !ids.is_empty :: :: method:
+        let id = ids.remove :: 0 :: method
+        select:
+            when id != target => ()
+            else =>
+                select app.window_snapshot_option :: id :: method:
+                    when Option.Some(snapshot) => snapshots.push :: snapshot :: method
+                    when Option.None => ()
+    return snapshots
+
+fn close_requested_windows_for_id_from_ids(read app: App, take ids: List[WindowId], target: WindowId) -> List[Window]:
+    let windows = List[Window] :: :: call
+    repeat while !ids.is_empty :: :: method:
+        let id = ids.remove :: 0 :: method
+        select:
+            when id != target => ()
+            else =>
+                select app.close_requested_window :: id :: method:
+                    when Option.Some(window) => windows.push :: window :: method
+                    when Option.None => ()
+    return windows
+
+fn close_requested_window_snapshots_for_id_from_ids(read app: App, take ids: List[WindowId], target: WindowId) -> List[WindowSnapshot]:
+    let snapshots = List[WindowSnapshot] :: :: call
+    repeat while !ids.is_empty :: :: method:
+        let id = ids.remove :: 0 :: method
+        select:
+            when id != target => ()
+            else =>
+                select app.close_requested_window_snapshot :: id :: method:
+                    when Option.Some(snapshot) => snapshots.push :: snapshot :: method
+                    when Option.None => ()
+    return snapshots
+
+fn monitors_for_id_from_ids(read app: App, take ids: List[MonitorId], target: MonitorId) -> List[Monitor]:
+    let monitors = List[Monitor] :: :: call
+    repeat while !ids.is_empty :: :: method:
+        let id = ids.remove :: 0 :: method
+        select:
+            when id != target => ()
+            else =>
+                select app.monitor_option :: id :: method:
+                    when Option.Some(monitor) => monitors.push :: monitor :: method
+                    when Option.None => ()
+    return monitors
+
+fn monitor_snapshots_for_id_from_ids(read app: App, take ids: List[MonitorId], target: MonitorId) -> List[MonitorSnapshot]:
+    let snapshots = List[MonitorSnapshot] :: :: call
+    repeat while !ids.is_empty :: :: method:
+        let id = ids.remove :: 0 :: method
+        select:
+            when id != target => ()
+            else =>
+                select app.monitor_snapshot_option :: id :: method:
+                    when Option.Some(snapshot) => snapshots.push :: snapshot :: method
+                    when Option.None => ()
+    return snapshots
+
+fn joysticks_for_id_from_ids(read app: App, take ids: List[JoystickId], target: JoystickId) -> List[Joystick]:
+    let joysticks = List[Joystick] :: :: call
+    repeat while !ids.is_empty :: :: method:
+        let id = ids.remove :: 0 :: method
+        select:
+            when id != target => ()
+            else =>
+                select app.joystick_option :: id :: method:
+                    when Option.Some(joystick) => joysticks.push :: joystick :: method
+                    when Option.None => ()
+    return joysticks
+
+fn joystick_snapshots_for_id_from_ids(read app: App, take ids: List[JoystickId], target: JoystickId) -> List[JoystickSnapshot]:
+    let snapshots = List[JoystickSnapshot] :: :: call
+    repeat while !ids.is_empty :: :: method:
+        let id = ids.remove :: 0 :: method
+        select:
+            when id != target => ()
+            else =>
+                select app.joystick_snapshot_option :: id :: method:
+                    when Option.Some(snapshot) => snapshots.push :: snapshot :: method
+                    when Option.None => ()
+    return snapshots
+
+impl App:
+    fn next_created_window_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_created_window_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_destroyed_window_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_destroyed_window_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_close_requested_window_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_close_requested_window_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_created_window_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_created_window_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_destroyed_window_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_destroyed_window_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_close_requested_window_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_close_requested_window_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_connected_monitor_event(edit self) -> Option[MonitorEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_connected_monitor_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_disconnected_monitor_event(edit self) -> Option[MonitorEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_disconnected_monitor_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_connected_monitor_event_for(edit self, id: MonitorId) -> Option[MonitorEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_connected_monitor_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_disconnected_monitor_event_for(edit self, id: MonitorId) -> Option[MonitorEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_disconnected_monitor_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_connected_joystick_event(edit self) -> Option[JoystickEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_connected_joystick_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_disconnected_joystick_event(edit self) -> Option[JoystickEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_disconnected_joystick_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_connected_joystick_event_for(edit self, id: JoystickId) -> Option[JoystickEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_connected_joystick_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_disconnected_joystick_event_for(edit self, id: JoystickId) -> Option[JoystickEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_disconnected_joystick_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_created_window_id(edit self) -> Option[WindowId]:
+        let batch = self.take_event_batch :: :: method
+        let id = batch.pop_created_window_id :: :: method
+        self.pending = batch.events
+        return id
+
+    fn next_destroyed_window_id(edit self) -> Option[WindowId]:
+        let batch = self.take_event_batch :: :: method
+        let id = batch.pop_destroyed_window_id :: :: method
+        self.pending = batch.events
+        return id
+
+    fn next_close_requested_window_id(edit self) -> Option[WindowId]:
+        let batch = self.take_event_batch :: :: method
+        let id = batch.pop_close_requested_window_id :: :: method
+        self.pending = batch.events
+        return id
+
+    fn next_connected_monitor_id(edit self) -> Option[MonitorId]:
+        let batch = self.take_event_batch :: :: method
+        let id = batch.pop_connected_monitor_id :: :: method
+        self.pending = batch.events
+        return id
+
+    fn next_disconnected_monitor_id(edit self) -> Option[MonitorId]:
+        let batch = self.take_event_batch :: :: method
+        let id = batch.pop_disconnected_monitor_id :: :: method
+        self.pending = batch.events
+        return id
+
+    fn next_connected_joystick_id(edit self) -> Option[JoystickId]:
+        let batch = self.take_event_batch :: :: method
+        let id = batch.pop_connected_joystick_id :: :: method
+        self.pending = batch.events
+        return id
+
+    fn next_disconnected_joystick_id(edit self) -> Option[JoystickId]:
+        let batch = self.take_event_batch :: :: method
+        let id = batch.pop_disconnected_joystick_id :: :: method
+        self.pending = batch.events
+        return id
+
+    fn next_created_window(edit self) -> Option[Window]:
+        select self.next_created_window_id :: :: method:
+            when Option.Some(id) => return self.window_option :: id :: method
+            when Option.None => return Option.None
+
+    fn next_created_window_snapshot(edit self) -> Option[WindowSnapshot]:
+        select self.next_created_window_id :: :: method:
+            when Option.Some(id) => return self.window_snapshot_option :: id :: method
+            when Option.None => return Option.None
+
+    fn next_close_requested_window(edit self) -> Option[Window]:
+        select self.next_close_requested_window_id :: :: method:
+            when Option.Some(id) => return self.close_requested_window :: id :: method
+            when Option.None => return Option.None
+
+    fn next_close_requested_window_snapshot(edit self) -> Option[WindowSnapshot]:
+        select self.next_close_requested_window_id :: :: method:
+            when Option.Some(id) => return self.close_requested_window_snapshot :: id :: method
+            when Option.None => return Option.None
+
+    fn next_connected_monitor(edit self) -> Option[Monitor]:
+        select self.next_connected_monitor_id :: :: method:
+            when Option.Some(id) => return self.monitor_option :: id :: method
+            when Option.None => return Option.None
+
+    fn next_connected_monitor_snapshot(edit self) -> Option[MonitorSnapshot]:
+        select self.next_connected_monitor_id :: :: method:
+            when Option.Some(id) => return self.monitor_snapshot_option :: id :: method
+            when Option.None => return Option.None
+
+    fn next_connected_joystick(edit self) -> Option[Joystick]:
+        select self.next_connected_joystick_id :: :: method:
+            when Option.Some(id) => return self.joystick_option :: id :: method
+            when Option.None => return Option.None
+
+    fn next_connected_joystick_snapshot(edit self) -> Option[JoystickSnapshot]:
+        select self.next_connected_joystick_id :: :: method:
+            when Option.Some(id) => return self.joystick_snapshot_option :: id :: method
+            when Option.None => return Option.None
+
+    fn next_created_window_for(edit self, id: WindowId) -> Option[Window]:
+        select self.next_created_window_event_for :: id :: method:
+            when Option.Some(_) => return self.window_option :: id :: method
+            when Option.None => return Option.None
+
+    fn next_created_window_snapshot_for(edit self, id: WindowId) -> Option[WindowSnapshot]:
+        select self.next_created_window_event_for :: id :: method:
+            when Option.Some(_) => return self.window_snapshot_option :: id :: method
+            when Option.None => return Option.None
+
+    fn next_close_requested_window_for(edit self, id: WindowId) -> Option[Window]:
+        select self.next_close_requested_window_event_for :: id :: method:
+            when Option.Some(_) => return self.close_requested_window :: id :: method
+            when Option.None => return Option.None
+
+    fn next_close_requested_window_snapshot_for(edit self, id: WindowId) -> Option[WindowSnapshot]:
+        select self.next_close_requested_window_event_for :: id :: method:
+            when Option.Some(_) => return self.close_requested_window_snapshot :: id :: method
+            when Option.None => return Option.None
+
+    fn next_connected_monitor_for(edit self, id: MonitorId) -> Option[Monitor]:
+        select self.next_connected_monitor_event_for :: id :: method:
+            when Option.Some(_) => return self.monitor_option :: id :: method
+            when Option.None => return Option.None
+
+    fn next_connected_monitor_snapshot_for(edit self, id: MonitorId) -> Option[MonitorSnapshot]:
+        select self.next_connected_monitor_event_for :: id :: method:
+            when Option.Some(_) => return self.monitor_snapshot_option :: id :: method
+            when Option.None => return Option.None
+
+    fn next_connected_joystick_for(edit self, id: JoystickId) -> Option[Joystick]:
+        select self.next_connected_joystick_event_for :: id :: method:
+            when Option.Some(_) => return self.joystick_option :: id :: method
+            when Option.None => return Option.None
+
+    fn next_connected_joystick_snapshot_for(edit self, id: JoystickId) -> Option[JoystickSnapshot]:
+        select self.next_connected_joystick_event_for :: id :: method:
+            when Option.Some(_) => return self.joystick_snapshot_option :: id :: method
+            when Option.None => return Option.None
+
+    fn pending_created_windows(edit self) -> List[Window]:
+        let ids = self.pending_created_window_ids :: :: method
+        return windows_from_ids :: self, ids :: call
+
+    fn pending_created_window_snapshots(edit self) -> List[WindowSnapshot]:
+        let ids = self.pending_created_window_ids :: :: method
+        return window_snapshots_from_ids :: self, ids :: call
+
+    fn pending_close_requested_windows(edit self) -> List[Window]:
+        let ids = self.pending_close_requested_window_ids :: :: method
+        return close_requested_windows_from_ids :: self, ids :: call
+
+    fn pending_close_requested_window_snapshots(edit self) -> List[WindowSnapshot]:
+        let ids = self.pending_close_requested_window_ids :: :: method
+        return close_requested_window_snapshots_from_ids :: self, ids :: call
+
+    fn pending_connected_monitors(edit self) -> List[Monitor]:
+        let ids = self.pending_connected_monitor_ids :: :: method
+        return monitors_from_ids :: self, ids :: call
+
+    fn pending_connected_monitor_snapshots(edit self) -> List[MonitorSnapshot]:
+        let ids = self.pending_connected_monitor_ids :: :: method
+        return monitor_snapshots_from_ids :: self, ids :: call
+
+    fn pending_connected_joysticks(edit self) -> List[Joystick]:
+        let ids = self.pending_connected_joystick_ids :: :: method
+        return joysticks_from_ids :: self, ids :: call
+
+    fn pending_connected_joystick_snapshots(edit self) -> List[JoystickSnapshot]:
+        let ids = self.pending_connected_joystick_ids :: :: method
+        return joystick_snapshots_from_ids :: self, ids :: call
+
+    fn pending_created_windows_for(edit self, id: WindowId) -> List[Window]:
+        let ids = self.pending_created_window_ids :: :: method
+        return windows_for_id_from_ids :: self, ids, id :: call
+
+    fn pending_created_window_snapshots_for(edit self, id: WindowId) -> List[WindowSnapshot]:
+        let ids = self.pending_created_window_ids :: :: method
+        return window_snapshots_for_id_from_ids :: self, ids, id :: call
+
+    fn pending_close_requested_windows_for(edit self, id: WindowId) -> List[Window]:
+        let ids = self.pending_close_requested_window_ids :: :: method
+        return close_requested_windows_for_id_from_ids :: self, ids, id :: call
+
+    fn pending_close_requested_window_snapshots_for(edit self, id: WindowId) -> List[WindowSnapshot]:
+        let ids = self.pending_close_requested_window_ids :: :: method
+        return close_requested_window_snapshots_for_id_from_ids :: self, ids, id :: call
+
+    fn pending_connected_monitors_for(edit self, id: MonitorId) -> List[Monitor]:
+        let ids = self.pending_connected_monitor_ids :: :: method
+        return monitors_for_id_from_ids :: self, ids, id :: call
+
+    fn pending_connected_monitor_snapshots_for(edit self, id: MonitorId) -> List[MonitorSnapshot]:
+        let ids = self.pending_connected_monitor_ids :: :: method
+        return monitor_snapshots_for_id_from_ids :: self, ids, id :: call
+
+    fn pending_connected_joysticks_for(edit self, id: JoystickId) -> List[Joystick]:
+        let ids = self.pending_connected_joystick_ids :: :: method
+        return joysticks_for_id_from_ids :: self, ids, id :: call
+
+    fn pending_connected_joystick_snapshots_for(edit self, id: JoystickId) -> List[JoystickSnapshot]:
+        let ids = self.pending_connected_joystick_ids :: :: method
+        return joystick_snapshots_for_id_from_ids :: self, ids, id :: call
+
+    fn pending_created_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.created_window_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_destroyed_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.destroyed_window_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_close_requested_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.close_requested_window_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_connected_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.connected_monitor_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_disconnected_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.disconnected_monitor_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_connected_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.connected_joystick_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_disconnected_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.disconnected_joystick_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_next_created_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_created_window_event :: :: method :: call
+
+    fn poll_next_destroyed_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_destroyed_window_event :: :: method :: call
+
+    fn poll_next_close_requested_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_close_requested_window_event :: :: method :: call
+
+    fn poll_next_created_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_created_window_event_for :: id :: method :: call
+
+    fn poll_next_destroyed_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_destroyed_window_event_for :: id :: method :: call
+
+    fn poll_next_close_requested_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_close_requested_window_event_for :: id :: method :: call
+
+    fn poll_next_connected_monitor_event(edit self) -> Result[Option[MonitorEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_connected_monitor_event :: :: method :: call
+
+    fn poll_next_disconnected_monitor_event(edit self) -> Result[Option[MonitorEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_disconnected_monitor_event :: :: method :: call
+
+    fn poll_next_connected_monitor_event_for(edit self, id: MonitorId) -> Result[Option[MonitorEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_connected_monitor_event_for :: id :: method :: call
+
+    fn poll_next_disconnected_monitor_event_for(edit self, id: MonitorId) -> Result[Option[MonitorEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_disconnected_monitor_event_for :: id :: method :: call
+
+    fn poll_next_connected_joystick_event(edit self) -> Result[Option[JoystickEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_connected_joystick_event :: :: method :: call
+
+    fn poll_next_disconnected_joystick_event(edit self) -> Result[Option[JoystickEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_disconnected_joystick_event :: :: method :: call
+
+    fn poll_next_connected_joystick_event_for(edit self, id: JoystickId) -> Result[Option[JoystickEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_connected_joystick_event_for :: id :: method :: call
+
+    fn poll_next_disconnected_joystick_event_for(edit self, id: JoystickId) -> Result[Option[JoystickEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_disconnected_joystick_event_for :: id :: method :: call
+
+    fn poll_next_created_window_id(edit self) -> Result[Option[WindowId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_created_window_id :: :: method :: call
+
+    fn poll_next_destroyed_window_id(edit self) -> Result[Option[WindowId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_destroyed_window_id :: :: method :: call
+
+    fn poll_next_close_requested_window_id(edit self) -> Result[Option[WindowId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_close_requested_window_id :: :: method :: call
+
+    fn poll_next_connected_monitor_id(edit self) -> Result[Option[MonitorId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_connected_monitor_id :: :: method :: call
+
+    fn poll_next_disconnected_monitor_id(edit self) -> Result[Option[MonitorId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_disconnected_monitor_id :: :: method :: call
+
+    fn poll_next_connected_joystick_id(edit self) -> Result[Option[JoystickId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_connected_joystick_id :: :: method :: call
+
+    fn poll_next_disconnected_joystick_id(edit self) -> Result[Option[JoystickId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_disconnected_joystick_id :: :: method :: call
+
+    fn poll_next_created_window(edit self) -> Result[Option[Window], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_created_window :: :: method :: call
+
+    fn poll_next_created_window_snapshot(edit self) -> Result[Option[WindowSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_created_window_snapshot :: :: method :: call
+
+    fn poll_next_close_requested_window(edit self) -> Result[Option[Window], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_close_requested_window :: :: method :: call
+
+    fn poll_next_close_requested_window_snapshot(edit self) -> Result[Option[WindowSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_close_requested_window_snapshot :: :: method :: call
+
+    fn poll_next_connected_monitor(edit self) -> Result[Option[Monitor], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_connected_monitor :: :: method :: call
+
+    fn poll_next_connected_monitor_snapshot(edit self) -> Result[Option[MonitorSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_connected_monitor_snapshot :: :: method :: call
+
+    fn poll_next_connected_joystick(edit self) -> Result[Option[Joystick], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_connected_joystick :: :: method :: call
+
+    fn poll_next_connected_joystick_snapshot(edit self) -> Result[Option[JoystickSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_connected_joystick_snapshot :: :: method :: call
+
+    fn poll_next_created_window_for(edit self, id: WindowId) -> Result[Option[Window], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_created_window_for :: id :: method :: call
+
+    fn poll_next_created_window_snapshot_for(edit self, id: WindowId) -> Result[Option[WindowSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_created_window_snapshot_for :: id :: method :: call
+
+    fn poll_next_close_requested_window_for(edit self, id: WindowId) -> Result[Option[Window], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_close_requested_window_for :: id :: method :: call
+
+    fn poll_next_close_requested_window_snapshot_for(edit self, id: WindowId) -> Result[Option[WindowSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_close_requested_window_snapshot_for :: id :: method :: call
+
+    fn poll_next_connected_monitor_for(edit self, id: MonitorId) -> Result[Option[Monitor], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_connected_monitor_for :: id :: method :: call
+
+    fn poll_next_connected_monitor_snapshot_for(edit self, id: MonitorId) -> Result[Option[MonitorSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_connected_monitor_snapshot_for :: id :: method :: call
+
+    fn poll_next_connected_joystick_for(edit self, id: JoystickId) -> Result[Option[Joystick], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_connected_joystick_for :: id :: method :: call
+
+    fn poll_next_connected_joystick_snapshot_for(edit self, id: JoystickId) -> Result[Option[JoystickSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_connected_joystick_snapshot_for :: id :: method :: call
+
+    fn poll_created_windows(edit self) -> List[Window]:
+        let ids = self.poll_created_window_ids :: :: method
+        return windows_from_ids :: self, ids :: call
+
+    fn poll_created_window_snapshots(edit self) -> List[WindowSnapshot]:
+        let ids = self.poll_created_window_ids :: :: method
+        return window_snapshots_from_ids :: self, ids :: call
+
+    fn poll_close_requested_windows(edit self) -> List[Window]:
+        let ids = self.poll_close_requested_window_ids :: :: method
+        return close_requested_windows_from_ids :: self, ids :: call
+
+    fn poll_close_requested_window_snapshots(edit self) -> List[WindowSnapshot]:
+        let ids = self.poll_close_requested_window_ids :: :: method
+        return close_requested_window_snapshots_from_ids :: self, ids :: call
+
+    fn poll_connected_monitors(edit self) -> List[Monitor]:
+        let ids = self.poll_connected_monitor_ids :: :: method
+        return monitors_from_ids :: self, ids :: call
+
+    fn poll_connected_monitor_snapshots(edit self) -> List[MonitorSnapshot]:
+        let ids = self.poll_connected_monitor_ids :: :: method
+        return monitor_snapshots_from_ids :: self, ids :: call
+
+    fn poll_connected_joysticks(edit self) -> List[Joystick]:
+        let ids = self.poll_connected_joystick_ids :: :: method
+        return joysticks_from_ids :: self, ids :: call
+
+    fn poll_connected_joystick_snapshots(edit self) -> List[JoystickSnapshot]:
+        let ids = self.poll_connected_joystick_ids :: :: method
+        return joystick_snapshots_from_ids :: self, ids :: call
+
+    fn poll_created_windows_for(edit self, id: WindowId) -> List[Window]:
+        let ids = self.poll_created_window_ids :: :: method
+        return windows_for_id_from_ids :: self, ids, id :: call
+
+    fn poll_created_window_snapshots_for(edit self, id: WindowId) -> List[WindowSnapshot]:
+        let ids = self.poll_created_window_ids :: :: method
+        return window_snapshots_for_id_from_ids :: self, ids, id :: call
+
+    fn poll_close_requested_windows_for(edit self, id: WindowId) -> List[Window]:
+        let ids = self.poll_close_requested_window_ids :: :: method
+        return close_requested_windows_for_id_from_ids :: self, ids, id :: call
+
+    fn poll_close_requested_window_snapshots_for(edit self, id: WindowId) -> List[WindowSnapshot]:
+        let ids = self.poll_close_requested_window_ids :: :: method
+        return close_requested_window_snapshots_for_id_from_ids :: self, ids, id :: call
+
+    fn poll_connected_monitors_for(edit self, id: MonitorId) -> List[Monitor]:
+        let ids = self.poll_connected_monitor_ids :: :: method
+        return monitors_for_id_from_ids :: self, ids, id :: call
+
+    fn poll_connected_monitor_snapshots_for(edit self, id: MonitorId) -> List[MonitorSnapshot]:
+        let ids = self.poll_connected_monitor_ids :: :: method
+        return monitor_snapshots_for_id_from_ids :: self, ids, id :: call
+
+    fn poll_connected_joysticks_for(edit self, id: JoystickId) -> List[Joystick]:
+        let ids = self.poll_connected_joystick_ids :: :: method
+        return joysticks_for_id_from_ids :: self, ids, id :: call
+
+    fn poll_connected_joystick_snapshots_for(edit self, id: JoystickId) -> List[JoystickSnapshot]:
+        let ids = self.poll_connected_joystick_ids :: :: method
+        return joystick_snapshots_for_id_from_ids :: self, ids, id :: call
+
+    fn poll_created_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_created_window_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_destroyed_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_destroyed_window_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_close_requested_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_close_requested_window_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_connected_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_connected_monitor_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_disconnected_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_disconnected_monitor_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_connected_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_connected_joystick_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_disconnected_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_disconnected_joystick_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_next_created_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_created_window_event :: :: method :: call
+
+    fn wait_next_destroyed_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_destroyed_window_event :: :: method :: call
+
+    fn wait_next_close_requested_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_close_requested_window_event :: :: method :: call
+
+    fn wait_next_created_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_created_window_event_for :: id :: method :: call
+
+    fn wait_next_destroyed_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_destroyed_window_event_for :: id :: method :: call
+
+    fn wait_next_close_requested_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_close_requested_window_event_for :: id :: method :: call
+
+    fn wait_next_connected_monitor_event(edit self) -> Result[Option[MonitorEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_connected_monitor_event :: :: method :: call
+
+    fn wait_next_disconnected_monitor_event(edit self) -> Result[Option[MonitorEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_disconnected_monitor_event :: :: method :: call
+
+    fn wait_next_connected_monitor_event_for(edit self, id: MonitorId) -> Result[Option[MonitorEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_connected_monitor_event_for :: id :: method :: call
+
+    fn wait_next_disconnected_monitor_event_for(edit self, id: MonitorId) -> Result[Option[MonitorEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_disconnected_monitor_event_for :: id :: method :: call
+
+    fn wait_next_connected_joystick_event(edit self) -> Result[Option[JoystickEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_connected_joystick_event :: :: method :: call
+
+    fn wait_next_disconnected_joystick_event(edit self) -> Result[Option[JoystickEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_disconnected_joystick_event :: :: method :: call
+
+    fn wait_next_connected_joystick_event_for(edit self, id: JoystickId) -> Result[Option[JoystickEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_connected_joystick_event_for :: id :: method :: call
+
+    fn wait_next_disconnected_joystick_event_for(edit self, id: JoystickId) -> Result[Option[JoystickEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_disconnected_joystick_event_for :: id :: method :: call
+
+    fn wait_next_created_window_id(edit self) -> Result[Option[WindowId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_created_window_id :: :: method :: call
+
+    fn wait_next_destroyed_window_id(edit self) -> Result[Option[WindowId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_destroyed_window_id :: :: method :: call
+
+    fn wait_next_close_requested_window_id(edit self) -> Result[Option[WindowId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_close_requested_window_id :: :: method :: call
+
+    fn wait_next_connected_monitor_id(edit self) -> Result[Option[MonitorId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_connected_monitor_id :: :: method :: call
+
+    fn wait_next_disconnected_monitor_id(edit self) -> Result[Option[MonitorId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_disconnected_monitor_id :: :: method :: call
+
+    fn wait_next_connected_joystick_id(edit self) -> Result[Option[JoystickId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_connected_joystick_id :: :: method :: call
+
+    fn wait_next_disconnected_joystick_id(edit self) -> Result[Option[JoystickId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_disconnected_joystick_id :: :: method :: call
+
+    fn wait_next_created_window(edit self) -> Result[Option[Window], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_created_window :: :: method :: call
+
+    fn wait_next_created_window_snapshot(edit self) -> Result[Option[WindowSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_created_window_snapshot :: :: method :: call
+
+    fn wait_next_close_requested_window(edit self) -> Result[Option[Window], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_close_requested_window :: :: method :: call
+
+    fn wait_next_close_requested_window_snapshot(edit self) -> Result[Option[WindowSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_close_requested_window_snapshot :: :: method :: call
+
+    fn wait_next_connected_monitor(edit self) -> Result[Option[Monitor], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_connected_monitor :: :: method :: call
+
+    fn wait_next_connected_monitor_snapshot(edit self) -> Result[Option[MonitorSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_connected_monitor_snapshot :: :: method :: call
+
+    fn wait_next_connected_joystick(edit self) -> Result[Option[Joystick], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_connected_joystick :: :: method :: call
+
+    fn wait_next_connected_joystick_snapshot(edit self) -> Result[Option[JoystickSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_connected_joystick_snapshot :: :: method :: call
+
+    fn wait_next_created_window_for(edit self, id: WindowId) -> Result[Option[Window], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_created_window_for :: id :: method :: call
+
+    fn wait_next_created_window_snapshot_for(edit self, id: WindowId) -> Result[Option[WindowSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_created_window_snapshot_for :: id :: method :: call
+
+    fn wait_next_close_requested_window_for(edit self, id: WindowId) -> Result[Option[Window], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_close_requested_window_for :: id :: method :: call
+
+    fn wait_next_close_requested_window_snapshot_for(edit self, id: WindowId) -> Result[Option[WindowSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_close_requested_window_snapshot_for :: id :: method :: call
+
+    fn wait_next_connected_monitor_for(edit self, id: MonitorId) -> Result[Option[Monitor], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_connected_monitor_for :: id :: method :: call
+
+    fn wait_next_connected_monitor_snapshot_for(edit self, id: MonitorId) -> Result[Option[MonitorSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_connected_monitor_snapshot_for :: id :: method :: call
+
+    fn wait_next_connected_joystick_for(edit self, id: JoystickId) -> Result[Option[Joystick], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_connected_joystick_for :: id :: method :: call
+
+    fn wait_next_connected_joystick_snapshot_for(edit self, id: JoystickId) -> Result[Option[JoystickSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_connected_joystick_snapshot_for :: id :: method :: call
+
+    fn wait_created_windows(edit self) -> List[Window]:
+        let ids = self.wait_created_window_ids :: :: method
+        return windows_from_ids :: self, ids :: call
+
+    fn wait_created_window_snapshots(edit self) -> List[WindowSnapshot]:
+        let ids = self.wait_created_window_ids :: :: method
+        return window_snapshots_from_ids :: self, ids :: call
+
+    fn wait_close_requested_windows(edit self) -> List[Window]:
+        let ids = self.wait_close_requested_window_ids :: :: method
+        return close_requested_windows_from_ids :: self, ids :: call
+
+    fn wait_close_requested_window_snapshots(edit self) -> List[WindowSnapshot]:
+        let ids = self.wait_close_requested_window_ids :: :: method
+        return close_requested_window_snapshots_from_ids :: self, ids :: call
+
+    fn wait_connected_monitors(edit self) -> List[Monitor]:
+        let ids = self.wait_connected_monitor_ids :: :: method
+        return monitors_from_ids :: self, ids :: call
+
+    fn wait_connected_monitor_snapshots(edit self) -> List[MonitorSnapshot]:
+        let ids = self.wait_connected_monitor_ids :: :: method
+        return monitor_snapshots_from_ids :: self, ids :: call
+
+    fn wait_connected_joysticks(edit self) -> List[Joystick]:
+        let ids = self.wait_connected_joystick_ids :: :: method
+        return joysticks_from_ids :: self, ids :: call
+
+    fn wait_connected_joystick_snapshots(edit self) -> List[JoystickSnapshot]:
+        let ids = self.wait_connected_joystick_ids :: :: method
+        return joystick_snapshots_from_ids :: self, ids :: call
+
+    fn wait_created_windows_for(edit self, id: WindowId) -> List[Window]:
+        let ids = self.wait_created_window_ids :: :: method
+        return windows_for_id_from_ids :: self, ids, id :: call
+
+    fn wait_created_window_snapshots_for(edit self, id: WindowId) -> List[WindowSnapshot]:
+        let ids = self.wait_created_window_ids :: :: method
+        return window_snapshots_for_id_from_ids :: self, ids, id :: call
+
+    fn wait_close_requested_windows_for(edit self, id: WindowId) -> List[Window]:
+        let ids = self.wait_close_requested_window_ids :: :: method
+        return close_requested_windows_for_id_from_ids :: self, ids, id :: call
+
+    fn wait_close_requested_window_snapshots_for(edit self, id: WindowId) -> List[WindowSnapshot]:
+        let ids = self.wait_close_requested_window_ids :: :: method
+        return close_requested_window_snapshots_for_id_from_ids :: self, ids, id :: call
+
+    fn wait_connected_monitors_for(edit self, id: MonitorId) -> List[Monitor]:
+        let ids = self.wait_connected_monitor_ids :: :: method
+        return monitors_for_id_from_ids :: self, ids, id :: call
+
+    fn wait_connected_monitor_snapshots_for(edit self, id: MonitorId) -> List[MonitorSnapshot]:
+        let ids = self.wait_connected_monitor_ids :: :: method
+        return monitor_snapshots_for_id_from_ids :: self, ids, id :: call
+
+    fn wait_connected_joysticks_for(edit self, id: JoystickId) -> List[Joystick]:
+        let ids = self.wait_connected_joystick_ids :: :: method
+        return joysticks_for_id_from_ids :: self, ids, id :: call
+
+    fn wait_connected_joystick_snapshots_for(edit self, id: JoystickId) -> List[JoystickSnapshot]:
+        let ids = self.wait_connected_joystick_ids :: :: method
+        return joystick_snapshots_for_id_from_ids :: self, ids, id :: call
+
+    fn wait_created_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_created_window_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_destroyed_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_destroyed_window_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_close_requested_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_close_requested_window_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_connected_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_connected_monitor_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_disconnected_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_disconnected_monitor_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_connected_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_connected_joystick_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_disconnected_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_disconnected_joystick_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_next_created_window_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_created_window_event :: :: method :: call
+
+    fn wait_timeout_next_destroyed_window_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_destroyed_window_event :: :: method :: call
+
+    fn wait_timeout_next_close_requested_window_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_close_requested_window_event :: :: method :: call
+
+    fn wait_timeout_next_created_window_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_created_window_event_for :: id :: method :: call
+
+    fn wait_timeout_next_destroyed_window_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_destroyed_window_event_for :: id :: method :: call
+
+    fn wait_timeout_next_close_requested_window_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_close_requested_window_event_for :: id :: method :: call
+
+    fn wait_timeout_next_connected_monitor_event(edit self, timeout: F64) -> Result[Option[MonitorEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_connected_monitor_event :: :: method :: call
+
+    fn wait_timeout_next_disconnected_monitor_event(edit self, timeout: F64) -> Result[Option[MonitorEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_disconnected_monitor_event :: :: method :: call
+
+    fn wait_timeout_next_connected_monitor_event_for(edit self, id: MonitorId, timeout: F64) -> Result[Option[MonitorEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_connected_monitor_event_for :: id :: method :: call
+
+    fn wait_timeout_next_disconnected_monitor_event_for(edit self, id: MonitorId, timeout: F64) -> Result[Option[MonitorEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_disconnected_monitor_event_for :: id :: method :: call
+
+    fn wait_timeout_next_connected_joystick_event(edit self, timeout: F64) -> Result[Option[JoystickEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_connected_joystick_event :: :: method :: call
+
+    fn wait_timeout_next_disconnected_joystick_event(edit self, timeout: F64) -> Result[Option[JoystickEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_disconnected_joystick_event :: :: method :: call
+
+    fn wait_timeout_next_connected_joystick_event_for(edit self, id: JoystickId, timeout: F64) -> Result[Option[JoystickEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_connected_joystick_event_for :: id :: method :: call
+
+    fn wait_timeout_next_disconnected_joystick_event_for(edit self, id: JoystickId, timeout: F64) -> Result[Option[JoystickEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_disconnected_joystick_event_for :: id :: method :: call
+
+    fn wait_timeout_next_created_window_id(edit self, timeout: F64) -> Result[Option[WindowId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_created_window_id :: :: method :: call
+
+    fn wait_timeout_next_destroyed_window_id(edit self, timeout: F64) -> Result[Option[WindowId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_destroyed_window_id :: :: method :: call
+
+    fn wait_timeout_next_close_requested_window_id(edit self, timeout: F64) -> Result[Option[WindowId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_close_requested_window_id :: :: method :: call
+
+    fn wait_timeout_next_connected_monitor_id(edit self, timeout: F64) -> Result[Option[MonitorId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_connected_monitor_id :: :: method :: call
+
+    fn wait_timeout_next_disconnected_monitor_id(edit self, timeout: F64) -> Result[Option[MonitorId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_disconnected_monitor_id :: :: method :: call
+
+    fn wait_timeout_next_connected_joystick_id(edit self, timeout: F64) -> Result[Option[JoystickId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_connected_joystick_id :: :: method :: call
+
+    fn wait_timeout_next_disconnected_joystick_id(edit self, timeout: F64) -> Result[Option[JoystickId], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_disconnected_joystick_id :: :: method :: call
+
+    fn wait_timeout_next_created_window(edit self, timeout: F64) -> Result[Option[Window], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_created_window :: :: method :: call
+
+    fn wait_timeout_next_created_window_snapshot(edit self, timeout: F64) -> Result[Option[WindowSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_created_window_snapshot :: :: method :: call
+
+    fn wait_timeout_next_close_requested_window(edit self, timeout: F64) -> Result[Option[Window], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_close_requested_window :: :: method :: call
+
+    fn wait_timeout_next_close_requested_window_snapshot(edit self, timeout: F64) -> Result[Option[WindowSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_close_requested_window_snapshot :: :: method :: call
+
+    fn wait_timeout_next_connected_monitor(edit self, timeout: F64) -> Result[Option[Monitor], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_connected_monitor :: :: method :: call
+
+    fn wait_timeout_next_connected_monitor_snapshot(edit self, timeout: F64) -> Result[Option[MonitorSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_connected_monitor_snapshot :: :: method :: call
+
+    fn wait_timeout_next_connected_joystick(edit self, timeout: F64) -> Result[Option[Joystick], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_connected_joystick :: :: method :: call
+
+    fn wait_timeout_next_connected_joystick_snapshot(edit self, timeout: F64) -> Result[Option[JoystickSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_connected_joystick_snapshot :: :: method :: call
+
+    fn wait_timeout_next_created_window_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Window], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_created_window_for :: id :: method :: call
+
+    fn wait_timeout_next_created_window_snapshot_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_created_window_snapshot_for :: id :: method :: call
+
+    fn wait_timeout_next_close_requested_window_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Window], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_close_requested_window_for :: id :: method :: call
+
+    fn wait_timeout_next_close_requested_window_snapshot_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_close_requested_window_snapshot_for :: id :: method :: call
+
+    fn wait_timeout_next_connected_monitor_for(edit self, id: MonitorId, timeout: F64) -> Result[Option[Monitor], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_connected_monitor_for :: id :: method :: call
+
+    fn wait_timeout_next_connected_monitor_snapshot_for(edit self, id: MonitorId, timeout: F64) -> Result[Option[MonitorSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_connected_monitor_snapshot_for :: id :: method :: call
+
+    fn wait_timeout_next_connected_joystick_for(edit self, id: JoystickId, timeout: F64) -> Result[Option[Joystick], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_connected_joystick_for :: id :: method :: call
+
+    fn wait_timeout_next_connected_joystick_snapshot_for(edit self, id: JoystickId, timeout: F64) -> Result[Option[JoystickSnapshot], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_connected_joystick_snapshot_for :: id :: method :: call
+
+    fn wait_timeout_created_windows(edit self, timeout: F64) -> List[Window]:
+        let ids = self.wait_timeout_created_window_ids :: timeout :: method
+        return windows_from_ids :: self, ids :: call
+
+    fn wait_timeout_created_window_snapshots(edit self, timeout: F64) -> List[WindowSnapshot]:
+        let ids = self.wait_timeout_created_window_ids :: timeout :: method
+        return window_snapshots_from_ids :: self, ids :: call
+
+    fn wait_timeout_close_requested_windows(edit self, timeout: F64) -> List[Window]:
+        let ids = self.wait_timeout_close_requested_window_ids :: timeout :: method
+        return close_requested_windows_from_ids :: self, ids :: call
+
+    fn wait_timeout_close_requested_window_snapshots(edit self, timeout: F64) -> List[WindowSnapshot]:
+        let ids = self.wait_timeout_close_requested_window_ids :: timeout :: method
+        return close_requested_window_snapshots_from_ids :: self, ids :: call
+
+    fn wait_timeout_connected_monitors(edit self, timeout: F64) -> List[Monitor]:
+        let ids = self.wait_timeout_connected_monitor_ids :: timeout :: method
+        return monitors_from_ids :: self, ids :: call
+
+    fn wait_timeout_connected_monitor_snapshots(edit self, timeout: F64) -> List[MonitorSnapshot]:
+        let ids = self.wait_timeout_connected_monitor_ids :: timeout :: method
+        return monitor_snapshots_from_ids :: self, ids :: call
+
+    fn wait_timeout_connected_joysticks(edit self, timeout: F64) -> List[Joystick]:
+        let ids = self.wait_timeout_connected_joystick_ids :: timeout :: method
+        return joysticks_from_ids :: self, ids :: call
+
+    fn wait_timeout_connected_joystick_snapshots(edit self, timeout: F64) -> List[JoystickSnapshot]:
+        let ids = self.wait_timeout_connected_joystick_ids :: timeout :: method
+        return joystick_snapshots_from_ids :: self, ids :: call
+
+    fn wait_timeout_created_windows_for(edit self, id: WindowId, timeout: F64) -> List[Window]:
+        let ids = self.wait_timeout_created_window_ids :: timeout :: method
+        return windows_for_id_from_ids :: self, ids, id :: call
+
+    fn wait_timeout_created_window_snapshots_for(edit self, id: WindowId, timeout: F64) -> List[WindowSnapshot]:
+        let ids = self.wait_timeout_created_window_ids :: timeout :: method
+        return window_snapshots_for_id_from_ids :: self, ids, id :: call
+
+    fn wait_timeout_close_requested_windows_for(edit self, id: WindowId, timeout: F64) -> List[Window]:
+        let ids = self.wait_timeout_close_requested_window_ids :: timeout :: method
+        return close_requested_windows_for_id_from_ids :: self, ids, id :: call
+
+    fn wait_timeout_close_requested_window_snapshots_for(edit self, id: WindowId, timeout: F64) -> List[WindowSnapshot]:
+        let ids = self.wait_timeout_close_requested_window_ids :: timeout :: method
+        return close_requested_window_snapshots_for_id_from_ids :: self, ids, id :: call
+
+    fn wait_timeout_connected_monitors_for(edit self, id: MonitorId, timeout: F64) -> List[Monitor]:
+        let ids = self.wait_timeout_connected_monitor_ids :: timeout :: method
+        return monitors_for_id_from_ids :: self, ids, id :: call
+
+    fn wait_timeout_connected_monitor_snapshots_for(edit self, id: MonitorId, timeout: F64) -> List[MonitorSnapshot]:
+        let ids = self.wait_timeout_connected_monitor_ids :: timeout :: method
+        return monitor_snapshots_for_id_from_ids :: self, ids, id :: call
+
+    fn wait_timeout_connected_joysticks_for(edit self, id: JoystickId, timeout: F64) -> List[Joystick]:
+        let ids = self.wait_timeout_connected_joystick_ids :: timeout :: method
+        return joysticks_for_id_from_ids :: self, ids, id :: call
+
+    fn wait_timeout_connected_joystick_snapshots_for(edit self, id: JoystickId, timeout: F64) -> List[JoystickSnapshot]:
+        let ids = self.wait_timeout_connected_joystick_ids :: timeout :: method
+        return joystick_snapshots_for_id_from_ids :: self, ids, id :: call
+
+    fn wait_timeout_created_window_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_created_window_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_destroyed_window_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_destroyed_window_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_close_requested_window_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_close_requested_window_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_connected_monitor_events_for(edit self, id: MonitorId, timeout: F64) -> List[MonitorEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_connected_monitor_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_disconnected_monitor_events_for(edit self, id: MonitorId, timeout: F64) -> List[MonitorEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_disconnected_monitor_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_connected_joystick_events_for(edit self, id: JoystickId, timeout: F64) -> List[JoystickEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_connected_joystick_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_disconnected_joystick_events_for(edit self, id: JoystickId, timeout: F64) -> List[JoystickEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_disconnected_joystick_events_for :: id :: method
+        self.pending = batch.events
+        return events

@@ -1,0 +1,85 @@
+use std.{Option, Result}
+use bridge.{cint_to_index, index_to_cint}
+use event.{JoystickId, MonitorId}
+use runtime.App
+use window.WindowId
+
+impl App:
+    fn has_joysticks(read self) -> Bool:
+        let ids = self.connected_joystick_ids :: :: method
+        return !ids.is_empty :: :: method
+
+    fn has_monitors(read self) -> Bool:
+        return !self.monitors.is_empty :: :: method
+
+    fn joystick_index(read self, id: JoystickId) -> Option[Index]:
+        let ids = self.connected_joystick_ids :: :: method
+        let count = ids.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return Option.None
+            select:
+                when ids[index] == id => return Option.Some :: index :: call
+                else => ()
+            scan = scan + 1
+        return Option.None
+
+    fn has_joystick(read self, id: JoystickId) -> Bool:
+        select self.joystick_index :: id :: method:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn window_index(read self, id: WindowId) -> Option[Index]:
+        let count = self.windows.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return Option.None
+            select:
+                when self.windows[index].window.id == id => return Option.Some :: index :: call
+                else => ()
+            scan = scan + 1
+        return Option.None
+
+    fn has_window(read self, id: WindowId) -> Bool:
+        select self.window_index :: id :: method:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn monitor_index(read self, id: MonitorId) -> Option[Index]:
+        let count = self.monitors.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return Option.None
+            select:
+                when self.monitors[index].id == id => return Option.Some :: index :: call
+                else => ()
+            scan = scan + 1
+        return Option.None
+
+    fn has_monitor(read self, id: MonitorId) -> Bool:
+        select self.monitor_index :: id :: method:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn current_context_window_index(read self) -> Option[Index]:
+        select self.current_context_window :: :: method:
+            when Result.Ok(window) => return self.window_index :: window.id :: method
+            when Result.Err(_) => return Option.None
+
+    fn has_current_context_window(read self) -> Bool:
+        select self.current_context_window_index :: :: method:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn primary_monitor_index(read self) -> Option[Index]:
+        select self.primary_monitor_id :: :: method:
+            when Result.Ok(id) => return self.monitor_index :: id :: method
+            when Result.Err(_) => return Option.None
+
+    fn has_primary_monitor(read self) -> Bool:
+        select self.primary_monitor_index :: :: method:
+            when Option.Some(_) => return true
+            when Option.None => return false

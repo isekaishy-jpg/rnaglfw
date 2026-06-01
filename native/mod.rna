@@ -1,0 +1,170 @@
+use std.Option
+use core.{GlfwMonitor, GlfwMonitorRaw, GlfwWindow, GlfwWindowRaw}
+use core.glfw_cint_is_true
+
+pub type GlfwWin32HWnd = *edit CVoid
+pub type GlfwWglContext = *edit CVoid
+pub type GlfwEglDisplay = *edit CVoid
+pub type GlfwEglContext = *edit CVoid
+pub type GlfwEglSurface = *edit CVoid
+pub type GlfwOsMesaContext = *edit CVoid
+
+pub struct GlfwOSMesaColorBuffer:
+    pub width: CInt
+    pub height: CInt
+    pub format: CInt
+    pub buffer: *edit CVoid
+
+pub struct GlfwOSMesaDepthBuffer:
+    pub width: CInt
+    pub height: CInt
+    pub bytes_per_value: CInt
+    pub buffer: *edit CVoid
+
+impl GlfwOSMesaColorBuffer:
+    fn width_value(read self) -> CInt:
+        return self.width
+
+    fn height_value(read self) -> CInt:
+        return self.height
+
+    fn format_value(read self) -> CInt:
+        return self.format
+
+    fn buffer_ptr(read self) -> *edit CVoid:
+        return self.buffer
+
+impl GlfwOSMesaDepthBuffer:
+    fn width_value(read self) -> CInt:
+        return self.width
+
+    fn height_value(read self) -> CInt:
+        return self.height
+
+    fn bytes_per_value(read self) -> CInt:
+        return self.bytes_per_value
+
+    fn buffer_ptr(read self) -> *edit CVoid:
+        return self.buffer
+
+pub fn glfw_osmesa_color_buffer_width(read report: GlfwOSMesaColorBuffer) -> CInt:
+    return report.width
+
+pub fn glfw_osmesa_color_buffer_height(read report: GlfwOSMesaColorBuffer) -> CInt:
+    return report.height
+
+pub fn glfw_osmesa_color_buffer_format(read report: GlfwOSMesaColorBuffer) -> CInt:
+    return report.format
+
+pub fn glfw_osmesa_color_buffer_data(read report: GlfwOSMesaColorBuffer) -> *edit CVoid:
+    return report.buffer
+
+pub fn glfw_osmesa_depth_buffer_width(read report: GlfwOSMesaDepthBuffer) -> CInt:
+    return report.width
+
+pub fn glfw_osmesa_depth_buffer_height(read report: GlfwOSMesaDepthBuffer) -> CInt:
+    return report.height
+
+pub fn glfw_osmesa_depth_buffer_bytes_per_value(read report: GlfwOSMesaDepthBuffer) -> CInt:
+    return report.bytes_per_value
+
+pub fn glfw_osmesa_depth_buffer_data(read report: GlfwOSMesaDepthBuffer) -> *edit CVoid:
+    return report.buffer
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetWin32Adapter(monitor: *edit GlfwMonitorRaw) -> *read CChar
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetWin32Monitor(monitor: *edit GlfwMonitorRaw) -> *read CChar
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetWin32Window(window: *edit GlfwWindowRaw) -> GlfwWin32HWnd
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetWGLContext(window: *edit GlfwWindowRaw) -> GlfwWglContext
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetEGLDisplay() -> GlfwEglDisplay
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetEGLContext(window: *edit GlfwWindowRaw) -> GlfwEglContext
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetEGLSurface(window: *edit GlfwWindowRaw) -> GlfwEglSurface
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetOSMesaColorBuffer(window: *edit GlfwWindowRaw, width: *edit CInt, height: *edit CInt, format: *edit CInt, buffer: *edit *edit CVoid) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetOSMesaDepthBuffer(window: *edit GlfwWindowRaw, width: *edit CInt, height: *edit CInt, bytes_per_value: *edit CInt, buffer: *edit *edit CVoid) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetOSMesaContext(window: *edit GlfwWindowRaw) -> GlfwOsMesaContext
+
+pub fn glfw_get_egl_display() -> GlfwEglDisplay:
+    return #unsafe glfwGetEGLDisplay :: :: call
+
+impl GlfwMonitor:
+    fn win32_adapter_name(read self) -> *read CChar:
+        return #unsafe glfwGetWin32Adapter :: self.raw :: call
+
+    fn win32_monitor_name(read self) -> *read CChar:
+        return #unsafe glfwGetWin32Monitor :: self.raw :: call
+
+impl GlfwWindow:
+    fn win32_window(read self) -> GlfwWin32HWnd:
+        return #unsafe glfwGetWin32Window :: self.raw :: call
+
+    fn wgl_context(read self) -> GlfwWglContext:
+        return #unsafe glfwGetWGLContext :: self.raw :: call
+
+    fn egl_context(read self) -> GlfwEglContext:
+        return #unsafe glfwGetEGLContext :: self.raw :: call
+
+    fn egl_surface(read self) -> GlfwEglSurface:
+        return #unsafe glfwGetEGLSurface :: self.raw :: call
+
+    fn osmesa_color_buffer(read self) -> Option[GlfwOSMesaColorBuffer]:
+        let width: CInt = 0
+        let height: CInt = 0
+        let format: CInt = 0
+        let buffer: *edit CVoid = null
+        let width_ptr: *edit CInt = #unsafe &raw edit width
+        let height_ptr: *edit CInt = #unsafe &raw edit height
+        let format_ptr: *edit CInt = #unsafe &raw edit format
+        let buffer_ptr: *edit *edit CVoid = #unsafe &raw edit buffer
+        let success: CInt = #unsafe glfwGetOSMesaColorBuffer :: self.raw, width_ptr, height_ptr, format_ptr, buffer_ptr :: call
+        select:
+            when glfw_cint_is_true :: success :: call =>
+                let report = GlfwOSMesaColorBuffer :: width, height, format, buffer :: call
+                return Option.Some :: report :: call
+            else => return Option.None
+
+    fn osmesa_depth_buffer(read self) -> Option[GlfwOSMesaDepthBuffer]:
+        let width: CInt = 0
+        let height: CInt = 0
+        let bytes_per_value: CInt = 0
+        let buffer: *edit CVoid = null
+        let width_ptr: *edit CInt = #unsafe &raw edit width
+        let height_ptr: *edit CInt = #unsafe &raw edit height
+        let bytes_ptr: *edit CInt = #unsafe &raw edit bytes_per_value
+        let buffer_ptr: *edit *edit CVoid = #unsafe &raw edit buffer
+        let success: CInt = #unsafe glfwGetOSMesaDepthBuffer :: self.raw, width_ptr, height_ptr, bytes_ptr, buffer_ptr :: call
+        select:
+            when glfw_cint_is_true :: success :: call =>
+                let report = GlfwOSMesaDepthBuffer :: width, height, bytes_per_value, buffer :: call
+                return Option.Some :: report :: call
+            else => return Option.None
+
+    fn osmesa_context(read self) -> GlfwOsMesaContext:
+        return #unsafe glfwGetOSMesaContext :: self.raw :: call

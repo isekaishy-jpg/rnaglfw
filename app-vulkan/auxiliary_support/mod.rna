@@ -1,0 +1,162 @@
+use std.{List, Option, Result}
+use runa_app.{AppError, Window, WindowId, WindowSnapshot}
+use present.{VulkanPresentApp, VulkanPresentRuntimeError}
+
+impl VulkanPresentApp:
+    fn auxiliary_window_ids(read self) -> List[WindowId]:
+        let ids = self.app.window_ids :: :: method
+        let auxiliary_ids = List[WindowId] :: :: call
+        repeat while !ids.is_empty :: :: method:
+            let id = ids.remove :: 0 :: method
+            select:
+                when id == self.window.id => ()
+                else => auxiliary_ids.push :: id :: method
+        return auxiliary_ids
+
+    fn auxiliary_window_count(read self) -> Index:
+        let ids = self.auxiliary_window_ids :: :: method
+        return ids.count :: :: method
+
+    fn has_auxiliary_windows(read self) -> Bool:
+        return self.auxiliary_window_count :: :: method != 0
+
+    fn auxiliary_window(read self, id: WindowId) -> Option[Window]:
+        select self.window_by_id_option :: id :: method:
+            when Option.Some(window) =>
+                select:
+                    when id == self.window.id => return Option.None
+                    else => return Option.Some :: window :: call
+            when Option.None => return Option.None
+
+    fn auxiliary_window_snapshot(read self, id: WindowId) -> Option[WindowSnapshot]:
+        select self.window_snapshot_by_id_option :: id :: method:
+            when Option.Some(snapshot) =>
+                select:
+                    when id == self.window.id => return Option.None
+                    else => return Option.Some :: snapshot :: call
+            when Option.None => return Option.None
+
+    fn auxiliary_windows_snapshot(read self) -> List[Window]:
+        let windows = self.app.windows_snapshot :: :: method
+        let auxiliary_windows = List[Window] :: :: call
+        repeat while !windows.is_empty :: :: method:
+            let window = windows.remove :: 0 :: method
+            select:
+                when window.id == self.window.id => ()
+                else => auxiliary_windows.push :: window :: method
+        return auxiliary_windows
+
+    fn auxiliary_window_snapshots(read self) -> List[WindowSnapshot]:
+        let snapshots = self.app.window_snapshots :: :: method
+        let auxiliary_snapshots = List[WindowSnapshot] :: :: call
+        repeat while !snapshots.is_empty :: :: method:
+            let snapshot = snapshots.remove :: 0 :: method
+            select:
+                when snapshot.window.id == self.window.id => ()
+                else => auxiliary_snapshots.push :: snapshot :: method
+        return auxiliary_snapshots
+
+    fn auxiliary_close_requested_window_ids(read self) -> List[WindowId]:
+        let ids = self.app.close_requested_window_ids :: :: method
+        let auxiliary_ids = List[WindowId] :: :: call
+        repeat while !ids.is_empty :: :: method:
+            let id = ids.remove :: 0 :: method
+            select:
+                when id == self.window.id => ()
+                else => auxiliary_ids.push :: id :: method
+        return auxiliary_ids
+
+    fn auxiliary_close_requested_window_count(read self) -> Index:
+        let ids = self.auxiliary_close_requested_window_ids :: :: method
+        return ids.count :: :: method
+
+    fn has_close_requested_auxiliary_windows(read self) -> Bool:
+        return self.auxiliary_close_requested_window_count :: :: method != 0
+
+    fn auxiliary_window_close_requested(read self, id: WindowId) -> Bool:
+        select:
+            when id == self.window.id => return false
+            else => return self.window_close_requested :: id :: method
+
+    fn auxiliary_close_requested_window(read self, id: WindowId) -> Option[Window]:
+        select:
+            when id == self.window.id => return Option.None
+            else => return self.close_requested_window :: id :: method
+
+    fn auxiliary_close_requested_window_snapshot(read self, id: WindowId) -> Option[WindowSnapshot]:
+        select:
+            when id == self.window.id => return Option.None
+            else => return self.close_requested_window_snapshot :: id :: method
+
+    fn auxiliary_close_requested_windows(read self) -> List[Window]:
+        let windows = self.app.close_requested_windows :: :: method
+        let auxiliary_windows = List[Window] :: :: call
+        repeat while !windows.is_empty :: :: method:
+            let window = windows.remove :: 0 :: method
+            select:
+                when window.id == self.window.id => ()
+                else => auxiliary_windows.push :: window :: method
+        return auxiliary_windows
+
+    fn auxiliary_close_requested_window_snapshots(read self) -> List[WindowSnapshot]:
+        let snapshots = self.app.close_requested_window_snapshots :: :: method
+        let auxiliary_snapshots = List[WindowSnapshot] :: :: call
+        repeat while !snapshots.is_empty :: :: method:
+            let snapshot = snapshots.remove :: 0 :: method
+            select:
+                when snapshot.window.id == self.window.id => ()
+                else => auxiliary_snapshots.push :: snapshot :: method
+        return auxiliary_snapshots
+
+    fn close_auxiliary_windows(read self) -> Unit:
+        let ids = self.app.window_ids :: :: method
+        repeat while !ids.is_empty :: :: method:
+            let id = ids.remove :: 0 :: method
+            select:
+                when id == self.window.id => ()
+                else =>
+                    select self.app.window :: id :: method:
+                        when Result.Ok(window) => window.close :: :: method
+                        when Result.Err(_) => ()
+        return
+
+    fn destroy_auxiliary_window_by_id(edit self, id: WindowId) -> Result[Unit, VulkanPresentRuntimeError]:
+        select:
+            when id == self.window.id => return Result.Err :: VulkanPresentRuntimeError.OwnedWindowProtected :: call
+            else => ()
+        select self.app.destroy_window_by_id :: id :: method:
+            when Result.Ok(_) => return Result.Ok :: () :: call
+            when Result.Err(err) =>
+                let error = VulkanPresentRuntimeError.App :: err :: call
+                return Result.Err :: error :: call
+
+    fn destroy_auxiliary_window(edit self, take window: Window) -> Result[Unit, VulkanPresentRuntimeError]:
+        return self.destroy_auxiliary_window_by_id :: window.id :: method
+
+    fn destroy_auxiliary_close_requested_windows(edit self) -> Index:
+        let ids = self.app.close_requested_window_ids :: :: method
+        let destroyed: CInt = 0
+        repeat while !ids.is_empty :: :: method:
+            let id = ids.remove :: 0 :: method
+            select:
+                when id == self.window.id => ()
+                else =>
+                    select self.app.destroy_window_by_id :: id :: method:
+                        when Result.Ok(_) => destroyed = destroyed + 1
+                        when Result.Err(_) => ()
+        let Result.Ok(total) = destroyed as Maybe[Index] else => return 0
+        return total
+
+    fn destroy_all_auxiliary_windows(edit self) -> Index:
+        let ids = self.app.window_ids :: :: method
+        let destroyed: CInt = 0
+        repeat while !ids.is_empty :: :: method:
+            let id = ids.remove :: 0 :: method
+            select:
+                when id == self.window.id => ()
+                else =>
+                    select self.app.destroy_window_by_id :: id :: method:
+                        when Result.Ok(_) => destroyed = destroyed + 1
+                        when Result.Err(_) => ()
+        let Result.Ok(total) = destroyed as Maybe[Index] else => return 0
+        return total

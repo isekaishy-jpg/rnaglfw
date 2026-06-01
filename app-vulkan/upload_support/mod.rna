@@ -1,0 +1,445 @@
+use std.{ByteBuffer, Option, Result}
+
+use present.{VkBuffer, VkBufferCreateInfo, VkDeviceMemory, VkMemoryAllocateInfo, VkMemoryRequirements, VulkanMemoryAllocationPlan}
+use present.{VulkanPresentApp, VulkanPresentContext, VulkanPresentError, VulkanTransferSourceBuffer, VulkanTransferSourceBufferPlan}
+use present.{VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_SHARING_MODE_EXCLUSIVE, VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO}
+use present.{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, VK_SUCCESS}
+use pixel_support.{VulkanPixelFormat, VulkanPixelFrame}
+use runa_app.{RgbaImage, rgba_image}
+use surface_support.surface_image_shape_from_extent
+
+const ZERO_USIZE: USize = 0USize
+
+fn copy_transfer_source_buffer_bytes_from_memory(read context: VulkanPresentContext, memory: VkDeviceMemory, byte_count: Index) -> Result[ByteBuffer, VulkanPresentError]:
+    let copied = ByteBuffer :: :: call
+    copied.reserve :: byte_count :: method
+    select:
+        when byte_count == 0 => return Result.Ok :: copied :: call
+        else => ()
+    let Result.Ok(byte_count_u64) = byte_count as Maybe[U64] else =>
+        let error = VulkanPresentError.StagingSizeOutOfRange :: byte_count :: call
+        return Result.Err :: error :: call
+    let mapped_memory: *edit CVoid = null
+    let mapped_memory_ptr: *edit *edit CVoid = #unsafe &raw edit mapped_memory
+    let map_result = #unsafe context.map_memory :: context.device, memory, 0U64, byte_count_u64, 0, mapped_memory_ptr :: call
+    select:
+        when map_result != 0 || mapped_memory.is_null :: :: method =>
+            let error = VulkanPresentError.StagingMemoryMapFailed :: map_result :: call
+            return Result.Err :: error :: call
+        else => ()
+    let mapped_address = #unsafe raw_pointer_address_edit :: mapped_memory :: call
+    let mapped_bytes = #unsafe raw_pointer_from_address_edit[U8] :: mapped_address :: call
+    let Result.Ok(scan_limit) = byte_count as Maybe[USize] else =>
+        #unsafe context.unmap_memory :: context.device, memory :: call
+        let error = VulkanPresentError.StagingSizeOutOfRange :: byte_count :: call
+        return Result.Err :: error :: call
+    let scan: USize = ZERO_USIZE
+    repeat while scan < scan_limit:
+        let Result.Ok(offset) = scan as Maybe[ISize] else =>
+            #unsafe context.unmap_memory :: context.device, memory :: call
+            let error = VulkanPresentError.StagingSizeOutOfRange :: byte_count :: call
+            return Result.Err :: error :: call
+        let slot = #unsafe mapped_bytes.offset :: offset :: method
+        let raw: U8 = #unsafe slot.load :: :: method
+        copied.push :: raw :: method
+        scan = scan + 1USize
+    #unsafe context.unmap_memory :: context.device, memory :: call
+    return Result.Ok :: copied :: call
+
+fn write_transfer_source_buffer_bytes_to_memory(read context: VulkanPresentContext, memory: VkDeviceMemory, required_byte_count: Index, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+    let actual_byte_count = pixels.byte_count :: :: method
+    select:
+        when actual_byte_count != required_byte_count =>
+            let error = VulkanPresentError.PixelByteCountMismatch :: actual_byte_count, required_byte_count :: call
+            return Result.Err :: error :: call
+        when required_byte_count == 0 => return Result.Ok :: :: call
+        else => ()
+    let Result.Ok(byte_count_u64) = required_byte_count as Maybe[U64] else =>
+        let error = VulkanPresentError.StagingSizeOutOfRange :: required_byte_count :: call
+        return Result.Err :: error :: call
+    let mapped_memory: *edit CVoid = null
+    let mapped_memory_ptr: *edit *edit CVoid = #unsafe &raw edit mapped_memory
+    let map_result = #unsafe context.map_memory :: context.device, memory, 0U64, byte_count_u64, 0, mapped_memory_ptr :: call
+    select:
+        when map_result != 0 || mapped_memory.is_null :: :: method =>
+            let error = VulkanPresentError.StagingMemoryMapFailed :: map_result :: call
+            return Result.Err :: error :: call
+        else => ()
+    let mapped_address = #unsafe raw_pointer_address_edit :: mapped_memory :: call
+    let mapped_bytes = #unsafe raw_pointer_from_address_edit[U8] :: mapped_address :: call
+    let source_ptr: *read U8 = #unsafe &raw read pixels[0]
+    let Result.Ok(scan_limit) = required_byte_count as Maybe[USize] else =>
+        #unsafe context.unmap_memory :: context.device, memory :: call
+        let error = VulkanPresentError.StagingSizeOutOfRange :: required_byte_count :: call
+        return Result.Err :: error :: call
+    let scan: USize = ZERO_USIZE
+    repeat while scan < scan_limit:
+        let Result.Ok(offset) = scan as Maybe[ISize] else =>
+            #unsafe context.unmap_memory :: context.device, memory :: call
+            let error = VulkanPresentError.StagingSizeOutOfRange :: required_byte_count :: call
+            return Result.Err :: error :: call
+        let source_slot = #unsafe source_ptr.offset :: offset :: method
+        let raw: U8 = #unsafe source_slot.load :: :: method
+        let dest_slot = #unsafe mapped_bytes.offset :: offset :: method
+        #unsafe dest_slot.store :: raw :: method
+        scan = scan + 1USize
+    #unsafe context.unmap_memory :: context.device, memory :: call
+    return Result.Ok :: :: call
+
+fn transfer_source_buffer_from_plan_internal(read context: VulkanPresentContext, read plan: VulkanTransferSourceBufferPlan) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+    let buffer: VkBuffer = 0U64
+    let memory: VkDeviceMemory = 0U64
+    let buffer_info = VkBufferCreateInfo :: :: call
+        stype = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO
+        pnext = null
+        flags = 0
+        size = plan.size :: :: method
+        usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+        sharing_mode = VK_SHARING_MODE_EXCLUSIVE
+        queuefamily_index_count = 0
+        queuefamily_indices = null
+    let buffer_info_ptr: *read VkBufferCreateInfo = #unsafe &raw read buffer_info
+    let buffer_ptr: *edit VkBuffer = #unsafe &raw edit buffer
+    let buffer_result = #unsafe context.create_buffer :: context.device, buffer_info_ptr, null, buffer_ptr :: call
+    select:
+        when buffer_result != VK_SUCCESS || buffer == 0U64 =>
+            let error = VulkanPresentError.StagingBufferCreateFailed :: buffer_result :: call
+            return Result.Err :: error :: call
+        else => ()
+    let allocation_info = VkMemoryAllocateInfo :: :: call
+        stype = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO
+        pnext = null
+        allocation_size = plan.allocation_size :: :: method
+        memory_type_index = plan.memory_type_index :: :: method
+    let allocation_info_ptr: *read VkMemoryAllocateInfo = #unsafe &raw read allocation_info
+    let memory_ptr: *edit VkDeviceMemory = #unsafe &raw edit memory
+    let allocate_result = #unsafe context.allocate_memory :: context.device, allocation_info_ptr, null, memory_ptr :: call
+    select:
+        when allocate_result != VK_SUCCESS || memory == 0U64 =>
+            select:
+                when buffer != 0U64 => #unsafe context.destroy_buffer :: context.device, buffer, null :: call
+                else => ()
+            let error = VulkanPresentError.StagingMemoryAllocateFailed :: allocate_result :: call
+            return Result.Err :: error :: call
+        else => ()
+    let bind_result = #unsafe context.bind_buffer_memory :: context.device, buffer, memory, 0U64 :: call
+    select:
+        when bind_result != VK_SUCCESS =>
+            select:
+                when buffer != 0U64 => #unsafe context.destroy_buffer :: context.device, buffer, null :: call
+                else => ()
+            select:
+                when memory != 0U64 => #unsafe context.free_memory :: context.device, memory, null :: call
+                else => ()
+            let error = VulkanPresentError.StagingBufferBindFailed :: bind_result :: call
+            return Result.Err :: error :: call
+        else => ()
+    let upload = VulkanTransferSourceBuffer :: :: call
+        buffer = buffer
+        memory = memory
+        byte_count = plan.byte_count
+        plan = plan
+    return Result.Ok :: upload :: call
+
+impl VulkanTransferSourceBufferPlan:
+    fn requirements(read self) -> VkMemoryRequirements:
+        return self.requirements
+
+    fn allocation_plan(read self) -> VulkanMemoryAllocationPlan:
+        return self.allocation_plan
+
+    fn size(read self) -> U64:
+        return self.requirements.size
+
+    fn alignment(read self) -> U64:
+        return self.requirements.alignment
+
+    fn memory_type_bits(read self) -> CUInt:
+        return self.requirements.memory_type_bits
+
+    fn memory_type_index(read self) -> CUInt:
+        return self.allocation_plan.memory_type_index
+
+    fn allocation_size(read self) -> U64:
+        return self.allocation_plan.size :: :: method
+
+    fn heap_index(read self) -> CUInt:
+        return self.allocation_plan.heap_index :: :: method
+
+    fn device_local(read self) -> Bool:
+        return self.allocation_plan.device_local :: :: method
+
+    fn host_visible(read self) -> Bool:
+        return self.allocation_plan.host_visible :: :: method
+
+    fn host_coherent(read self) -> Bool:
+        return self.allocation_plan.host_coherent :: :: method
+
+    fn staging_compatible(read self) -> Bool:
+        return self.allocation_plan.staging_compatible :: :: method
+
+impl VulkanTransferSourceBuffer:
+    fn buffer_handle(read self) -> VkBuffer:
+        return self.buffer
+
+    fn memory_handle(read self) -> VkDeviceMemory:
+        return self.memory
+
+    fn valid(read self) -> Bool:
+        return self.buffer != 0U64 && self.memory != 0U64
+
+    fn byte_count(read self) -> Index:
+        return self.byte_count
+
+    fn plan(read self) -> VulkanTransferSourceBufferPlan:
+        return self.plan
+
+    fn requirements(read self) -> VkMemoryRequirements:
+        return self.plan.requirements :: :: method
+
+    fn allocation_plan(read self) -> VulkanMemoryAllocationPlan:
+        return self.plan.allocation_plan :: :: method
+
+    fn size(read self) -> U64:
+        return self.plan.size :: :: method
+
+    fn alignment(read self) -> U64:
+        return self.plan.alignment :: :: method
+
+    fn memory_type_bits(read self) -> CUInt:
+        return self.plan.memory_type_bits :: :: method
+
+    fn memory_type_index(read self) -> CUInt:
+        return self.plan.memory_type_index :: :: method
+
+    fn allocation_size(read self) -> U64:
+        return self.plan.allocation_size :: :: method
+
+    fn heap_index(read self) -> CUInt:
+        return self.plan.heap_index :: :: method
+
+    fn device_local(read self) -> Bool:
+        return self.plan.device_local :: :: method
+
+    fn host_visible(read self) -> Bool:
+        return self.plan.host_visible :: :: method
+
+    fn host_coherent(read self) -> Bool:
+        return self.plan.host_coherent :: :: method
+
+    fn staging_compatible(read self) -> Bool:
+        return self.plan.staging_compatible :: :: method
+
+impl VulkanPresentContext:
+    fn transfer_source_buffer_from_plan(read self, read plan: VulkanTransferSourceBufferPlan) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+        return transfer_source_buffer_from_plan_internal :: self, plan :: call
+
+    fn transfer_source_buffer_empty(read self, byte_count: Index) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+        select self.transfer_source_buffer_plan :: byte_count :: method:
+            when Result.Ok(plan) => return self.transfer_source_buffer_from_plan :: plan :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn transfer_source_buffer_plan(read self, byte_count: Index) -> Result[VulkanTransferSourceBufferPlan, VulkanPresentError]:
+        select self.transfer_source_buffer_requirements :: byte_count :: method:
+            when Result.Ok(requirements) =>
+                let memory_properties = self.memory_properties :: :: method
+                select memory_properties.staging_allocation_plan :: requirements :: method:
+                    when Option.Some(allocation_plan) =>
+                        let plan = VulkanTransferSourceBufferPlan :: :: call
+                            byte_count = byte_count
+                            requirements = requirements
+                            allocation_plan = allocation_plan
+                        return Result.Ok :: plan :: call
+                    when Option.None =>
+                        let error = VulkanPresentError.StagingMemoryTypeUnavailable :: requirements.memory_type_bits :: call
+                        return Result.Err :: error :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn surface_transfer_source_buffer_requirements(read self) -> Result[VkMemoryRequirements, VulkanPresentError]:
+        select self.surface_rgba_byte_count :: :: method:
+            when Result.Ok(byte_count) => return self.transfer_source_buffer_requirements :: byte_count :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn surface_transfer_source_buffer_plan(read self) -> Result[VulkanTransferSourceBufferPlan, VulkanPresentError]:
+        select self.surface_rgba_byte_count :: :: method:
+            when Result.Ok(byte_count) => return self.transfer_source_buffer_plan :: byte_count :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn surface_transfer_source_buffer_empty(read self) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+        select self.surface_transfer_source_buffer_plan :: :: method:
+            when Result.Ok(plan) => return self.transfer_source_buffer_from_plan :: plan :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn surface_transfer_source_buffer(read self, take pixels: ByteBuffer) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+        let actual_byte_count = pixels.byte_count :: :: method
+        select self.surface_rgba_byte_count :: :: method:
+            when Result.Ok(required_byte_count) =>
+                select:
+                    when actual_byte_count != required_byte_count =>
+                        let error = VulkanPresentError.PixelByteCountMismatch :: actual_byte_count, required_byte_count :: call
+                        return Result.Err :: error :: call
+                    else => return self.transfer_source_buffer :: pixels :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn surface_transfer_source_buffer_from_pixel_frame(read self, read frame: VulkanPixelFrame) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+        let surface_extent = self.surface_extent :: :: method
+        select surface_image_shape_from_extent :: surface_extent :: call:
+            when Result.Ok(shape) =>
+                select:
+                    when frame.width :: :: method != shape.width || frame.height :: :: method != shape.height =>
+                        let error = VulkanPresentError.PixelFrameExtentMismatch :: frame.width :: :: method, frame.height :: :: method, surface_extent.width, surface_extent.height :: call
+                        return Result.Err :: error :: call
+                    else => ()
+            when Result.Err(err) => return Result.Err :: err :: call
+        let surface_format = self.chosen_surface_format :: :: method
+        select frame.to_surface_bytes :: surface_format :: method:
+            when Result.Ok(surface_pixels) => return self.surface_transfer_source_buffer :: surface_pixels :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn surface_transfer_source_buffer_from_image(read self, read image: RgbaImage) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+        select self.surface_pixel_frame_from_image :: image :: method:
+            when Result.Ok(frame) => return self.surface_transfer_source_buffer_from_pixel_frame :: frame :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn transfer_source_buffer_bytes(read self, read upload: VulkanTransferSourceBuffer) -> Result[ByteBuffer, VulkanPresentError]:
+        return copy_transfer_source_buffer_bytes_from_memory :: self, upload.memory, upload.byte_count :: call
+
+    fn write_transfer_source_buffer(read self, read upload: VulkanTransferSourceBuffer, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+        return write_transfer_source_buffer_bytes_to_memory :: self, upload.memory, upload.byte_count, pixels :: call
+
+    fn surface_transfer_source_buffer_pixel_frame(read self, read upload: VulkanTransferSourceBuffer) -> Result[VulkanPixelFrame, VulkanPresentError]:
+        select self.surface_rgba_byte_count :: :: method:
+            when Result.Ok(required_byte_count) =>
+                select:
+                    when upload.byte_count != required_byte_count =>
+                        let error = VulkanPresentError.PixelByteCountMismatch :: upload.byte_count, required_byte_count :: call
+                        return Result.Err :: error :: call
+                    else => ()
+            when Result.Err(err) => return Result.Err :: err :: call
+        select self.transfer_source_buffer_bytes :: upload :: method:
+            when Result.Ok(surface_pixels) => return self.surface_pixel_frame_from_surface_bytes :: surface_pixels :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn surface_transfer_source_buffer_image(read self, read upload: VulkanTransferSourceBuffer) -> Result[RgbaImage, VulkanPresentError]:
+        select self.surface_transfer_source_buffer_pixel_frame :: upload :: method:
+            when Result.Ok(surface_frame) =>
+                select surface_frame.converted_frame :: VulkanPixelFormat.Rgba8 :: method:
+                    when Result.Ok(rgba_frame) =>
+                        let width = rgba_frame.width :: :: method
+                        let height = rgba_frame.height :: :: method
+                        select rgba_frame.copy_pixels :: :: method:
+                            when Result.Ok(rgba_pixels) =>
+                                select rgba_image :: width, height, rgba_pixels :: call:
+                                    when Result.Ok(image) => return Result.Ok :: image :: call
+                                    when Result.Err(err) =>
+                                        let error = VulkanPresentError.ImageCreate :: err :: call
+                                        return Result.Err :: error :: call
+                            when Result.Err(err) => return Result.Err :: err :: call
+                    when Result.Err(err) => return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn write_surface_transfer_source_buffer(read self, read upload: VulkanTransferSourceBuffer, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+        select self.surface_rgba_byte_count :: :: method:
+            when Result.Ok(required_byte_count) =>
+                select:
+                    when upload.byte_count != required_byte_count =>
+                        let error = VulkanPresentError.PixelByteCountMismatch :: upload.byte_count, required_byte_count :: call
+                        return Result.Err :: error :: call
+                    else => return self.write_transfer_source_buffer :: upload, pixels :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn write_surface_transfer_source_buffer_from_pixel_frame(read self, read upload: VulkanTransferSourceBuffer, read frame: VulkanPixelFrame) -> Result[Unit, VulkanPresentError]:
+        let surface_extent = self.surface_extent :: :: method
+        select surface_image_shape_from_extent :: surface_extent :: call:
+            when Result.Ok(shape) =>
+                select:
+                    when frame.width :: :: method != shape.width || frame.height :: :: method != shape.height =>
+                        let error = VulkanPresentError.PixelFrameExtentMismatch :: frame.width :: :: method, frame.height :: :: method, surface_extent.width, surface_extent.height :: call
+                        return Result.Err :: error :: call
+                    else => ()
+            when Result.Err(err) => return Result.Err :: err :: call
+        let surface_format = self.chosen_surface_format :: :: method
+        select frame.to_surface_bytes :: surface_format :: method:
+            when Result.Ok(surface_pixels) => return self.write_surface_transfer_source_buffer :: upload, surface_pixels :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn write_surface_transfer_source_buffer_from_image(read self, read upload: VulkanTransferSourceBuffer, read image: RgbaImage) -> Result[Unit, VulkanPresentError]:
+        select self.surface_pixel_frame_from_image :: image :: method:
+            when Result.Ok(frame) => return self.write_surface_transfer_source_buffer_from_pixel_frame :: upload, frame :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn surface_staging_allocation_plan(read self) -> Result[VulkanMemoryAllocationPlan, VulkanPresentError]:
+        select self.surface_transfer_source_buffer_requirements :: :: method:
+            when Result.Ok(requirements) =>
+                let memory_properties = self.memory_properties :: :: method
+                select memory_properties.staging_allocation_plan :: requirements :: method:
+                    when Option.Some(plan) => return Result.Ok :: plan :: call
+                    when Option.None =>
+                        let error = VulkanPresentError.StagingMemoryTypeUnavailable :: requirements.memory_type_bits :: call
+                        return Result.Err :: error :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+impl VulkanPresentApp:
+    fn transfer_source_buffer_from_plan(read self, read plan: VulkanTransferSourceBufferPlan) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+        return self.context.transfer_source_buffer_from_plan :: plan :: method
+
+    fn transfer_source_buffer_empty(read self, byte_count: Index) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+        return self.context.transfer_source_buffer_empty :: byte_count :: method
+
+    fn transfer_source_buffer_requirements(read self, byte_count: Index) -> Result[VkMemoryRequirements, VulkanPresentError]:
+        return self.context.transfer_source_buffer_requirements :: byte_count :: method
+
+    fn transfer_source_buffer_plan(read self, byte_count: Index) -> Result[VulkanTransferSourceBufferPlan, VulkanPresentError]:
+        return self.context.transfer_source_buffer_plan :: byte_count :: method
+
+    fn surface_transfer_source_buffer_requirements(read self) -> Result[VkMemoryRequirements, VulkanPresentError]:
+        return self.context.surface_transfer_source_buffer_requirements :: :: method
+
+    fn surface_transfer_source_buffer_plan(read self) -> Result[VulkanTransferSourceBufferPlan, VulkanPresentError]:
+        return self.context.surface_transfer_source_buffer_plan :: :: method
+
+    fn surface_transfer_source_buffer_empty(read self) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+        return self.context.surface_transfer_source_buffer_empty :: :: method
+
+    fn surface_staging_allocation_plan(read self) -> Result[VulkanMemoryAllocationPlan, VulkanPresentError]:
+        return self.context.surface_staging_allocation_plan :: :: method
+
+    fn transfer_source_buffer(read self, take pixels: ByteBuffer) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+        return self.context.transfer_source_buffer :: pixels :: method
+
+    fn transfer_source_buffer_bytes(read self, read upload: VulkanTransferSourceBuffer) -> Result[ByteBuffer, VulkanPresentError]:
+        return self.context.transfer_source_buffer_bytes :: upload :: method
+
+    fn write_transfer_source_buffer(read self, read upload: VulkanTransferSourceBuffer, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+        return self.context.write_transfer_source_buffer :: upload, pixels :: method
+
+    fn surface_transfer_source_buffer(read self, take pixels: ByteBuffer) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+        return self.context.surface_transfer_source_buffer :: pixels :: method
+
+    fn surface_transfer_source_buffer_from_pixel_frame(read self, read frame: VulkanPixelFrame) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+        return self.context.surface_transfer_source_buffer_from_pixel_frame :: frame :: method
+
+    fn surface_transfer_source_buffer_from_image(read self, read image: RgbaImage) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+        return self.context.surface_transfer_source_buffer_from_image :: image :: method
+
+    fn surface_transfer_source_buffer_pixel_frame(read self, read upload: VulkanTransferSourceBuffer) -> Result[VulkanPixelFrame, VulkanPresentError]:
+        return self.context.surface_transfer_source_buffer_pixel_frame :: upload :: method
+
+    fn surface_transfer_source_buffer_image(read self, read upload: VulkanTransferSourceBuffer) -> Result[RgbaImage, VulkanPresentError]:
+        return self.context.surface_transfer_source_buffer_image :: upload :: method
+
+    fn write_surface_transfer_source_buffer(read self, read upload: VulkanTransferSourceBuffer, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+        return self.context.write_surface_transfer_source_buffer :: upload, pixels :: method
+
+    fn write_surface_transfer_source_buffer_from_pixel_frame(read self, read upload: VulkanTransferSourceBuffer, read frame: VulkanPixelFrame) -> Result[Unit, VulkanPresentError]:
+        return self.context.write_surface_transfer_source_buffer_from_pixel_frame :: upload, frame :: method
+
+    fn write_surface_transfer_source_buffer_from_image(read self, read upload: VulkanTransferSourceBuffer, read image: RgbaImage) -> Result[Unit, VulkanPresentError]:
+        return self.context.write_surface_transfer_source_buffer_from_image :: upload, image :: method
+
+    fn present_transfer_source_buffer(edit self, read upload: VulkanTransferSourceBuffer) -> Result[Unit, VulkanPresentError]:
+        return self.context.present_transfer_source_buffer :: upload :: method
+
+    fn destroy_transfer_source_buffer(read self, take upload: VulkanTransferSourceBuffer) -> Unit:
+        self.context.destroy_transfer_source_buffer :: upload :: method
+        return

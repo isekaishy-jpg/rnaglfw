@@ -1,0 +1,181 @@
+use std.{MaybeStr, Result, Str}
+
+use present.{MAX_PRESENT_MODES, MAX_SURFACE_FORMATS}
+use present.{VkExtent2D, VkSurfaceCapabilitiesKHR, VkSurfaceFormatKHR, VulkanPresentError}
+use present.{VulkanPresentApp, VulkanPresentContext, VulkanPresentSnapshot, VulkanSurfaceLayout}
+use pixel_support.VulkanPixelFormat
+use runa_app.{TextDecodeError, Window}
+
+pub(package) struct SurfaceImageShape:
+    pub(package) width: Index
+    pub(package) height: Index
+    pub(package) tight_stride: Index
+    pub(package) rgba_byte_count: Index
+
+const PRESENT_MODE_MAILBOX: CInt = 1
+const PRESENT_MODE_FIFO: CInt = 2
+const COLOR_SPACE_SRGB_NONLINEAR: CInt = 0
+const FORMAT_B8G8R8A8_SRGB: CInt = 50
+
+fn copy_surface_pixel_format(read format: VulkanPixelFormat) -> VulkanPixelFormat:
+    select format:
+        when VulkanPixelFormat.Rgba8 => return VulkanPixelFormat.Rgba8
+        when VulkanPixelFormat.Bgra8 => return VulkanPixelFormat.Bgra8
+        when VulkanPixelFormat.Rgbx8 => return VulkanPixelFormat.Rgbx8
+        when VulkanPixelFormat.Bgrx8 => return VulkanPixelFormat.Bgrx8
+    return VulkanPixelFormat.Rgba8
+
+pub(package) fn maybe_c_string_local(text: Str) -> Result[MaybeStr, VulkanPresentError]:
+    let Result.Ok(value) = text as Maybe[MaybeStr] else =>
+        let error = VulkanPresentError.TextDecode :: TextDecodeError.EmbeddedNul :: call
+        return Result.Err :: error :: call
+    return Result.Ok :: value :: call
+
+pub(package) fn surface_image_shape_from_extent(read extent: VkExtent2D) -> Result[SurfaceImageShape, VulkanPresentError]:
+    let Result.Ok(width) = extent.width as Maybe[Index] else =>
+        let error = VulkanPresentError.SurfaceExtentOutOfRange :: extent.width, extent.height :: call
+        return Result.Err :: error :: call
+    let Result.Ok(height) = extent.height as Maybe[Index] else =>
+        let error = VulkanPresentError.SurfaceExtentOutOfRange :: extent.width, extent.height :: call
+        return Result.Err :: error :: call
+    let raw_tight_stride: CUInt = extent.width * 4
+    let Result.Ok(tight_stride) = raw_tight_stride as Maybe[Index] else =>
+        let error = VulkanPresentError.SurfaceExtentOutOfRange :: extent.width, extent.height :: call
+        return Result.Err :: error :: call
+    let raw_pixel_count: CUInt = extent.width * extent.height
+    let raw_rgba_byte_count: CUInt = raw_pixel_count * 4
+    let Result.Ok(rgba_byte_count) = raw_rgba_byte_count as Maybe[Index] else =>
+        let error = VulkanPresentError.SurfaceExtentOutOfRange :: extent.width, extent.height :: call
+        return Result.Err :: error :: call
+    let shape = SurfaceImageShape :: :: call
+        width = width
+        height = height
+        tight_stride = tight_stride
+        rgba_byte_count = rgba_byte_count
+    return Result.Ok :: shape :: call
+
+pub(package) fn vulkan_surface_layout(read extent: VkExtent2D, read pixel_format: VulkanPixelFormat) -> Result[VulkanSurfaceLayout, VulkanPresentError]:
+    select surface_image_shape_from_extent :: extent :: call:
+        when Result.Ok(shape) =>
+            let format = copy_surface_pixel_format :: pixel_format :: call
+            let Result.Ok(width_wide) = shape.width as Maybe[USize] else =>
+                let error = VulkanPresentError.PixelExtentOutOfRange :: 0, 0 :: call
+                return Result.Err :: error :: call
+            let Result.Ok(height_wide) = shape.height as Maybe[USize] else =>
+                let error = VulkanPresentError.PixelExtentOutOfRange :: 0, 0 :: call
+                return Result.Err :: error :: call
+            let pixel_count_wide: USize = width_wide * height_wide
+            let Result.Ok(pixel_count) = pixel_count_wide as Maybe[Index] else =>
+                let error = VulkanPresentError.PixelExtentOutOfRange :: 0, 0 :: call
+                return Result.Err :: error :: call
+            let layout = VulkanSurfaceLayout :: :: call
+                extent = extent
+                width = shape.width
+                height = shape.height
+                pixel_format = format
+                pixel_count = pixel_count
+                tight_stride = shape.tight_stride
+                rgba_byte_count = shape.rgba_byte_count
+            return Result.Ok :: layout :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+pub(package) fn choose_surface_format(read formats: [VkSurfaceFormatKHR; MAX_SURFACE_FORMATS], count: CUInt) -> Result[VkSurfaceFormatKHR, VulkanPresentError]:
+    select:
+        when count == 0 =>
+            let error = VulkanPresentError.NoSurfaceFormats :: :: call
+            return Result.Err :: error :: call
+        else => ()
+    let scan: CUInt = 0
+    repeat while scan < count:
+        let Result.Ok(index) = scan as Maybe[Index] else =>
+            let error = VulkanPresentError.SurfaceFormatOverflow :: count :: call
+            return Result.Err :: error :: call
+        let format = formats[index]
+        select:
+            when format.format == FORMAT_B8G8R8A8_SRGB && format.color_space == COLOR_SPACE_SRGB_NONLINEAR => return Result.Ok :: format :: call
+            else => ()
+        scan = scan + 1
+    return Result.Ok :: formats[0] :: call
+
+pub(package) fn choose_present_mode(read modes: [CInt; MAX_PRESENT_MODES], count: CUInt) -> Result[CInt, VulkanPresentError]:
+    select:
+        when count == 0 =>
+            let error = VulkanPresentError.NoPresentModes :: :: call
+            return Result.Err :: error :: call
+        else => ()
+    let scan: CUInt = 0
+    repeat while scan < count:
+        let Result.Ok(index) = scan as Maybe[Index] else =>
+            let error = VulkanPresentError.PresentModeOverflow :: count :: call
+            return Result.Err :: error :: call
+        select:
+            when modes[index] == PRESENT_MODE_MAILBOX => return Result.Ok :: PRESENT_MODE_MAILBOX :: call
+            else => ()
+        scan = scan + 1
+    return Result.Ok :: PRESENT_MODE_FIFO :: call
+
+pub(package) fn choose_image_count(read capabilities: VkSurfaceCapabilitiesKHR) -> CUInt:
+    let preferred = capabilities.min_image_count + 1
+    select:
+        when capabilities.max_image_count != 0 && preferred > capabilities.max_image_count => return capabilities.max_image_count
+        else => return preferred
+
+impl VkSurfaceCapabilitiesKHR:
+    fn current_width(read self) -> CUInt:
+        return self.current_extent.width
+
+    fn current_height(read self) -> CUInt:
+        return self.current_extent.height
+
+impl VkSurfaceFormatKHR:
+    fn srgb_bgra8(read self) -> Bool:
+        return self.format == FORMAT_B8G8R8A8_SRGB && self.color_space == COLOR_SPACE_SRGB_NONLINEAR
+
+impl VulkanPresentSnapshot:
+    fn surface_width(read self) -> CUInt:
+        return self.surface_extent.width
+
+    fn surface_height(read self) -> CUInt:
+        return self.surface_extent.height
+
+    fn surface_layout(read self) -> Result[VulkanSurfaceLayout, VulkanPresentError]:
+        select self.surface_pixel_format :: :: method:
+            when Result.Ok(pixel_format) => return vulkan_surface_layout :: self.surface_extent, pixel_format :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn surface_rgba_byte_count(read self) -> Result[Index, VulkanPresentError]:
+        select surface_image_shape_from_extent :: self.surface_extent :: call:
+            when Result.Ok(shape) => return Result.Ok :: shape.rgba_byte_count :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+impl VulkanPresentContext:
+    fn surface_layout(read self) -> Result[VulkanSurfaceLayout, VulkanPresentError]:
+        select self.surface_pixel_format :: :: method:
+            when Result.Ok(pixel_format) => return vulkan_surface_layout :: self.surface_extent :: :: method, pixel_format :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+impl VulkanPresentApp:
+    fn surface_layout(read self) -> Result[VulkanSurfaceLayout, VulkanPresentError]:
+        return self.context.surface_layout :: :: method
+
+pub(package) fn choose_window_extent(read window: Window, read capabilities: VkSurfaceCapabilitiesKHR) -> Result[VkExtent2D, VulkanPresentError]:
+    select:
+        when capabilities.current_extent.width != 4294967295 => return Result.Ok :: capabilities.current_extent :: call
+        else => ()
+    let window_size = window.framebuffer_size :: :: method
+    let Result.Ok(window_width) = window_size.width as Maybe[CUInt] else =>
+        return Result.Err :: VulkanPresentError.WindowExtentOutOfRange :: call
+    let Result.Ok(window_height) = window_size.height as Maybe[CUInt] else =>
+        return Result.Err :: VulkanPresentError.WindowExtentOutOfRange :: call
+    let chosen = VkExtent2D :: :: call
+        width = window_width
+        height = window_height
+    select:
+        when chosen.width < capabilities.min_image_extent.width => chosen.width = capabilities.min_image_extent.width
+        when chosen.width > capabilities.max_image_extent.width => chosen.width = capabilities.max_image_extent.width
+        else => ()
+    select:
+        when chosen.height < capabilities.min_image_extent.height => chosen.height = capabilities.min_image_extent.height
+        when chosen.height > capabilities.max_image_extent.height => chosen.height = capabilities.max_image_extent.height
+        else => ()
+    return Result.Ok :: chosen :: call

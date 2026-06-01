@@ -1,0 +1,156 @@
+use std.{List, Option}
+use bridge.{cint_to_index, index_to_cint}
+use event.JoystickId
+use glfw.{GlfwCursorPos, GlfwPoint, GlfwScale, GlfwSize, GlfwWindow}
+use glfw.glfw_window_raw_handle
+use runtime.{AppSnapshot, JoystickSnapshot, MonitorSnapshot, WindowSnapshot}
+use runtime.joystick_snapshot_from_id
+use window.{CursorPos, FrameSize, Point, Scale, Size, Window}
+
+fn copy_point(read point: Point) -> Point:
+    return GlfwPoint :: point.x, point.y :: call
+
+fn copy_size(read size: Size) -> Size:
+    return GlfwSize :: size.width, size.height :: call
+
+fn copy_scale(read scale: Scale) -> Scale:
+    return GlfwScale :: scale.x, scale.y :: call
+
+fn copy_cursor_pos(read pos: CursorPos) -> CursorPos:
+    return GlfwCursorPos :: pos.x, pos.y :: call
+
+fn copy_frame_size(read size: FrameSize) -> FrameSize:
+    return FrameSize :: :: call
+        left = size.left
+        top = size.top
+        right = size.right
+        bottom = size.bottom
+
+pub(package) fn copy_window_snapshot(read snapshot: WindowSnapshot) -> WindowSnapshot:
+    let raw_handle = glfw_window_raw_handle :: snapshot.window.raw :: call
+    let raw_window = GlfwWindow :: raw_handle :: call
+    let window = Window :: raw_window, snapshot.window.id :: call
+    let title = window.title :: :: method
+    let input = window.input_snapshot :: :: method
+    let client_api = window.client_api :: :: method
+    let opengl_profile = window.opengl_profile :: :: method
+    let context_creation_api = window.context_creation_api :: :: method
+    let cursor_mode = window.cursor_mode :: :: method
+    return WindowSnapshot :: :: call
+        window = window
+        title = title
+        input = input
+        hwnd = snapshot.hwnd
+        should_close = snapshot.should_close
+        pos = copy_point :: snapshot.pos :: call
+        size = copy_size :: snapshot.size :: call
+        frame_size = copy_frame_size :: snapshot.frame_size :: call
+        framebuffer_size = copy_size :: snapshot.framebuffer_size :: call
+        content_scale = copy_scale :: snapshot.content_scale :: call
+        focused = snapshot.focused
+        iconified = snapshot.iconified
+        maximized = snapshot.maximized
+        cursor_pos = copy_cursor_pos :: snapshot.cursor_pos :: call
+        client_api = client_api
+        opengl_profile = opengl_profile
+        context_creation_api = context_creation_api
+        context_version_major = snapshot.context_version_major
+        context_version_minor = snapshot.context_version_minor
+        current_context = snapshot.current_context
+        opengl_forward_compat = snapshot.opengl_forward_compat
+        opengl_debug_context = snapshot.opengl_debug_context
+        context_no_error = snapshot.context_no_error
+        srgb_capable = snapshot.srgb_capable
+        doublebuffered = snapshot.doublebuffered
+        opacity = snapshot.opacity
+        cursor_mode = cursor_mode
+        sticky_keys_enabled = snapshot.sticky_keys_enabled
+        sticky_mouse_buttons_enabled = snapshot.sticky_mouse_buttons_enabled
+        lock_key_mods_enabled = snapshot.lock_key_mods_enabled
+        raw_mouse_motion_enabled = snapshot.raw_mouse_motion_enabled
+        visible = snapshot.visible
+        resizable = snapshot.resizable
+        decorated = snapshot.decorated
+        auto_iconify = snapshot.auto_iconify
+        focus_on_show = snapshot.focus_on_show
+        mouse_passthrough = snapshot.mouse_passthrough
+        hovered = snapshot.hovered
+        floating = snapshot.floating
+        fullscreen = snapshot.fullscreen
+
+pub(package) fn copy_monitor_snapshot(read snapshot: MonitorSnapshot) -> MonitorSnapshot:
+    let monitor = snapshot.monitor
+    let name_text = monitor.name_text :: :: method
+    let win32_names = monitor.win32_names :: :: method
+    let available = monitor.available :: :: method
+    let primary = monitor.primary :: :: method
+    let screen_pos = monitor.screen_pos :: :: method
+    let work_rect = monitor.work_rect :: :: method
+    let physical_size_mm = monitor.physical_size_mm :: :: method
+    let desktop_scale = monitor.desktop_scale :: :: method
+    let current_video_mode = monitor.current_video_mode :: :: method
+    let video_mode_count = monitor.video_mode_count :: :: method
+    let video_modes = monitor.video_modes_snapshot :: :: method
+    let gamma_ramp = monitor.gamma_ramp_snapshot :: :: method
+    return MonitorSnapshot :: :: call
+        id = snapshot.id
+        monitor = monitor
+        name_text = name_text
+        win32_names = win32_names
+        available = available
+        primary = primary
+        screen_pos = screen_pos
+        work_rect = work_rect
+        physical_size_mm = physical_size_mm
+        desktop_scale = desktop_scale
+        current_video_mode = current_video_mode
+        video_mode_count = video_mode_count
+        video_modes = video_modes
+        gamma_ramp = gamma_ramp
+
+pub(package) fn copy_joystick_snapshot(read snapshot: JoystickSnapshot) -> JoystickSnapshot:
+    return joystick_snapshot_from_id :: snapshot.joystick.id :: call
+
+impl AppSnapshot:
+    fn has_monitors(read self) -> Bool:
+        return self.monitor_count != 0
+
+    fn has_joysticks(read self) -> Bool:
+        return self.connected_joystick_count != 0
+
+    fn has_current_context_window(read self) -> Bool:
+        select self.current_context_window_id:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn has_primary_monitor(read self) -> Bool:
+        select self.primary_monitor_id:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn joystick(read self, id: JoystickId) -> Option[JoystickSnapshot]:
+        select self.joystick_index :: id :: method:
+            when Option.Some(index) =>
+                let snapshot = copy_joystick_snapshot :: self.joysticks[index] :: call
+                return Option.Some :: snapshot :: call
+            when Option.None => return Option.None
+
+    fn gamepad(read self, id: JoystickId) -> Option[JoystickSnapshot]:
+        select self.joystick_index :: id :: method:
+            when Option.Some(index) =>
+                select:
+                    when self.joysticks[index].gamepad =>
+                        let snapshot = copy_joystick_snapshot :: self.joysticks[index] :: call
+                        return Option.Some :: snapshot :: call
+                    else => return Option.None
+            when Option.None => return Option.None
+
+    fn gamepad_snapshots(read self) -> List[JoystickSnapshot]:
+        let snapshots = List[JoystickSnapshot] :: :: call
+        let ids = self.gamepad_ids :: :: method
+        repeat while !ids.is_empty :: :: method:
+            let id = ids.remove :: 0 :: method
+            select self.gamepad :: id :: method:
+                when Option.Some(snapshot) => snapshots.push :: snapshot :: method
+                when Option.None => ()
+        return snapshots

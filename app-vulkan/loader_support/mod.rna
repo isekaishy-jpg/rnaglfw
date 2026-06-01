@@ -1,0 +1,262 @@
+use std.{MaybeStr, Option, Result, Str}
+use std.dylib.{DynamicLibrary, lookup_symbol}
+
+use present.{VkAcquireNextImageFn, VkAllocateCommandBuffersFn, VkAllocateMemoryFn, VkBeginCommandBufferFn}
+use present.{VkBindBufferMemoryFn, VkBindImageMemoryFn, VkCmdClearColorImageFn, VkCmdCopyBufferToImageFn}
+use present.{VkCmdCopyImageFn, VkCmdCopyImageToBufferFn}
+use present.{VkCmdPipelineBarrierFn, VkCreateBufferFn, VkCreateCommandPoolFn, VkCreateDeviceFn}
+use present.{VkCreateImageFn, VkCreateInstanceFn, VkCreateSemaphoreFn, VkCreateSwapchainFn, VkDestroyBufferFn}
+use present.{VkDestroyCommandPoolFn, VkDestroyDeviceFn, VkDestroyImageFn, VkDestroyInstanceFn}
+use present.{VkDestroySemaphoreFn, VkDestroySurfaceFn, VkDestroySwapchainFn, VkDevice, VkDeviceWaitIdleFn}
+use present.{VkEndCommandBufferFn, VkEnumeratePhysicalDevicesFn, VkFreeMemoryFn, VkGetBufferMemoryRequirementsFn}
+use present.{VkGetDeviceQueueFn, VkGetImageMemoryRequirementsFn, VkGetPhysicalDeviceMemoryPropertiesFn}
+use present.{VkGetPhysicalDeviceQueueFamilyPropertiesFn, VkGetPhysicalDeviceSurfaceCapabilitiesFn}
+use present.{VkGetPhysicalDeviceSurfaceFormatsFn, VkGetPhysicalDeviceSurfacePresentModesFn}
+use present.{VkGetPhysicalDeviceSurfaceSupportFn, VkGetSwapchainImagesFn, VkMapMemoryFn}
+use present.{VkQueuePresentFn, VkQueueSubmitFn, VkQueueWaitIdleFn, VkUnmapMemoryFn}
+use present.{VulkanDeviceFns, VulkanInstanceFns, VulkanPresentError}
+use runa_app.{GlfwVkInstance, vulkan_required_instance_extensions}
+use surface_support.maybe_c_string_local
+
+pub(package) fn lookup_loader_symbol[T](read library: DynamicLibrary, read name: Str) -> Result[T, VulkanPresentError]:
+    select #unsafe lookup_symbol[T] :: library, name :: call:
+        when Result.Ok(symbol) => return Result.Ok :: symbol :: call
+        when Result.Err(err) =>
+            let error = VulkanPresentError.SymbolLookup :: err :: call
+            return Result.Err :: error :: call
+
+pub(package) fn lookup_instance_symbol[T](read library: DynamicLibrary, instance: GlfwVkInstance, name: Str, unavailable_name: Str) -> Result[T, VulkanPresentError]:
+    select maybe_c_string_local :: name :: call:
+        when Result.Ok(proc_name) =>
+            select #unsafe lookup_symbol[extern["system"] fn(GlfwVkInstance, *read CChar) -> Option[T]] :: library, "vkGetInstanceProcAddr" :: call:
+                when Result.Ok(load_proc) =>
+                    let proc_name_ptr = proc_name.as_ptr :: :: method
+                    select #unsafe (load_proc :: instance, proc_name_ptr :: call):
+                        when Option.Some(symbol) => return Result.Ok :: symbol :: call
+                        when Option.None =>
+                            let error = VulkanPresentError.ProcUnavailable :: unavailable_name :: call
+                            return Result.Err :: error :: call
+                when Result.Err(err) =>
+                    let error = VulkanPresentError.SymbolLookup :: err :: call
+                    return Result.Err :: error :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+fn lookup_device_symbol[T](read library: DynamicLibrary, device: VkDevice, name: Str, unavailable_name: Str) -> Result[T, VulkanPresentError]:
+    select maybe_c_string_local :: name :: call:
+        when Result.Ok(proc_name) =>
+            select #unsafe lookup_symbol[extern["system"] fn(VkDevice, *read CChar) -> Option[T]] :: library, "vkGetDeviceProcAddr" :: call:
+                when Result.Ok(load_proc) =>
+                    let proc_name_ptr = proc_name.as_ptr :: :: method
+                    select #unsafe (load_proc :: device, proc_name_ptr :: call):
+                        when Option.Some(symbol) => return Result.Ok :: symbol :: call
+                        when Option.None =>
+                            let error = VulkanPresentError.ProcUnavailable :: unavailable_name :: call
+                            return Result.Err :: error :: call
+                when Result.Err(err) =>
+                    let error = VulkanPresentError.SymbolLookup :: err :: call
+                    return Result.Err :: error :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+pub(package) fn copy_required_extension_array() -> Result[([*read CChar; 2], [MaybeStr; 2]), VulkanPresentError]:
+    select vulkan_required_instance_extensions :: :: call:
+        when Result.Ok(required_extensions) =>
+            select:
+                when required_extensions.count :: :: method != 2 =>
+                    let Result.Ok(count) = (required_extensions.count :: :: method) as Maybe[CUInt] else =>
+                        let error = VulkanPresentError.UnsupportedRequiredInstanceExtensionCount :: 0 :: call
+                        return Result.Err :: error :: call
+                    let error = VulkanPresentError.UnsupportedRequiredInstanceExtensionCount :: count :: call
+                    return Result.Err :: error :: call
+                else => ()
+            let first_extension = required_extensions.remove :: 0 :: method
+            let second_extension = required_extensions.remove :: 0 :: method
+            select maybe_c_string_local :: first_extension :: call:
+                when Result.Ok(first_name) =>
+                    select maybe_c_string_local :: second_extension :: call:
+                        when Result.Ok(second_name) =>
+                            let names: [MaybeStr; 2] = [first_name, second_name]
+                            let pointers: [*read CChar; 2] = [names[0].as_ptr :: :: method, names[1].as_ptr :: :: method]
+                            return Result.Ok :: (pointers, names) :: call
+                        when Result.Err(err) => return Result.Err :: err :: call
+                when Result.Err(err) => return Result.Err :: err :: call
+        when Result.Err(err) =>
+            let error = VulkanPresentError.TextDecode :: err :: call
+            return Result.Err :: error :: call
+
+pub(package) fn lookup_vulkan_instance_fns(read library: DynamicLibrary, instance: GlfwVkInstance, destroy_instance: VkDestroyInstanceFn) -> Result[VulkanInstanceFns, VulkanPresentError]:
+    select lookup_instance_symbol[VkEnumeratePhysicalDevicesFn] :: library, instance, "vkEnumeratePhysicalDevices", "vkEnumeratePhysicalDevices" :: call:
+        when Result.Ok(enumerate_physical_devices) =>
+            select lookup_instance_symbol[VkGetPhysicalDeviceQueueFamilyPropertiesFn] :: library, instance, "vkGetPhysicalDeviceQueueFamilyProperties", "vkGetPhysicalDeviceQueueFamilyProperties" :: call:
+                when Result.Ok(queue_family_properties) =>
+                    select lookup_instance_symbol[VkGetPhysicalDeviceMemoryPropertiesFn] :: library, instance, "vkGetPhysicalDeviceMemoryProperties", "vkGetPhysicalDeviceMemoryProperties" :: call:
+                        when Result.Ok(memory_properties) =>
+                            select lookup_instance_symbol[VkGetPhysicalDeviceSurfaceSupportFn] :: library, instance, "vkGetPhysicalDeviceSurfaceSupportKHR", "vkGetPhysicalDeviceSurfaceSupportKHR" :: call:
+                                when Result.Ok(surface_support) =>
+                                    select lookup_instance_symbol[VkGetPhysicalDeviceSurfaceCapabilitiesFn] :: library, instance, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR", "vkGetPhysicalDeviceSurfaceCapabilitiesKHR" :: call:
+                                        when Result.Ok(surface_capabilities) =>
+                                            select lookup_instance_symbol[VkGetPhysicalDeviceSurfaceFormatsFn] :: library, instance, "vkGetPhysicalDeviceSurfaceFormatsKHR", "vkGetPhysicalDeviceSurfaceFormatsKHR" :: call:
+                                                when Result.Ok(surface_formats) =>
+                                                    select lookup_instance_symbol[VkGetPhysicalDeviceSurfacePresentModesFn] :: library, instance, "vkGetPhysicalDeviceSurfacePresentModesKHR", "vkGetPhysicalDeviceSurfacePresentModesKHR" :: call:
+                                                        when Result.Ok(surface_present_modes) =>
+                                                            select lookup_instance_symbol[VkCreateDeviceFn] :: library, instance, "vkCreateDevice", "vkCreateDevice" :: call:
+                                                                when Result.Ok(create_device) =>
+                                                                    select lookup_instance_symbol[VkDestroySurfaceFn] :: library, instance, "vkDestroySurfaceKHR", "vkDestroySurfaceKHR" :: call:
+                                                                        when Result.Ok(destroy_surface) =>
+                                                                            let fns = VulkanInstanceFns :: :: call
+                                                                                destroy_instance = destroy_instance
+                                                                                enumerate_physical_devices = enumerate_physical_devices
+                                                                                queue_family_properties = queue_family_properties
+                                                                                memory_properties = memory_properties
+                                                                                surface_support = surface_support
+                                                                                surface_capabilities = surface_capabilities
+                                                                                surface_formats = surface_formats
+                                                                                surface_present_modes = surface_present_modes
+                                                                                create_device = create_device
+                                                                                destroy_surface = destroy_surface
+                                                                            return Result.Ok :: fns :: call
+                                                                        when Result.Err(err) => return Result.Err :: err :: call
+                                                                when Result.Err(err) => return Result.Err :: err :: call
+                                                        when Result.Err(err) => return Result.Err :: err :: call
+                                                when Result.Err(err) => return Result.Err :: err :: call
+                                        when Result.Err(err) => return Result.Err :: err :: call
+                                when Result.Err(err) => return Result.Err :: err :: call
+                        when Result.Err(err) => return Result.Err :: err :: call
+                when Result.Err(err) => return Result.Err :: err :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+pub(package) fn lookup_vulkan_device_fns(read library: DynamicLibrary, device: VkDevice, destroy_device: VkDestroyDeviceFn) -> Result[VulkanDeviceFns, VulkanPresentError]:
+    select lookup_device_symbol[VkGetDeviceQueueFn] :: library, device, "vkGetDeviceQueue", "vkGetDeviceQueue" :: call:
+        when Result.Ok(get_device_queue) =>
+            select lookup_device_symbol[VkCreateSwapchainFn] :: library, device, "vkCreateSwapchainKHR", "vkCreateSwapchainKHR" :: call:
+                when Result.Ok(create_swapchain) =>
+                    select lookup_device_symbol[VkDestroySwapchainFn] :: library, device, "vkDestroySwapchainKHR", "vkDestroySwapchainKHR" :: call:
+                        when Result.Ok(destroy_swapchain) =>
+                            select lookup_device_symbol[VkGetSwapchainImagesFn] :: library, device, "vkGetSwapchainImagesKHR", "vkGetSwapchainImagesKHR" :: call:
+                                when Result.Ok(get_swapchain_images) =>
+                                    select lookup_device_symbol[VkCreateImageFn] :: library, device, "vkCreateImage", "vkCreateImage" :: call:
+                                        when Result.Ok(create_image) =>
+                                            select lookup_device_symbol[VkDestroyImageFn] :: library, device, "vkDestroyImage", "vkDestroyImage" :: call:
+                                                when Result.Ok(destroy_image) =>
+                                                    select lookup_device_symbol[VkGetImageMemoryRequirementsFn] :: library, device, "vkGetImageMemoryRequirements", "vkGetImageMemoryRequirements" :: call:
+                                                        when Result.Ok(get_image_memory_requirements) =>
+                                                            select lookup_device_symbol[VkBindImageMemoryFn] :: library, device, "vkBindImageMemory", "vkBindImageMemory" :: call:
+                                                                when Result.Ok(bind_image_memory) =>
+                                                                    select lookup_device_symbol[VkCreateBufferFn] :: library, device, "vkCreateBuffer", "vkCreateBuffer" :: call:
+                                                                        when Result.Ok(create_buffer) =>
+                                                                            select lookup_device_symbol[VkDestroyBufferFn] :: library, device, "vkDestroyBuffer", "vkDestroyBuffer" :: call:
+                                                                                when Result.Ok(destroy_buffer) =>
+                                                                                    select lookup_device_symbol[VkGetBufferMemoryRequirementsFn] :: library, device, "vkGetBufferMemoryRequirements", "vkGetBufferMemoryRequirements" :: call:
+                                                                                        when Result.Ok(get_buffer_memory_requirements) =>
+                                                                                            select lookup_device_symbol[VkAllocateMemoryFn] :: library, device, "vkAllocateMemory", "vkAllocateMemory" :: call:
+                                                                                                when Result.Ok(allocate_memory) =>
+                                                                                                    select lookup_device_symbol[VkFreeMemoryFn] :: library, device, "vkFreeMemory", "vkFreeMemory" :: call:
+                                                                                                        when Result.Ok(free_memory) =>
+                                                                                                            select lookup_device_symbol[VkBindBufferMemoryFn] :: library, device, "vkBindBufferMemory", "vkBindBufferMemory" :: call:
+                                                                                                                when Result.Ok(bind_buffer_memory) =>
+                                                                                                                    select lookup_device_symbol[VkMapMemoryFn] :: library, device, "vkMapMemory", "vkMapMemory" :: call:
+                                                                                                                        when Result.Ok(map_memory) =>
+                                                                                                                            select lookup_device_symbol[VkUnmapMemoryFn] :: library, device, "vkUnmapMemory", "vkUnmapMemory" :: call:
+                                                                                                                                when Result.Ok(unmap_memory) =>
+                                                                                                                                    select lookup_device_symbol[VkCreateCommandPoolFn] :: library, device, "vkCreateCommandPool", "vkCreateCommandPool" :: call:
+                                                                                                                                        when Result.Ok(create_command_pool) =>
+                                                                                                                                            select lookup_device_symbol[VkDestroyCommandPoolFn] :: library, device, "vkDestroyCommandPool", "vkDestroyCommandPool" :: call:
+                                                                                                                                                when Result.Ok(destroy_command_pool) =>
+                                                                                                                                                    select lookup_device_symbol[VkAllocateCommandBuffersFn] :: library, device, "vkAllocateCommandBuffers", "vkAllocateCommandBuffers" :: call:
+                                                                                                                                                        when Result.Ok(allocate_command_buffers) =>
+                                                                                                                                                            select lookup_device_symbol[VkBeginCommandBufferFn] :: library, device, "vkBeginCommandBuffer", "vkBeginCommandBuffer" :: call:
+                                                                                                                                                                when Result.Ok(begin_command_buffer) =>
+                                                                                                                                                                    select lookup_device_symbol[VkEndCommandBufferFn] :: library, device, "vkEndCommandBuffer", "vkEndCommandBuffer" :: call:
+                                                                                                                                                                        when Result.Ok(end_command_buffer) =>
+                                                                                                                                                                            select lookup_device_symbol[VkCmdPipelineBarrierFn] :: library, device, "vkCmdPipelineBarrier", "vkCmdPipelineBarrier" :: call:
+                                                                                                                                                                                when Result.Ok(cmd_pipeline_barrier) =>
+                                                                                                                                                                                    select lookup_device_symbol[VkCmdClearColorImageFn] :: library, device, "vkCmdClearColorImage", "vkCmdClearColorImage" :: call:
+                                                                                                                                                                                        when Result.Ok(cmd_clear_color_image) =>
+                                                                                                                                                                                            select lookup_device_symbol[VkCmdCopyBufferToImageFn] :: library, device, "vkCmdCopyBufferToImage", "vkCmdCopyBufferToImage" :: call:
+                                                                                                                                                                                                when Result.Ok(cmd_copy_buffer_to_image) =>
+                                                                                                                                                                                                    select lookup_device_symbol[VkCmdCopyImageFn] :: library, device, "vkCmdCopyImage", "vkCmdCopyImage" :: call:
+                                                                                                                                                                                                        when Result.Ok(cmd_copy_image) =>
+                                                                                                                                                                                                            select lookup_device_symbol[VkCmdCopyImageToBufferFn] :: library, device, "vkCmdCopyImageToBuffer", "vkCmdCopyImageToBuffer" :: call:
+                                                                                                                                                                                                                when Result.Ok(cmd_copy_image_to_buffer) =>
+                                                                                                                                                                                                                    select lookup_device_symbol[VkCreateSemaphoreFn] :: library, device, "vkCreateSemaphore", "vkCreateSemaphore" :: call:
+                                                                                                                                                                                                                        when Result.Ok(create_semaphore) =>
+                                                                                                                                                                                                                            select lookup_device_symbol[VkDestroySemaphoreFn] :: library, device, "vkDestroySemaphore", "vkDestroySemaphore" :: call:
+                                                                                                                                                                                                                                when Result.Ok(destroy_semaphore) =>
+                                                                                                                                                                                                                                    select lookup_device_symbol[VkAcquireNextImageFn] :: library, device, "vkAcquireNextImageKHR", "vkAcquireNextImageKHR" :: call:
+                                                                                                                                                                                                                                        when Result.Ok(acquire_next_image) =>
+                                                                                                                                                                                                                                            select lookup_device_symbol[VkQueueSubmitFn] :: library, device, "vkQueueSubmit", "vkQueueSubmit" :: call:
+                                                                                                                                                                                                                                                when Result.Ok(queue_submit) =>
+                                                                                                                                                                                                                                                    select lookup_device_symbol[VkQueuePresentFn] :: library, device, "vkQueuePresentKHR", "vkQueuePresentKHR" :: call:
+                                                                                                                                                                                                                                                        when Result.Ok(queue_present) =>
+                                                                                                                                                                                                                                                            select lookup_device_symbol[VkQueueWaitIdleFn] :: library, device, "vkQueueWaitIdle", "vkQueueWaitIdle" :: call:
+                                                                                                                                                                                                                                                                when Result.Ok(queue_wait_idle) =>
+                                                                                                                                                                                                                                                                    select lookup_device_symbol[VkDeviceWaitIdleFn] :: library, device, "vkDeviceWaitIdle", "vkDeviceWaitIdle" :: call:
+                                                                                                                                                                                                                                                                        when Result.Ok(device_wait_idle) =>
+                                                                                                                                                                                                                                                                            let fns = VulkanDeviceFns :: :: call
+                                                                                                                                                                                                                                                                                destroy_device = destroy_device
+                                                                                                                                                                                                                                                                                get_device_queue = get_device_queue
+                                                                                                                                                                                                                                                                                create_swapchain = create_swapchain
+                                                                                                                                                                                                                                                                                destroy_swapchain = destroy_swapchain
+                                                                                                                                                                                                                                                                                get_swapchain_images = get_swapchain_images
+                                                                                                                                                                                                                                                                                create_image = create_image
+                                                                                                                                                                                                                                                                                destroy_image = destroy_image
+                                                                                                                                                                                                                                                                                get_image_memory_requirements = get_image_memory_requirements
+                                                                                                                                                                                                                                                                                bind_image_memory = bind_image_memory
+                                                                                                                                                                                                                                                                                create_buffer = create_buffer
+                                                                                                                                                                                                                                                                                destroy_buffer = destroy_buffer
+                                                                                                                                                                                                                                                                                get_buffer_memory_requirements = get_buffer_memory_requirements
+                                                                                                                                                                                                                                                                                allocate_memory = allocate_memory
+                                                                                                                                                                                                                                                                                free_memory = free_memory
+                                                                                                                                                                                                                                                                                bind_buffer_memory = bind_buffer_memory
+                                                                                                                                                                                                                                                                                map_memory = map_memory
+                                                                                                                                                                                                                                                                                unmap_memory = unmap_memory
+                                                                                                                                                                                                                                                                                create_command_pool = create_command_pool
+                                                                                                                                                                                                                                                                                destroy_command_pool = destroy_command_pool
+                                                                                                                                                                                                                                                                                allocate_command_buffers = allocate_command_buffers
+                                                                                                                                                                                                                                                                                begin_command_buffer = begin_command_buffer
+                                                                                                                                                                                                                                                                                end_command_buffer = end_command_buffer
+                                                                                                                                                                                                                                                                                cmd_pipeline_barrier = cmd_pipeline_barrier
+                                                                                                                                                                                                                                                                                cmd_clear_color_image = cmd_clear_color_image
+                                                                                                                                                                                                                                                                                cmd_copy_buffer_to_image = cmd_copy_buffer_to_image
+                                                                                                                                                                                                                                                                                cmd_copy_image = cmd_copy_image
+                                                                                                                                                                                                                                                                                cmd_copy_image_to_buffer = cmd_copy_image_to_buffer
+                                                                                                                                                                                                                                                                                create_semaphore = create_semaphore
+                                                                                                                                                                                                                                                                                destroy_semaphore = destroy_semaphore
+                                                                                                                                                                                                                                                                                acquire_next_image = acquire_next_image
+                                                                                                                                                                                                                                                                                queue_submit = queue_submit
+                                                                                                                                                                                                                                                                                queue_present = queue_present
+                                                                                                                                                                                                                                                                                queue_wait_idle = queue_wait_idle
+                                                                                                                                                                                                                                                                                device_wait_idle = device_wait_idle
+                                                                                                                                                                                                                                                                            return Result.Ok :: fns :: call
+                                                                                                                                                                                                                                                                        when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                                                                                                                                                when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                                                                                                                                        when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                                                                                                                                when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                                                                                                                        when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                                                                                                                when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                                                                                                        when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                                                                                                when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                                                                                        when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                                                                                when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                                                                        when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                                                                when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                                                        when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                                                when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                                        when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                                when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                        when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                                when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                        when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                                when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                        when Result.Err(err) => return Result.Err :: err :: call
+                                                                                                when Result.Err(err) => return Result.Err :: err :: call
+                                                                                        when Result.Err(err) => return Result.Err :: err :: call
+                                                                                when Result.Err(err) => return Result.Err :: err :: call
+                                                                        when Result.Err(err) => return Result.Err :: err :: call
+                                                                when Result.Err(err) => return Result.Err :: err :: call
+                                                        when Result.Err(err) => return Result.Err :: err :: call
+                                                when Result.Err(err) => return Result.Err :: err :: call
+                                        when Result.Err(err) => return Result.Err :: err :: call
+                                when Result.Err(err) => return Result.Err :: err :: call
+                        when Result.Err(err) => return Result.Err :: err :: call
+                when Result.Err(err) => return Result.Err :: err :: call
+        when Result.Err(err) => return Result.Err :: err :: call

@@ -1,0 +1,211 @@
+use std.Option
+use core.{glfw_cint_is_true, glfw_cint_to_index}
+
+pub struct GlfwAxisList:
+    pub(package) base: *read F32
+    pub(package) count_value: CInt
+
+pub struct GlfwButtonList:
+    pub(package) base: *read CUnsignedChar
+    pub(package) count_value: CInt
+
+pub struct GlfwHatList:
+    pub(package) base: *read CUnsignedChar
+    pub(package) count_value: CInt
+
+const POINTER_OFFSET_STEP: ISize = 1
+
+fn axis_slot_at(base: *read F32, index: CInt) -> *read F32:
+    let slot: *read F32 = base
+    let scan: CInt = 0
+    repeat while scan < index:
+        slot = #unsafe slot.offset :: POINTER_OFFSET_STEP :: method
+        scan = scan + 1
+    return slot
+
+fn byte_slot_at(base: *read CUnsignedChar, index: CInt) -> *read CUnsignedChar:
+    let slot: *read CUnsignedChar = base
+    let scan: CInt = 0
+    repeat while scan < index:
+        slot = #unsafe slot.offset :: POINTER_OFFSET_STEP :: method
+        scan = scan + 1
+    return slot
+
+#repr[c]
+pub struct GlfwGamepadState:
+    pub buttons: [CUnsignedChar; 15]
+    pub axes: [F32; 6]
+
+pub type GlfwJoystickCallback = extern["c"] fn(CInt, CInt) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwJoystickPresent(jid: CInt) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetJoystickAxes(jid: CInt, count: *edit CInt) -> *read F32
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetJoystickButtons(jid: CInt, count: *edit CInt) -> *read CUnsignedChar
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetJoystickHats(jid: CInt, count: *edit CInt) -> *read CUnsignedChar
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetJoystickName(jid: CInt) -> *read CChar
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetJoystickGUID(jid: CInt) -> *read CChar
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetJoystickUserPointer(jid: CInt, pointer: *edit CVoid) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetJoystickUserPointer(jid: CInt) -> *edit CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwJoystickIsGamepad(jid: CInt) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetJoystickCallback(take callback: Option[GlfwJoystickCallback]) -> Option[GlfwJoystickCallback]
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwUpdateGamepadMappings(mappings: *read CChar) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetGamepadName(jid: CInt) -> *read CChar
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetGamepadState(jid: CInt, state: *edit GlfwGamepadState) -> CInt
+
+pub fn glfw_joystick_present(jid: CInt) -> Bool:
+    let present: CInt = #unsafe glfwJoystickPresent :: jid :: call
+    return glfw_cint_is_true :: present :: call
+
+pub fn glfw_joystick_axes(jid: CInt) -> GlfwAxisList:
+    let count: CInt = 0
+    let count_ptr: *edit CInt = #unsafe &raw edit count
+    let base: *read F32 = #unsafe glfwGetJoystickAxes :: jid, count_ptr :: call
+    return GlfwAxisList :: base, count :: call
+
+pub fn glfw_joystick_buttons(jid: CInt) -> GlfwButtonList:
+    let count: CInt = 0
+    let count_ptr: *edit CInt = #unsafe &raw edit count
+    let base: *read CUnsignedChar = #unsafe glfwGetJoystickButtons :: jid, count_ptr :: call
+    return GlfwButtonList :: base, count :: call
+
+pub fn glfw_joystick_hats(jid: CInt) -> GlfwHatList:
+    let count: CInt = 0
+    let count_ptr: *edit CInt = #unsafe &raw edit count
+    let base: *read CUnsignedChar = #unsafe glfwGetJoystickHats :: jid, count_ptr :: call
+    return GlfwHatList :: base, count :: call
+
+pub fn glfw_joystick_name(jid: CInt) -> *read CChar:
+    return #unsafe glfwGetJoystickName :: jid :: call
+
+pub fn glfw_joystick_guid(jid: CInt) -> *read CChar:
+    return #unsafe glfwGetJoystickGUID :: jid :: call
+
+pub fn glfw_set_joystick_user_pointer(jid: CInt, pointer: *edit CVoid) -> Unit:
+    #unsafe glfwSetJoystickUserPointer :: jid, pointer :: call
+    return
+
+pub fn glfw_joystick_user_pointer(jid: CInt) -> *edit CVoid:
+    return #unsafe glfwGetJoystickUserPointer :: jid :: call
+
+pub fn glfw_joystick_is_gamepad(jid: CInt) -> Bool:
+    let value: CInt = #unsafe glfwJoystickIsGamepad :: jid :: call
+    return glfw_cint_is_true :: value :: call
+
+pub fn glfw_set_joystick_callback(take callback: Option[GlfwJoystickCallback]) -> Option[GlfwJoystickCallback]:
+    return #unsafe glfwSetJoystickCallback :: callback :: call
+
+pub fn glfw_update_gamepad_mappings(mappings: *read CChar) -> Bool:
+    let result: CInt = #unsafe glfwUpdateGamepadMappings :: mappings :: call
+    return glfw_cint_is_true :: result :: call
+
+pub fn glfw_gamepad_name(jid: CInt) -> *read CChar:
+    return #unsafe glfwGetGamepadName :: jid :: call
+
+pub fn glfw_gamepad_state(jid: CInt) -> Option[GlfwGamepadState]:
+    let buttons: [CUnsignedChar; 15] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let axes: [F32; 6] = [0.0F32, 0.0F32, 0.0F32, 0.0F32, 0.0F32, 0.0F32]
+    let state = GlfwGamepadState :: buttons, axes :: call
+    let state_ptr: *edit GlfwGamepadState = #unsafe &raw edit state
+    let success: CInt = #unsafe glfwGetGamepadState :: jid, state_ptr :: call
+    select:
+        when glfw_cint_is_true :: success :: call => return Option.Some :: state :: call
+        else => return Option.None
+
+impl GlfwAxisList:
+    fn count(read self) -> CInt:
+        return self.count_value
+
+    fn at(read self, index: CInt) -> Option[F32]:
+        select:
+            when self.base.is_null :: :: method => return Option.None
+            when index < 0 => return Option.None
+            when index >= self.count_value => return Option.None
+            else =>
+                let ptr: *read F32 = axis_slot_at :: self.base, index :: call
+                let value: F32 = #unsafe ptr.load :: :: method
+                return Option.Some :: value :: call
+
+impl GlfwButtonList:
+    fn count(read self) -> CInt:
+        return self.count_value
+
+    fn at(read self, index: CInt) -> Option[CUnsignedChar]:
+        select:
+            when self.base.is_null :: :: method => return Option.None
+            when index < 0 => return Option.None
+            when index >= self.count_value => return Option.None
+            else =>
+                let ptr: *read CUnsignedChar = byte_slot_at :: self.base, index :: call
+                let value: CUnsignedChar = #unsafe ptr.load :: :: method
+                return Option.Some :: value :: call
+
+impl GlfwHatList:
+    fn count(read self) -> CInt:
+        return self.count_value
+
+    fn at(read self, index: CInt) -> Option[CUnsignedChar]:
+        select:
+            when self.base.is_null :: :: method => return Option.None
+            when index < 0 => return Option.None
+            when index >= self.count_value => return Option.None
+            else =>
+                let ptr: *read CUnsignedChar = byte_slot_at :: self.base, index :: call
+                let value: CUnsignedChar = #unsafe ptr.load :: :: method
+                return Option.Some :: value :: call
+
+impl GlfwGamepadState:
+    fn button(read self, index: CInt) -> Option[CUnsignedChar]:
+        select:
+            when index < 0 => return Option.None
+            when index >= 15 => return Option.None
+            else =>
+                let Option.Some(slot) = glfw_cint_to_index :: index :: call else => return Option.None
+                let value: CUnsignedChar = self.buttons[slot]
+                return Option.Some :: value :: call
+
+    fn axis(read self, index: CInt) -> Option[F32]:
+        select:
+            when index < 0 => return Option.None
+            when index >= 6 => return Option.None
+            else =>
+                let Option.Some(slot) = glfw_cint_to_index :: index :: call else => return Option.None
+                let value: F32 = self.axes[slot]
+                return Option.Some :: value :: call

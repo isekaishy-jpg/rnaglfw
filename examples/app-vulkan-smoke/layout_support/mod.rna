@@ -1,0 +1,27 @@
+use std.Result
+
+use runa_app_vulkan.{VkExtent2D, VulkanPresentApp, VulkanPresentSnapshot, vulkan_pixel_format_code}
+
+pub fn check_vulkan_surface_layout(read present_app: VulkanPresentApp, read present_snapshot: VulkanPresentSnapshot, read extent: VkExtent2D) -> I32:
+    select present_app.surface_layout :: :: method:
+        when Result.Ok(app_layout) =>
+            select present_snapshot.surface_layout :: :: method:
+                when Result.Ok(snapshot_layout) =>
+                    select:
+                        when app_layout.extent.width != extent.width => return 1
+                        when app_layout.extent.height != extent.height => return 2
+                        when snapshot_layout.extent.width != extent.width => return 3
+                        when snapshot_layout.extent.height != extent.height => return 4
+                        when app_layout.width != snapshot_layout.width => return 5
+                        when app_layout.height != snapshot_layout.height => return 6
+                        when vulkan_pixel_format_code :: app_layout.pixel_format :: call != vulkan_pixel_format_code :: snapshot_layout.pixel_format :: call => return 7
+                        when app_layout.pixel_count != snapshot_layout.pixel_count => return 8
+                        when app_layout.tight_stride != snapshot_layout.tight_stride => return 9
+                        when app_layout.rgba_byte_count != snapshot_layout.rgba_byte_count => return 10
+                        when app_layout.width == 0 => return 11
+                        when app_layout.height == 0 => return 12
+                        when app_layout.pixel_count == 0 => return 13
+                        else => ()
+                when Result.Err(_) => return 14
+        when Result.Err(_) => return 15
+    return 0

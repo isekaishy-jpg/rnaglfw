@@ -1,0 +1,713 @@
+use std.{List, Option, Result, Str}
+use bridge.{cint_is_true, copy_edit_c_string, cuint_to_index}
+use event.{AppEvent, WindowEvent}
+use glfw.{GlfwCharCallback, GlfwCharModsCallback, GlfwCursorEnterCallback}
+use glfw.{GlfwCursorPosCallback, GlfwFramebufferSizeCallback, GlfwKeyCallback}
+use glfw.{GlfwDropCallback, GlfwMouseButtonCallback, GlfwScrollCallback}
+use glfw.GlfwWindowContentScaleCallback
+use glfw.{GlfwWindow, GlfwWindowRaw}
+use glfw.{GlfwWindowFocusCallback, GlfwWindowIconifyCallback, GlfwWindowMaximizeCallback}
+use glfw.{GlfwWindowPosCallback, GlfwWindowRefreshCallback, GlfwWindowSizeCallback}
+use input.{input_action_from_raw, key_from_raw, modifiers_from_raw}
+use input.mouse_button_from_raw
+use window.WindowId
+
+pub const WINDOW_MAILBOX_CAPACITY: Index = 128
+const POINTER_OFFSET_STEP: ISize = 1
+type ReadDropPathPointer = *read CChar
+type DropPathPointer = *edit CChar
+
+struct SlotWrite:
+    pub kind: CInt
+    pub a: CInt
+    pub b: CInt
+    pub c: CInt
+    pub d: CInt
+    pub u: CUInt
+    pub fx: F32
+    pub fy: F32
+    pub x: F64
+    pub y: F64
+    pub p: *edit CVoid
+
+#repr[c]
+pub(package) struct WindowMailbox:
+    pub read_index: CUInt
+    pub write_index: CUInt
+    pub overflowed: CInt
+    pub kinds: [CInt; 128]
+    pub as_: [CInt; 128]
+    pub bs: [CInt; 128]
+    pub cs: [CInt; 128]
+    pub ds: [CInt; 128]
+    pub us: [CUInt; 128]
+    pub fxs: [F32; 128]
+    pub fys: [F32; 128]
+    pub xs: [F64; 128]
+    pub ys: [F64; 128]
+    pub ps: [*edit CVoid; 128]
+
+#link[name = "kernel32"]
+#unsafe
+extern["system"] fn GetProcessHeap() -> *edit CVoid
+
+#link[name = "kernel32"]
+#unsafe
+extern["system"] fn HeapAlloc(heap: *edit CVoid, flags: CUInt, bytes: CSize) -> *edit CVoid
+
+#link[name = "kernel32"]
+#unsafe
+extern["system"] fn HeapFree(heap: *edit CVoid, flags: CUInt, memory: *edit CVoid) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetWindowUserPointer(window: *edit GlfwWindowRaw) -> *edit CVoid
+
+fn next_slot(index: CUInt) -> CUInt:
+    select:
+        when index + 1 == 128 => return 0
+        else => return index + 1
+
+fn c_char_read_as_unsigned(pointer: *read CChar) -> *read CUnsignedChar:
+    let address = #unsafe raw_pointer_address_read :: pointer :: call
+    return #unsafe raw_pointer_from_address_read[CUnsignedChar] :: address :: call
+
+fn c_char_edit_as_void(pointer: *edit CChar) -> *edit CVoid:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[CVoid] :: address :: call
+
+fn void_as_mailbox(pointer: *edit CVoid) -> *edit WindowMailbox:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[WindowMailbox] :: address :: call
+
+fn void_as_unsigned(pointer: *edit CVoid) -> *edit CUnsignedChar:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[CUnsignedChar] :: address :: call
+
+fn void_as_c_char(pointer: *edit CVoid) -> *edit CChar:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[CChar] :: address :: call
+
+fn void_as_drop_path_pointer(pointer: *edit CVoid) -> *edit DropPathPointer:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[DropPathPointer] :: address :: call
+
+fn mailbox_as_void(pointer: *edit WindowMailbox) -> *edit CVoid:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[CVoid] :: address :: call
+
+fn mailbox_from_window(window: *edit GlfwWindowRaw) -> *edit WindowMailbox:
+    let user: *edit CVoid = #unsafe glfwGetWindowUserPointer :: window :: call
+    select:
+        when user.is_null :: :: method =>
+            let pointer: *edit WindowMailbox = null
+            return pointer
+        else => return void_as_mailbox :: user :: call
+
+fn input_path_slot_at(base: *read ReadDropPathPointer, index: CInt) -> *read ReadDropPathPointer:
+    let slot: *read ReadDropPathPointer = base
+    let scan: CInt = 0
+    repeat while scan < index:
+        slot = #unsafe slot.offset :: POINTER_OFFSET_STEP :: method
+        scan = scan + 1
+    return slot
+
+fn copied_path_slot_at(base: *edit DropPathPointer, index: CInt) -> *edit DropPathPointer:
+    let slot: *edit DropPathPointer = base
+    let scan: CInt = 0
+    repeat while scan < index:
+        slot = #unsafe slot.offset :: POINTER_OFFSET_STEP :: method
+        scan = scan + 1
+    return slot
+
+fn free_heap_string(heap: *edit CVoid, string: *edit CChar) -> Unit:
+    select:
+        when string.is_null :: :: method => return
+        else =>
+            let memory = c_char_edit_as_void :: string :: call
+            #unsafe HeapFree :: heap, 0, memory :: call
+            return
+
+fn copy_heap_string(heap: *edit CVoid, source: *read CChar) -> *edit CChar:
+    select:
+        when source.is_null :: :: method =>
+            let none: *edit CChar = null
+            return none
+        else => ()
+    let read_ptr = c_char_read_as_unsigned :: source :: call
+    let offset: ISize = 0
+    let length: CSize = 0
+    repeat:
+        let current: *read CUnsignedChar = #unsafe read_ptr.offset :: offset :: method
+        let raw: CUnsignedChar = #unsafe current.load :: :: method
+        select:
+            when raw == 0 => break
+            else =>
+                length = length + 1
+                offset = offset + 1
+    let bytes: CSize = length + 1
+    let memory: *edit CVoid = #unsafe HeapAlloc :: heap, 0, bytes :: call
+    select:
+        when memory.is_null :: :: method =>
+            let none: *edit CChar = null
+            return none
+        else => ()
+    let write_ptr = void_as_unsigned :: memory :: call
+    offset = 0
+    repeat:
+        let source_slot: *read CUnsignedChar = #unsafe read_ptr.offset :: offset :: method
+        let raw: CUnsignedChar = #unsafe source_slot.load :: :: method
+        let dest_slot: *edit CUnsignedChar = #unsafe write_ptr.offset :: offset :: method
+        #unsafe dest_slot.store :: raw :: method
+        select:
+            when raw == 0 => break
+            else => offset = offset + 1
+    return void_as_c_char :: memory :: call
+
+fn free_drop_payload_heap(heap: *edit CVoid, count: CInt, payload: *edit CVoid) -> Unit:
+    select:
+        when payload.is_null :: :: method => return
+        else => ()
+    let copied_paths = void_as_drop_path_pointer :: payload :: call
+    let scan: CInt = 0
+    repeat while scan < count:
+        let slot: *edit DropPathPointer = copied_path_slot_at :: copied_paths, scan :: call
+        let copied: DropPathPointer = #unsafe slot.load :: :: method
+        free_heap_string :: heap, copied :: call
+        let cleared: DropPathPointer = null
+        #unsafe slot.store :: cleared :: method
+        scan = scan + 1
+    #unsafe HeapFree :: heap, 0, payload :: call
+    return
+
+fn free_drop_payload(count: CInt, payload: *edit CVoid) -> Unit:
+    select:
+        when payload.is_null :: :: method => return
+        else => ()
+    let heap: *edit CVoid = #unsafe GetProcessHeap :: :: call
+    select:
+        when heap.is_null :: :: method => return
+        else => return free_drop_payload_heap :: heap, count, payload :: call
+
+fn copy_drop_payload(count: CInt, paths: *read *read CChar) -> *edit CVoid:
+    select:
+        when count <= 0 =>
+            let none: *edit CVoid = null
+            return none
+        when paths.is_null :: :: method =>
+            let none: *edit CVoid = null
+            return none
+        else => ()
+    let heap: *edit CVoid = #unsafe GetProcessHeap :: :: call
+    select:
+        when heap.is_null :: :: method =>
+            let none: *edit CVoid = null
+            return none
+        else => ()
+    let Result.Ok(pointer_count) = count as Maybe[CSize] else =>
+        let none: *edit CVoid = null
+        return none
+    let payload_bytes: CSize = pointer_count * 8
+    let payload: *edit CVoid = #unsafe HeapAlloc :: heap, 0x00000008, payload_bytes :: call
+    select:
+        when payload.is_null :: :: method =>
+            let none: *edit CVoid = null
+            return none
+        else => ()
+    let copied_paths = void_as_drop_path_pointer :: payload :: call
+    let scan: CInt = 0
+    repeat while scan < count:
+        let source_slot: *read ReadDropPathPointer = input_path_slot_at :: paths, scan :: call
+        let source_path: ReadDropPathPointer = #unsafe source_slot.load :: :: method
+        let copied: *edit CChar = copy_heap_string :: heap, source_path :: call
+        select:
+            when copied.is_null :: :: method =>
+                free_drop_payload_heap :: heap, scan, payload :: call
+                let none: *edit CVoid = null
+                return none
+            else => ()
+        let copied_slot: *edit DropPathPointer = copied_path_slot_at :: copied_paths, scan :: call
+        #unsafe copied_slot.store :: copied :: method
+        scan = scan + 1
+    return payload
+
+fn take_dropped_paths(count: CInt, payload: *edit CVoid) -> List[Str]:
+    let paths = List[Str] :: :: call
+    select:
+        when payload.is_null :: :: method => return paths
+        else => ()
+    let copied_paths = void_as_drop_path_pointer :: payload :: call
+    let scan: CInt = 0
+    repeat while scan < count:
+        let slot: *edit DropPathPointer = copied_path_slot_at :: copied_paths, scan :: call
+        let copied: DropPathPointer = #unsafe slot.load :: :: method
+        select copy_edit_c_string :: copied :: call:
+            when Result.Ok(path) => paths.push :: path :: method
+            when Result.Err(_) => ()
+        scan = scan + 1
+    free_drop_payload :: count, payload :: call
+    return paths
+
+fn free_slot_payload(read slot: SlotWrite) -> Unit:
+    select:
+        when slot.kind == 17 => free_drop_payload :: slot.a, slot.p :: call
+        else => return
+
+fn push_slot(mailbox_ptr: *edit WindowMailbox, read slot: SlotWrite) -> Unit:
+    select:
+        when mailbox_ptr.is_null :: :: method =>
+            free_slot_payload :: slot :: call
+            return
+        else =>
+            let mailbox: WindowMailbox = #unsafe mailbox_ptr.load :: :: method
+            let next: CUInt = next_slot :: mailbox.write_index :: call
+            select:
+                when next == mailbox.read_index =>
+                    mailbox.overflowed = 1
+                    #unsafe mailbox_ptr.store :: mailbox :: method
+                    free_slot_payload :: slot :: call
+                    return
+                else =>
+                    let Result.Ok(slot_index) = cuint_to_index :: mailbox.write_index :: call else =>
+                        mailbox.overflowed = 1
+                        #unsafe mailbox_ptr.store :: mailbox :: method
+                        free_slot_payload :: slot :: call
+                        return
+                    mailbox.kinds[slot_index] = slot.kind
+                    mailbox.as_[slot_index] = slot.a
+                    mailbox.bs[slot_index] = slot.b
+                    mailbox.cs[slot_index] = slot.c
+                    mailbox.ds[slot_index] = slot.d
+                    mailbox.us[slot_index] = slot.u
+                    mailbox.fxs[slot_index] = slot.fx
+                    mailbox.fys[slot_index] = slot.fy
+                    mailbox.xs[slot_index] = slot.x
+                    mailbox.ys[slot_index] = slot.y
+                    mailbox.ps[slot_index] = slot.p
+                    mailbox.write_index = next
+                    #unsafe mailbox_ptr.store :: mailbox :: method
+                    return
+
+fn make_empty_slot() -> SlotWrite:
+    return SlotWrite :: :: call
+        kind = 0
+        a = 0
+        b = 0
+        c = 0
+        d = 0
+        u = 0
+        fx = 0.0
+        fy = 0.0
+        x = 0.0
+        y = 0.0
+        p = null
+
+#export[name = "runa_app_window_close_callback"]
+extern["c"] fn window_close_callback(window: *edit GlfwWindowRaw) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    let slot = make_empty_slot :: :: call
+    slot.kind = 1
+    push_slot :: mailbox, slot :: call
+    return
+
+#export[name = "runa_app_window_refresh_callback"]
+extern["c"] fn window_refresh_callback(window: *edit GlfwWindowRaw) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    let slot = make_empty_slot :: :: call
+    slot.kind = 2
+    push_slot :: mailbox, slot :: call
+    return
+
+#export[name = "runa_app_window_pos_callback"]
+extern["c"] fn window_pos_callback(window: *edit GlfwWindowRaw, x: CInt, y: CInt) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    let slot = make_empty_slot :: :: call
+    slot.kind = 3
+    slot.a = x
+    slot.b = y
+    push_slot :: mailbox, slot :: call
+    return
+
+#export[name = "runa_app_window_size_callback"]
+extern["c"] fn window_size_callback(window: *edit GlfwWindowRaw, width: CInt, height: CInt) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    let slot = make_empty_slot :: :: call
+    slot.kind = 4
+    slot.a = width
+    slot.b = height
+    push_slot :: mailbox, slot :: call
+    return
+
+#export[name = "runa_app_window_framebuffer_size_callback"]
+extern["c"] fn framebuffer_size_callback(window: *edit GlfwWindowRaw, width: CInt, height: CInt) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    let slot = make_empty_slot :: :: call
+    slot.kind = 5
+    slot.a = width
+    slot.b = height
+    push_slot :: mailbox, slot :: call
+    return
+
+#export[name = "runa_app_window_content_scale_callback"]
+extern["c"] fn content_scale_callback(window: *edit GlfwWindowRaw, x: F32, y: F32) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    let slot = make_empty_slot :: :: call
+    slot.kind = 6
+    slot.fx = x
+    slot.fy = y
+    push_slot :: mailbox, slot :: call
+    return
+
+#export[name = "runa_app_window_focus_callback"]
+extern["c"] fn focus_callback(window: *edit GlfwWindowRaw, focused: CInt) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    let slot = make_empty_slot :: :: call
+    slot.kind = 7
+    slot.a = focused
+    push_slot :: mailbox, slot :: call
+    return
+
+#export[name = "runa_app_window_iconify_callback"]
+extern["c"] fn iconify_callback(window: *edit GlfwWindowRaw, iconified: CInt) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    let slot = make_empty_slot :: :: call
+    slot.kind = 8
+    slot.a = iconified
+    push_slot :: mailbox, slot :: call
+    return
+
+#export[name = "runa_app_window_maximize_callback"]
+extern["c"] fn maximize_callback(window: *edit GlfwWindowRaw, maximized: CInt) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    let slot = make_empty_slot :: :: call
+    slot.kind = 9
+    slot.a = maximized
+    push_slot :: mailbox, slot :: call
+    return
+
+#export[name = "runa_app_window_cursor_enter_callback"]
+extern["c"] fn cursor_enter_callback(window: *edit GlfwWindowRaw, entered: CInt) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    let slot = make_empty_slot :: :: call
+    slot.kind = 10
+    slot.a = entered
+    push_slot :: mailbox, slot :: call
+    return
+
+#export[name = "runa_app_window_key_callback"]
+extern["c"] fn key_callback(window: *edit GlfwWindowRaw, key: CInt, scancode: CInt, action: CInt, mods: CInt) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    let slot = make_empty_slot :: :: call
+    slot.kind = 11
+    slot.a = key
+    slot.b = scancode
+    slot.c = action
+    slot.d = mods
+    push_slot :: mailbox, slot :: call
+    return
+
+#export[name = "runa_app_window_char_callback"]
+extern["c"] fn char_callback(window: *edit GlfwWindowRaw, codepoint: CUInt) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    let slot = make_empty_slot :: :: call
+    slot.kind = 12
+    slot.u = codepoint
+    push_slot :: mailbox, slot :: call
+    return
+
+#export[name = "runa_app_window_char_mods_callback"]
+extern["c"] fn char_mods_callback(window: *edit GlfwWindowRaw, codepoint: CUInt, mods: CInt) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    let slot = make_empty_slot :: :: call
+    slot.kind = 13
+    slot.u = codepoint
+    slot.a = mods
+    push_slot :: mailbox, slot :: call
+    return
+
+#export[name = "runa_app_window_mouse_button_callback"]
+extern["c"] fn mouse_button_callback(window: *edit GlfwWindowRaw, button: CInt, action: CInt, mods: CInt) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    let slot = make_empty_slot :: :: call
+    slot.kind = 14
+    slot.a = button
+    slot.b = action
+    slot.c = mods
+    push_slot :: mailbox, slot :: call
+    return
+
+#export[name = "runa_app_window_cursor_pos_callback"]
+extern["c"] fn cursor_pos_callback(window: *edit GlfwWindowRaw, x: F64, y: F64) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    let slot = make_empty_slot :: :: call
+    slot.kind = 15
+    slot.x = x
+    slot.y = y
+    push_slot :: mailbox, slot :: call
+    return
+
+#export[name = "runa_app_window_scroll_callback"]
+extern["c"] fn scroll_callback(window: *edit GlfwWindowRaw, x: F64, y: F64) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    let slot = make_empty_slot :: :: call
+    slot.kind = 16
+    slot.x = x
+    slot.y = y
+    push_slot :: mailbox, slot :: call
+    return
+
+#export[name = "runa_app_window_drop_callback"]
+extern["c"] fn drop_callback(window: *edit GlfwWindowRaw, count: CInt, paths: *read *read CChar) -> CVoid:
+    let mailbox = mailbox_from_window :: window :: call
+    select:
+        when mailbox.is_null :: :: method => return
+        else => ()
+    let payload = copy_drop_payload :: count, paths :: call
+    select:
+        when payload.is_null :: :: method => return
+        else => ()
+    let slot = make_empty_slot :: :: call
+    slot.kind = 17
+    slot.a = count
+    slot.p = payload
+    push_slot :: mailbox, slot :: call
+    return
+
+pub(package) fn allocate_window_mailbox() -> Option[*edit WindowMailbox]:
+    let heap: *edit CVoid = #unsafe GetProcessHeap :: :: call
+    select:
+        when heap.is_null :: :: method => return Option.None
+        else =>
+            let memory: *edit CVoid = #unsafe HeapAlloc :: heap, 0x00000008, 7184 :: call
+            select:
+                when memory.is_null :: :: method => return Option.None
+                else =>
+                    let mailbox = void_as_mailbox :: memory :: call
+                    return Option.Some :: mailbox :: call
+
+pub(package) fn free_window_mailbox(mailbox: *edit WindowMailbox) -> Unit:
+    select:
+        when mailbox.is_null :: :: method => return
+        else =>
+            let heap: *edit CVoid = #unsafe GetProcessHeap :: :: call
+            select:
+                when heap.is_null :: :: method => return
+                else =>
+                    let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+                    let slot_scan: CInt = 0
+                    repeat while slot_scan < 128:
+                        let Result.Ok(slot_index) = slot_scan as Maybe[Index] else => break
+                        let kind: CInt = stored.kinds[slot_index]
+                        let count: CInt = stored.as_[slot_index]
+                        let payload: *edit CVoid = stored.ps[slot_index]
+                        select:
+                            when kind == 17 => free_drop_payload_heap :: heap, count, payload :: call
+                            else => ()
+                        slot_scan = slot_scan + 1
+                    let memory = mailbox_as_void :: mailbox :: call
+                    #unsafe HeapFree :: heap, 0, memory :: call
+                    return
+
+pub(package) fn attach_callbacks(read window: GlfwWindow, mailbox: *edit WindowMailbox) -> Unit:
+    let user = mailbox_as_void :: mailbox :: call
+    window.set_user_pointer :: user :: method
+    let refresh_callback: Option[GlfwWindowRefreshCallback] = Option.Some :: window_refresh_callback :: call
+    let pos_callback: Option[GlfwWindowPosCallback] = Option.Some :: window_pos_callback :: call
+    let size_callback: Option[GlfwWindowSizeCallback] = Option.Some :: window_size_callback :: call
+    let framebuffer_callback: Option[GlfwFramebufferSizeCallback] = Option.Some :: framebuffer_size_callback :: call
+    let content_scale_changed: Option[GlfwWindowContentScaleCallback] = Option.Some :: content_scale_callback :: call
+    let focus_changed: Option[GlfwWindowFocusCallback] = Option.Some :: focus_callback :: call
+    let iconify_changed: Option[GlfwWindowIconifyCallback] = Option.Some :: iconify_callback :: call
+    let maximize_changed: Option[GlfwWindowMaximizeCallback] = Option.Some :: maximize_callback :: call
+    let cursor_entered: Option[GlfwCursorEnterCallback] = Option.Some :: cursor_enter_callback :: call
+    let key_changed: Option[GlfwKeyCallback] = Option.Some :: key_callback :: call
+    let character: Option[GlfwCharCallback] = Option.Some :: char_callback :: call
+    let character_mods: Option[GlfwCharModsCallback] = Option.Some :: char_mods_callback :: call
+    let mouse_button_changed: Option[GlfwMouseButtonCallback] = Option.Some :: mouse_button_callback :: call
+    let cursor_moved: Option[GlfwCursorPosCallback] = Option.Some :: cursor_pos_callback :: call
+    let scrolled: Option[GlfwScrollCallback] = Option.Some :: scroll_callback :: call
+    let dropped: Option[GlfwDropCallback] = Option.Some :: drop_callback :: call
+    window.set_refresh_callback :: refresh_callback :: method
+    window.set_pos_callback :: pos_callback :: method
+    window.set_size_callback :: size_callback :: method
+    window.set_framebuffer_size_callback :: framebuffer_callback :: method
+    window.set_content_scale_callback :: content_scale_changed :: method
+    window.set_focus_callback :: focus_changed :: method
+    window.set_iconify_callback :: iconify_changed :: method
+    window.set_maximize_callback :: maximize_changed :: method
+    window.set_cursor_enter_callback :: cursor_entered :: method
+    window.set_key_callback :: key_changed :: method
+    window.set_char_callback :: character :: method
+    window.set_char_mods_callback :: character_mods :: method
+    window.set_mouse_button_callback :: mouse_button_changed :: method
+    window.set_cursor_pos_callback :: cursor_moved :: method
+    window.set_scroll_callback :: scrolled :: method
+    window.set_drop_callback :: dropped :: method
+    return
+
+pub(package) fn clear_user_pointer(read window: GlfwWindow) -> Unit:
+    let user: *edit CVoid = null
+    window.set_user_pointer :: user :: method
+    return
+
+pub(package) fn mailbox_overflowed(mailbox_ptr: *edit WindowMailbox) -> Bool:
+    select:
+        when mailbox_ptr.is_null :: :: method => return false
+        else =>
+            let mailbox: WindowMailbox = #unsafe mailbox_ptr.load :: :: method
+            return cint_is_true :: mailbox.overflowed :: call
+
+pub(package) fn drain_window_mailbox(id: WindowId, mailbox_ptr: *edit WindowMailbox, edit pending: List[AppEvent]) -> Unit:
+    select:
+        when mailbox_ptr.is_null :: :: method => return
+        else =>
+            let mailbox: WindowMailbox = #unsafe mailbox_ptr.load :: :: method
+            repeat while mailbox.read_index != mailbox.write_index:
+                let Result.Ok(slot_index) = cuint_to_index :: mailbox.read_index :: call else => return
+                let kind: CInt = mailbox.kinds[slot_index]
+                let a: CInt = mailbox.as_[slot_index]
+                let b: CInt = mailbox.bs[slot_index]
+                let c: CInt = mailbox.cs[slot_index]
+                let d: CInt = mailbox.ds[slot_index]
+                let u: CUInt = mailbox.us[slot_index]
+                let fx: F32 = mailbox.fxs[slot_index]
+                let fy: F32 = mailbox.fys[slot_index]
+                let x: F64 = mailbox.xs[slot_index]
+                let y: F64 = mailbox.ys[slot_index]
+                let p: *edit CVoid = mailbox.ps[slot_index]
+                select:
+                    when kind == 1 =>
+                        let event = WindowEvent.CloseRequested :: :: call
+                            id = id
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 2 =>
+                        let event = WindowEvent.Refreshed :: :: call
+                            id = id
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 3 =>
+                        let event = WindowEvent.Moved :: :: call
+                            id = id
+                            x = a
+                            y = b
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 4 =>
+                        let event = WindowEvent.Resized :: :: call
+                            id = id
+                            width = a
+                            height = b
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 5 =>
+                        let event = WindowEvent.FramebufferResized :: :: call
+                            id = id
+                            width = a
+                            height = b
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 6 =>
+                        let event = WindowEvent.ContentScaleChanged :: :: call
+                            id = id
+                            x = fx
+                            y = fy
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 7 =>
+                        let event = WindowEvent.FocusChanged :: :: call
+                            id = id
+                            focused = cint_is_true :: a :: call
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 8 =>
+                        let event = WindowEvent.Iconified :: :: call
+                            id = id
+                            iconified = cint_is_true :: a :: call
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 9 =>
+                        let event = WindowEvent.Maximized :: :: call
+                            id = id
+                            maximized = cint_is_true :: a :: call
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 10 =>
+                        let event = WindowEvent.CursorEntered :: :: call
+                            id = id
+                            entered = cint_is_true :: a :: call
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 11 =>
+                        let action = input_action_from_raw :: c :: call
+                        let key = key_from_raw :: a :: call
+                        let mods = modifiers_from_raw :: d :: call
+                        let event = WindowEvent.KeyChanged :: :: call
+                            id = id
+                            key = key
+                            scancode = b
+                            action = action
+                            mods = mods
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 12 =>
+                        let event = WindowEvent.Character :: :: call
+                            id = id
+                            codepoint = u
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 13 =>
+                        let mods = modifiers_from_raw :: a :: call
+                        let event = WindowEvent.CharacterMods :: :: call
+                            id = id
+                            codepoint = u
+                            mods = mods
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 14 =>
+                        let button = mouse_button_from_raw :: a :: call
+                        let action = input_action_from_raw :: b :: call
+                        let mods = modifiers_from_raw :: c :: call
+                        let event = WindowEvent.MouseButtonChanged :: :: call
+                            id = id
+                            button = button
+                            action = action
+                            mods = mods
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 15 =>
+                        let event = WindowEvent.CursorMoved :: :: call
+                            id = id
+                            x = x
+                            y = y
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 16 =>
+                        let event = WindowEvent.Scrolled :: :: call
+                            id = id
+                            x = x
+                            y = y
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 17 =>
+                        let paths = take_dropped_paths :: a, p :: call
+                        let event = WindowEvent.DroppedPaths :: :: call
+                            id = id
+                            paths = paths
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    else => ()
+                mailbox.kinds[slot_index] = 0
+                mailbox.as_[slot_index] = 0
+                mailbox.bs[slot_index] = 0
+                mailbox.cs[slot_index] = 0
+                mailbox.ds[slot_index] = 0
+                mailbox.us[slot_index] = 0
+                mailbox.fxs[slot_index] = 0.0
+                mailbox.fys[slot_index] = 0.0
+                mailbox.xs[slot_index] = 0.0
+                mailbox.ys[slot_index] = 0.0
+                mailbox.ps[slot_index] = null
+                mailbox.read_index = next_slot :: mailbox.read_index :: call
+            #unsafe mailbox_ptr.store :: mailbox :: method
+            return

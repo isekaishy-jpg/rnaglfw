@@ -1,0 +1,2784 @@
+mod allocation_support
+mod binding_support
+mod blend_support
+mod image_support
+mod layout_support
+mod line_support
+mod memory_support
+mod pixel_path_support
+mod support
+mod upload_support
+
+use std.{List, Option, Result, Str}
+
+use runa_app.{AppError, AppSnapshot, ClientApi, ControlFlow, CursorMode, GamepadAxis, GamepadButton}
+use runa_app.{JoystickSnapshot, MonitorSnapshot}
+use runa_app.{KeyCode, MouseButton}
+use runa_app.{Platform, StandardCursor}
+use runa_app.RgbaImage
+use runa_app.{WindowEventKind, WindowId}
+use runa_app.{client_api_raw, context_creation_api_raw, input_action_raw, opengl_profile_raw}
+use runa_app.{app_init_config, hidden_window_spec, vulkan_window_spec}
+use runa_app.{rgba_color, solid_rgba_image}
+use runa_app.{window_aspect_ratio, window_size_limits}
+use runa_app_vulkan.VulkanPresentApp
+use runa_app_vulkan.{VulkanPresentAppError, VulkanPresentError, VulkanPresentRuntimeError}
+use runa_app_vulkan.app_init_hidden_vulkan_present_with
+use allocation_support.check_vulkan_allocation_helpers
+use binding_support.check_vulkan_present_bindings
+use blend_support.{check_rgba_blend_helpers, check_vulkan_pixel_frame_blend_helpers}
+use image_support.check_vulkan_transfer_destination_image_helpers
+use layout_support.check_vulkan_surface_layout
+use line_support.{check_rgba_line_helpers, check_vulkan_pixel_frame_line_helpers}
+use memory_support.check_vulkan_memory_helpers
+use pixel_path_support.check_present_pixel_path
+use support.{check_osmesa_buffer_helpers, check_rgba_image_helpers, check_vulkan_pixel_frame_helpers}
+use support.{check_vulkan_report_helpers, prove_window_input_data_single_runtime}
+use support.prove_lifecycle_object_runtime
+use support.prove_lifecycle_object_lists_runtime
+use support.prove_lifecycle_ids_runtime
+use support.prove_lifecycle_event_lists_runtime
+use support.prove_lifecycle_event_single_runtime
+use support.{prove_window_input_event_single_runtime, prove_window_state_data_runtime}
+use support.prove_window_state_event_single_runtime
+use upload_support.check_vulkan_upload_plan_helpers
+
+const WINDOW_TITLE: Str = "runa_app_vulkan_smoke"
+const UPDATED_WINDOW_TITLE: Str = "runa_app_vulkan_smoke_owned"
+
+fn check_primary_monitor_snapshot(read primary_monitor_snapshot: MonitorSnapshot) -> I32:
+    select:
+        when !primary_monitor_snapshot.available :: :: method => return 457
+        when !primary_monitor_snapshot.primary :: :: method => return 458
+        else => ()
+    select primary_monitor_snapshot.first_video_mode :: :: method:
+        when Option.Some(first_mode) =>
+            select:
+                when !primary_monitor_snapshot.supports_video_mode :: first_mode :: method => return 459
+                else => ()
+        when Option.None =>
+            select:
+                when !primary_monitor_snapshot.video_modes.is_empty :: :: method => return 460
+                else => ()
+    let has_gamma_ramp = primary_monitor_snapshot.has_gamma_ramp :: :: method
+    select primary_monitor_snapshot.gamma_ramp:
+        when Option.Some(_) =>
+            select:
+                when !has_gamma_ramp => return 461
+                else => ()
+        when Option.None =>
+            select:
+                when has_gamma_ramp => return 462
+                else => ()
+    select primary_monitor_snapshot.current_video_mode:
+        when Option.Some(current_mode) =>
+            select:
+                when !primary_monitor_snapshot.supports_video_mode :: current_mode :: method => return 463
+                else => ()
+            select primary_monitor_snapshot.video_mode_matching :: current_mode.width, current_mode.height, current_mode.refresh_rate :: method:
+                when Option.Some(found_mode) =>
+                    select:
+                        when found_mode.width != current_mode.width => return 464
+                        when found_mode.height != current_mode.height => return 465
+                        when found_mode.refresh_rate != current_mode.refresh_rate => return 466
+                        else => ()
+                when Option.None => return 467
+            select primary_monitor_snapshot.fullscreen_spec :: :: method:
+                when Result.Ok(spec) =>
+                    select:
+                        when spec.pos.x != primary_monitor_snapshot.screen_pos.x => return 468
+                        when spec.pos.y != primary_monitor_snapshot.screen_pos.y => return 469
+                        when spec.size.width != current_mode.width => return 470
+                        when spec.size.height != current_mode.height => return 471
+                        when spec.refresh_rate != current_mode.refresh_rate => return 472
+                        else => ()
+                when Result.Err(_) => return 473
+            select primary_monitor_snapshot.fullscreen_spec_with_video_mode :: current_mode :: method:
+                when Result.Ok(spec) =>
+                    select:
+                        when spec.pos.x != primary_monitor_snapshot.screen_pos.x => return 474
+                        when spec.pos.y != primary_monitor_snapshot.screen_pos.y => return 475
+                        when spec.size.width != current_mode.width => return 476
+                        when spec.size.height != current_mode.height => return 477
+                        when spec.refresh_rate != current_mode.refresh_rate => return 478
+                        else => ()
+                when Result.Err(_) => return 479
+        when Option.None =>
+            select primary_monitor_snapshot.fullscreen_spec :: :: method:
+                when Result.Ok(_) => return 480
+                when Result.Err(_) => ()
+    return 0
+
+fn check_joystick_snapshot(read joystick_snapshot: JoystickSnapshot) -> I32:
+    select:
+        when !joystick_snapshot.available :: :: method => return 481
+        when joystick_snapshot.axis_count :: :: method != joystick_snapshot.axes.count :: :: method => return 482
+        when joystick_snapshot.button_count :: :: method != joystick_snapshot.buttons.count :: :: method => return 483
+        when joystick_snapshot.hat_count :: :: method != joystick_snapshot.hats.count :: :: method => return 484
+        else => ()
+    select:
+        when joystick_snapshot.axes.is_empty :: :: method =>
+            select joystick_snapshot.axis_at :: 0 :: method:
+                when Option.Some(_) => return 485
+                when Option.None => ()
+        else =>
+            select joystick_snapshot.axis_at :: 0 :: method:
+                when Option.Some(axis_value) =>
+                    select:
+                        when axis_value != joystick_snapshot.axes[0] => return 486
+                        else => ()
+                when Option.None => return 487
+    select:
+        when joystick_snapshot.buttons.is_empty :: :: method =>
+            select joystick_snapshot.button_at :: 0 :: method:
+                when Option.Some(_) => return 488
+                when Option.None => ()
+        else =>
+            select joystick_snapshot.button_at :: 0 :: method:
+                when Option.Some(button_value) =>
+                    select:
+                        when button_value != joystick_snapshot.buttons[0] => return 489
+                        else => ()
+                when Option.None => return 490
+    select:
+        when joystick_snapshot.hats.is_empty :: :: method =>
+            select joystick_snapshot.hat_at :: 0 :: method:
+                when Option.Some(_) => return 491
+                when Option.None => ()
+        else =>
+            select joystick_snapshot.hat_at :: 0 :: method:
+                when Option.Some(hat_value) =>
+                    select:
+                        when hat_value.up :: :: method != joystick_snapshot.hats[0].up :: :: method => return 492
+                        when hat_value.right :: :: method != joystick_snapshot.hats[0].right :: :: method => return 493
+                        when hat_value.down :: :: method != joystick_snapshot.hats[0].down :: :: method => return 494
+                        when hat_value.left :: :: method != joystick_snapshot.hats[0].left :: :: method => return 495
+                        else => ()
+                when Option.None => return 496
+    select joystick_snapshot.gamepad_state:
+        when Option.Some(gamepad_state) =>
+            select:
+                when !joystick_snapshot.has_gamepad_state :: :: method => return 497
+                when joystick_snapshot.gamepad_button_down :: GamepadButton.A :: method != gamepad_state.button_down :: GamepadButton.A :: method => return 498
+                when joystick_snapshot.gamepad_button_up :: GamepadButton.A :: method != gamepad_state.button_up :: GamepadButton.A :: method => return 499
+                when joystick_snapshot.gamepad_axis :: GamepadAxis.LeftX :: method != gamepad_state.axis :: GamepadAxis.LeftX :: method => return 500
+                when joystick_snapshot.left_stick_x :: :: method != gamepad_state.left_stick_x :: :: method => return 501
+                when joystick_snapshot.left_stick_y :: :: method != gamepad_state.left_stick_y :: :: method => return 502
+                when joystick_snapshot.right_stick_x :: :: method != gamepad_state.right_stick_x :: :: method => return 503
+                when joystick_snapshot.right_stick_y :: :: method != gamepad_state.right_stick_y :: :: method => return 504
+                when joystick_snapshot.left_trigger :: :: method != gamepad_state.left_trigger :: :: method => return 505
+                when joystick_snapshot.right_trigger :: :: method != gamepad_state.right_trigger :: :: method => return 506
+                else => ()
+        when Option.None =>
+            select:
+                when joystick_snapshot.has_gamepad_state :: :: method => return 507
+                when joystick_snapshot.gamepad_button_down :: GamepadButton.A :: method => return 508
+                when !joystick_snapshot.gamepad_button_up :: GamepadButton.A :: method => return 509
+                when joystick_snapshot.gamepad_axis :: GamepadAxis.LeftX :: method != 0.0 => return 510
+                when joystick_snapshot.left_stick_x :: :: method != 0.0 => return 511
+                when joystick_snapshot.left_stick_y :: :: method != 0.0 => return 512
+                when joystick_snapshot.right_stick_x :: :: method != 0.0 => return 513
+                when joystick_snapshot.right_stick_y :: :: method != 0.0 => return 514
+                when joystick_snapshot.left_trigger :: :: method != 0.0 => return 515
+                when joystick_snapshot.right_trigger :: :: method != 0.0 => return 516
+                else => ()
+    return 0
+
+fn check_snapshot_window_take(take snapshot: AppSnapshot, window_id: WindowId) -> I32:
+    select snapshot.take_window :: window_id :: method:
+        when Option.Some(window_snapshot) =>
+            select:
+                when window_snapshot.window.id != window_id => return 503
+                when snapshot.has_window :: window_id :: method => return 504
+                else => ()
+        when Option.None => return 505
+    return 0
+
+fn check_snapshot_current_context_take(take snapshot: AppSnapshot) -> I32:
+    select snapshot.take_current_context_window :: :: method:
+        when Option.Some(_) => return 506
+        when Option.None => return 0
+
+fn check_snapshot_window_lookup(read snapshot: AppSnapshot, window_id: WindowId) -> I32:
+    select snapshot.window :: window_id :: method:
+        when Option.Some(window_snapshot) =>
+            select:
+                when window_snapshot.window.id != window_id => return 507
+                else => ()
+        when Option.None => return 508
+    select snapshot.window :: window_id + 1000 :: method:
+        when Option.Some(_) => return 509
+        when Option.None => ()
+    return 0
+
+fn check_snapshot_current_context_lookup(read snapshot: AppSnapshot) -> I32:
+    select snapshot.current_context_window :: :: method:
+        when Option.Some(_) => return 510
+        when Option.None => return 0
+
+fn check_snapshot_primary_monitor_lookup(read snapshot: AppSnapshot) -> I32:
+    select snapshot.primary_monitor_id:
+        when Option.Some(primary_monitor_id) =>
+            select snapshot.primary_monitor :: :: method:
+                when Option.Some(monitor_snapshot) =>
+                    select:
+                        when monitor_snapshot.id != primary_monitor_id => return 511
+                        else => ()
+                when Option.None => return 512
+            select snapshot.monitor :: primary_monitor_id :: method:
+                when Option.Some(monitor_snapshot) =>
+                    select:
+                        when monitor_snapshot.id != primary_monitor_id => return 513
+                        else => ()
+                when Option.None => return 514
+        when Option.None =>
+            select snapshot.primary_monitor :: :: method:
+                when Option.Some(_) => return 515
+                when Option.None => ()
+    return 0
+
+fn check_snapshot_primary_monitor_take(take snapshot: AppSnapshot) -> I32:
+    select snapshot.primary_monitor_id:
+        when Option.Some(primary_monitor_id) =>
+            select snapshot.take_primary_monitor :: :: method:
+                when Option.Some(monitor_snapshot) =>
+                    select:
+                        when monitor_snapshot.id != primary_monitor_id => return 516
+                        when snapshot.has_monitor :: primary_monitor_id :: method => return 517
+                        else => ()
+                when Option.None => return 518
+        when Option.None =>
+            select snapshot.take_primary_monitor :: :: method:
+                when Option.Some(_) => return 519
+                when Option.None => ()
+    return 0
+
+fn check_snapshot_joystick_take(take snapshot: AppSnapshot) -> I32:
+    select:
+        when snapshot.connected_joystick_count == 0 =>
+            select snapshot.take_joystick :: 0 :: method:
+                when Option.Some(_) => return 520
+                when Option.None => ()
+        else =>
+            let joystick_id = snapshot.joysticks[0].joystick.id
+            select snapshot.take_joystick :: joystick_id :: method:
+                when Option.Some(found_snapshot) =>
+                    select:
+                        when found_snapshot.joystick.id != joystick_id => return 521
+                        when snapshot.has_joystick :: joystick_id :: method => return 522
+                        else => ()
+                when Option.None => return 523
+    return 0
+
+fn check_snapshot_joystick_lookup(read snapshot: AppSnapshot) -> I32:
+    select:
+        when snapshot.connected_joystick_count == 0 =>
+            select snapshot.joystick :: 0 :: method:
+                when Option.Some(_) => return 549
+                when Option.None => ()
+        else =>
+            let joystick_id = snapshot.joysticks[0].joystick.id
+            select snapshot.joystick :: joystick_id :: method:
+                when Option.Some(joystick_snapshot) =>
+                    select:
+                        when joystick_snapshot.joystick.id != joystick_id => return 550
+                        else => ()
+                when Option.None => return 551
+    return 0
+
+fn check_snapshot_id_lists(read snapshot: AppSnapshot, window_id: WindowId) -> I32:
+    let window_ids = snapshot.window_ids :: :: method
+    select:
+        when window_ids.count :: :: method != 1 => return 524
+        when window_ids.remove :: 0 :: method != window_id => return 525
+        else => ()
+    let monitor_ids = snapshot.monitor_ids :: :: method
+    select:
+        when monitor_ids.count :: :: method != snapshot.monitor_count => return 526
+        when snapshot.monitor_count != 0 && monitor_ids.remove :: 0 :: method != snapshot.monitors[0].id => return 527
+        else => ()
+    let joystick_ids = snapshot.joystick_ids :: :: method
+    select:
+        when joystick_ids.count :: :: method != snapshot.connected_joystick_count => return 519
+        when snapshot.connected_joystick_count != 0 && joystick_ids.remove :: 0 :: method != snapshot.joysticks[0].joystick.id => return 520
+        else => ()
+    let gamepad_ids = snapshot.gamepad_ids :: :: method
+    let gamepad_count = snapshot.gamepad_count :: :: method
+    select:
+        when gamepad_ids.count :: :: method != gamepad_count => return 521
+        when snapshot.has_gamepads :: :: method != (gamepad_count != 0) => return 522
+        else => ()
+    return 0
+
+fn check_snapshot_gamepad_take(take snapshot: AppSnapshot) -> I32:
+    let gamepad_ids = snapshot.gamepad_ids :: :: method
+    select:
+        when gamepad_ids.is_empty :: :: method =>
+            select snapshot.take_gamepad :: 0 :: method:
+                when Option.Some(_) => return 523
+                when Option.None => ()
+        else =>
+            let gamepad_id = gamepad_ids.remove :: 0 :: method
+            select snapshot.take_gamepad :: gamepad_id :: method:
+                when Option.Some(gamepad_snapshot) =>
+                    select:
+                        when gamepad_snapshot.joystick.id != gamepad_id => return 524
+                        when !gamepad_snapshot.gamepad => return 525
+                        when snapshot.has_joystick :: gamepad_id :: method => return 526
+                        else => ()
+                when Option.None => return 527
+    return 0
+
+fn check_snapshot_gamepad_lookup(read snapshot: AppSnapshot) -> I32:
+    let gamepad_ids = snapshot.gamepad_ids :: :: method
+    let gamepad_snapshots = snapshot.gamepad_snapshots :: :: method
+    select:
+        when gamepad_ids.is_empty :: :: method =>
+            select:
+                when snapshot.has_gamepad :: 0 :: method => return 528
+                else => ()
+            select:
+                when gamepad_snapshots.count :: :: method != 0 => return 556
+                else => ()
+            select snapshot.gamepad :: 0 :: method:
+                when Option.Some(_) => return 552
+                when Option.None => ()
+            select snapshot.gamepad_index :: 0 :: method:
+                when Option.Some(_) => return 529
+                when Option.None => ()
+        else =>
+            let gamepad_id = gamepad_ids.remove :: 0 :: method
+            select:
+                when !snapshot.has_gamepad :: gamepad_id :: method => return 530
+                when gamepad_snapshots.count :: :: method != snapshot.gamepad_count :: :: method => return 557
+                when !gamepad_snapshots[0].gamepad => return 558
+                when !snapshot.has_gamepad :: gamepad_snapshots[0].joystick.id :: method => return 559
+                else => ()
+            select snapshot.gamepad :: gamepad_id :: method:
+                when Option.Some(gamepad_snapshot) =>
+                    select:
+                        when gamepad_snapshot.joystick.id != gamepad_id => return 553
+                        when !gamepad_snapshot.gamepad => return 554
+                        else => ()
+                when Option.None => return 555
+            select snapshot.gamepad_index :: gamepad_id :: method:
+                when Option.Some(index) =>
+                    select:
+                        when snapshot.joysticks[index].joystick.id != gamepad_id => return 531
+                        when !snapshot.joysticks[index].gamepad => return 532
+                        else => ()
+                when Option.None => return 533
+    return 0
+
+fn check_snapshot_close_requested_views(take snapshot: AppSnapshot, window_id: WindowId) -> I32:
+    let count_before = snapshot.close_requested_window_count :: :: method
+    let ids_before = snapshot.close_requested_window_ids :: :: method
+    let windows_before = snapshot.close_requested_windows :: :: method
+    select:
+        when count_before != 0 => return 532
+        when snapshot.has_close_requested_windows :: :: method => return 533
+        when snapshot.window_close_requested :: window_id :: method => return 543
+        when ids_before.count :: :: method != 0 => return 534
+        when windows_before.count :: :: method != 0 => return 535
+        else => ()
+    select snapshot.close_requested_window :: window_id :: method:
+        when Option.Some(_) => return 544
+        when Option.None => ()
+    select snapshot.take_window :: window_id :: method:
+        when Option.Some(window_snapshot) =>
+            let closing_snapshot = window_snapshot
+            closing_snapshot.should_close = true
+            snapshot.windows.push :: closing_snapshot :: method
+        when Option.None => return 536
+    let count_after = snapshot.close_requested_window_count :: :: method
+    let ids_after = snapshot.close_requested_window_ids :: :: method
+    let windows_after = snapshot.close_requested_windows :: :: method
+    select:
+        when count_after != 1 => return 537
+        when !snapshot.has_close_requested_windows :: :: method => return 538
+        when !snapshot.window_close_requested :: window_id :: method => return 545
+        when ids_after.count :: :: method != 1 => return 539
+        when ids_after.remove :: 0 :: method != window_id => return 540
+        when windows_after.count :: :: method != 1 => return 541
+        when windows_after.remove :: 0 :: method.window.id != window_id => return 542
+        else => ()
+    select snapshot.close_requested_window :: window_id :: method:
+        when Option.Some(closing_snapshot) =>
+            select:
+                when closing_snapshot.window.id != window_id => return 546
+                when !closing_snapshot.should_close => return 547
+                else => ()
+        when Option.None => return 548
+    return 0
+
+fn main() -> I32:
+    let report_status = check_vulkan_report_helpers :: :: call
+    select:
+        when report_status != 0 => return report_status
+        else => ()
+    let osmesa_status = check_osmesa_buffer_helpers :: :: call
+    select:
+        when osmesa_status != 0 => return osmesa_status
+        else => ()
+    let rgba_image_status = check_rgba_image_helpers :: :: call
+    select:
+        when rgba_image_status != 0 => return rgba_image_status
+        else => ()
+    let rgba_blend_status = check_rgba_blend_helpers :: :: call
+    select:
+        when rgba_blend_status != 0 => return rgba_blend_status
+        else => ()
+    let rgba_line_status = check_rgba_line_helpers :: :: call
+    select:
+        when rgba_line_status != 0 => return rgba_line_status
+        else => ()
+    let pixel_frame_status = check_vulkan_pixel_frame_helpers :: :: call
+    select:
+        when pixel_frame_status != 0 => return pixel_frame_status
+        else => ()
+    let pixel_frame_blend_status = check_vulkan_pixel_frame_blend_helpers :: :: call
+    select:
+        when pixel_frame_blend_status != 0 => return pixel_frame_blend_status
+        else => ()
+    let pixel_frame_line_status = check_vulkan_pixel_frame_line_helpers :: :: call
+    select:
+        when pixel_frame_line_status != 0 => return pixel_frame_line_status
+        else => ()
+    let config = app_init_config :: :: call
+    let config = config.on_platform :: Platform.Win32 :: method
+    let spec = vulkan_window_spec :: WINDOW_TITLE, 64, 64 :: call
+    select app_init_hidden_vulkan_present_with :: config, WINDOW_TITLE, spec :: call:
+        when Result.Ok(present_app) =>
+            let window_id = present_app.window_id :: :: method
+            let snapshot = present_app.snapshot :: :: method
+            select:
+                when !present_app.is_live :: :: method => return 136
+                when !present_app.has_windows :: :: method => return 137
+                when present_app.has_monitors :: :: method != (snapshot.monitor_count != 0) => return 138
+                when present_app.has_joysticks :: :: method != (snapshot.connected_joystick_count != 0) => return 139
+                when present_app.has_current_context_window :: :: method => return 140
+                when snapshot.has_monitors :: :: method != (snapshot.monitor_count != 0) => return 141
+                when snapshot.has_joysticks :: :: method != (snapshot.connected_joystick_count != 0) => return 142
+                when snapshot.has_current_context_window :: :: method => return 143
+                when present_app.window_count :: :: method != snapshot.window_count => return 138
+                when !present_app.window_exists :: window_id :: method => return 144
+                when present_app.monitor_count :: :: method != snapshot.monitor_count => return 145
+                when present_app.connected_joystick_count :: :: method != snapshot.connected_joystick_count => return 146
+                else => ()
+            select present_app.current_context_window_option :: :: method:
+                when Option.Some(_) => return 141
+                when Option.None => ()
+            select present_app.current_context_window_snapshot_option :: :: method:
+                when Option.Some(_) => return 142
+                when Option.None => ()
+            let window_ids = present_app.window_ids :: :: method
+            select:
+                when window_ids.count :: :: method != 1 => return 142
+                when window_ids.remove :: 0 :: method != window_id => return 143
+                else => ()
+            let live_windows = present_app.windows_snapshot :: :: method
+            select:
+                when live_windows.count :: :: method != 1 => return 144
+                else => ()
+            let live_window = live_windows.remove :: 0 :: method
+            select:
+                when live_window.id != window_id => return 145
+                else => ()
+            let window_snapshots = present_app.window_snapshots :: :: method
+            select:
+                when window_snapshots.count :: :: method != 1 => return 146
+                else => ()
+            let only_window_snapshot = window_snapshots.remove :: 0 :: method
+            select:
+                when only_window_snapshot.window.id != window_id => return 147
+                else => ()
+            let owned_window = present_app.window :: :: method
+            select present_app.window_by_id_option :: window_id :: method:
+                when Option.Some(optional_window) =>
+                    select:
+                        when optional_window.id != window_id => return 148
+                        else => ()
+                when Option.None => return 149
+            select present_app.window_snapshot_by_id_option :: window_id :: method:
+                when Option.Some(optional_window_snapshot) =>
+                    select:
+                        when optional_window_snapshot.window.id != window_id => return 150
+                        else => ()
+                when Option.None => return 151
+            select:
+                when present_app.wgl_context :: :: method != owned_window.wgl_context :: :: method => return 152
+                when present_app.egl_context :: :: method != owned_window.egl_context :: :: method => return 153
+                when present_app.egl_surface :: :: method != owned_window.egl_surface :: :: method => return 154
+                when present_app.osmesa_context :: :: method != owned_window.osmesa_context :: :: method => return 155
+                else => ()
+            select present_app.osmesa_color_buffer :: :: method:
+                when Option.Some(color_buffer) =>
+                    select owned_window.osmesa_color_buffer :: :: method:
+                        when Option.Some(window_color_buffer) =>
+                            select:
+                                when color_buffer.width :: :: method != window_color_buffer.width :: :: method => return 156
+                                when color_buffer.height :: :: method != window_color_buffer.height :: :: method => return 157
+                                when color_buffer.has_data :: :: method != window_color_buffer.has_data :: :: method => return 158
+                                else => ()
+                        when Option.None => return 159
+                when Option.None =>
+                    select owned_window.osmesa_color_buffer :: :: method:
+                        when Option.Some(_) => return 160
+                        when Option.None => ()
+            select present_app.osmesa_depth_buffer :: :: method:
+                when Option.Some(depth_buffer) =>
+                    select owned_window.osmesa_depth_buffer :: :: method:
+                        when Option.Some(window_depth_buffer) =>
+                            select:
+                                when depth_buffer.width :: :: method != window_depth_buffer.width :: :: method => return 161
+                                when depth_buffer.height :: :: method != window_depth_buffer.height :: :: method => return 162
+                                when depth_buffer.has_data :: :: method != window_depth_buffer.has_data :: :: method => return 163
+                                else => ()
+                        when Option.None => return 164
+                when Option.None =>
+                    select owned_window.osmesa_depth_buffer :: :: method:
+                        when Option.Some(_) => return 165
+                        when Option.None => ()
+            select snapshot.primary_monitor_id:
+                when Option.Some(primary_monitor_id) =>
+                    select present_app.monitor_option :: primary_monitor_id :: method:
+                        when Option.Some(optional_monitor) =>
+                            select present_app.monitor :: primary_monitor_id :: method:
+                                when Result.Ok(strict_monitor) =>
+                                    let optional_monitor_pos = optional_monitor.screen_pos :: :: method
+                                    let strict_monitor_pos = strict_monitor.screen_pos :: :: method
+                                    select:
+                                        when optional_monitor_pos.x != strict_monitor_pos.x => return 42
+                                        when optional_monitor_pos.y != strict_monitor_pos.y => return 43
+                                        else => ()
+                                when Result.Err(_) => return 44
+                        when Option.None => return 45
+                    select present_app.monitor_snapshot_option :: primary_monitor_id :: method:
+                        when Option.Some(optional_monitor_snapshot) =>
+                            select:
+                                when optional_monitor_snapshot.id != primary_monitor_id => return 46
+                                else => ()
+                        when Option.None => return 47
+                    select present_app.primary_monitor_option :: :: method:
+                        when Option.Some(primary_monitor) =>
+                            select present_app.primary_monitor :: :: method:
+                                when Result.Ok(strict_primary_monitor) =>
+                                    let optional_primary_pos = primary_monitor.screen_pos :: :: method
+                                    let strict_primary_pos = strict_primary_monitor.screen_pos :: :: method
+                                    select:
+                                        when !primary_monitor.primary :: :: method => return 48
+                                        when optional_primary_pos.x != strict_primary_pos.x => return 49
+                                        when optional_primary_pos.y != strict_primary_pos.y => return 50
+                                        else => ()
+                                when Result.Err(_) => return 51
+                        when Option.None => return 52
+                    select present_app.primary_monitor_id_option :: :: method:
+                        when Option.Some(optional_primary_monitor_id) =>
+                            select:
+                                when optional_primary_monitor_id != primary_monitor_id => return 53
+                                else => ()
+                        when Option.None => return 54
+                    select present_app.primary_monitor_snapshot_option :: :: method:
+                        when Option.Some(optional_primary_monitor_snapshot) =>
+                            select:
+                                when optional_primary_monitor_snapshot.id != primary_monitor_id => return 55
+                                else => ()
+                        when Option.None => return 56
+                    select present_app.primary_monitor_snapshot :: :: method:
+                        when Result.Ok(primary_monitor_snapshot) =>
+                            select:
+                                when !present_app.has_primary_monitor :: :: method => return 57
+                                when !snapshot.has_primary_monitor :: :: method => return 58
+                                when primary_monitor_snapshot.id != primary_monitor_id => return 59
+                                else => ()
+                            let status = check_primary_monitor_snapshot :: primary_monitor_snapshot :: call
+                            select:
+                                when status != 0 => return status
+                                else => ()
+                        when Result.Err(_) => return 60
+                when Option.None =>
+                    select:
+                        when present_app.has_primary_monitor :: :: method => return 61
+                        else => ()
+                    select present_app.primary_monitor_option :: :: method:
+                        when Option.Some(_) => return 62
+                        when Option.None => ()
+                    select present_app.primary_monitor_id_option :: :: method:
+                        when Option.Some(_) => return 63
+                        when Option.None => ()
+                    select present_app.primary_monitor_snapshot_option :: :: method:
+                        when Option.Some(_) => return 64
+                        when Option.None => ()
+            select:
+                when snapshot.connected_joystick_count == 0 => ()
+                else =>
+                    let joystick_snapshot = snapshot.joysticks[0]
+                    let status = check_joystick_snapshot :: joystick_snapshot :: call
+                    select:
+                        when status != 0 => return status
+                        else => ()
+            let window_take_snapshot = present_app.snapshot :: :: method
+            let window_take_status = check_snapshot_window_take :: window_take_snapshot, window_id :: call
+            select:
+                when window_take_status != 0 => return window_take_status
+                else => ()
+            let current_context_take_snapshot = present_app.snapshot :: :: method
+            let current_context_take_status = check_snapshot_current_context_take :: current_context_take_snapshot :: call
+            select:
+                when current_context_take_status != 0 => return current_context_take_status
+                else => ()
+            let window_lookup_snapshot = present_app.snapshot :: :: method
+            let window_lookup_status = check_snapshot_window_lookup :: window_lookup_snapshot, window_id :: call
+            select:
+                when window_lookup_status != 0 => return window_lookup_status
+                else => ()
+            let current_context_lookup_snapshot = present_app.snapshot :: :: method
+            let current_context_lookup_status = check_snapshot_current_context_lookup :: current_context_lookup_snapshot :: call
+            select:
+                when current_context_lookup_status != 0 => return current_context_lookup_status
+                else => ()
+            let primary_monitor_lookup_snapshot = present_app.snapshot :: :: method
+            let primary_monitor_lookup_status = check_snapshot_primary_monitor_lookup :: primary_monitor_lookup_snapshot :: call
+            select:
+                when primary_monitor_lookup_status != 0 => return primary_monitor_lookup_status
+                else => ()
+            let primary_monitor_take_snapshot = present_app.snapshot :: :: method
+            let primary_monitor_take_status = check_snapshot_primary_monitor_take :: primary_monitor_take_snapshot :: call
+            select:
+                when primary_monitor_take_status != 0 => return primary_monitor_take_status
+                else => ()
+            let joystick_take_snapshot = present_app.snapshot :: :: method
+            let joystick_take_status = check_snapshot_joystick_take :: joystick_take_snapshot :: call
+            select:
+                when joystick_take_status != 0 => return joystick_take_status
+                else => ()
+            let joystick_lookup_snapshot = present_app.snapshot :: :: method
+            let joystick_lookup_status = check_snapshot_joystick_lookup :: joystick_lookup_snapshot :: call
+            select:
+                when joystick_lookup_status != 0 => return joystick_lookup_status
+                else => ()
+            let snapshot_id_list_status = check_snapshot_id_lists :: snapshot, window_id :: call
+            select:
+                when snapshot_id_list_status != 0 => return snapshot_id_list_status
+                else => ()
+            let gamepad_take_snapshot = present_app.snapshot :: :: method
+            let snapshot_gamepad_take_status = check_snapshot_gamepad_take :: gamepad_take_snapshot :: call
+            select:
+                when snapshot_gamepad_take_status != 0 => return snapshot_gamepad_take_status
+                else => ()
+            let gamepad_lookup_snapshot = present_app.snapshot :: :: method
+            let snapshot_gamepad_lookup_status = check_snapshot_gamepad_lookup :: gamepad_lookup_snapshot :: call
+            select:
+                when snapshot_gamepad_lookup_status != 0 => return snapshot_gamepad_lookup_status
+                else => ()
+            let close_requested_view_snapshot = present_app.snapshot :: :: method
+            let snapshot_close_requested_view_status = check_snapshot_close_requested_views :: close_requested_view_snapshot, window_id :: call
+            select:
+                when snapshot_close_requested_view_status != 0 => return snapshot_close_requested_view_status
+                else => ()
+            select present_app.client_api :: :: method:
+                when ClientApi.None => ()
+                when _ => return 309
+            select present_app.set_title :: UPDATED_WINDOW_TITLE :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) => return 310
+            let icon_fill_a = rgba_color :: 255U8, 0U8, 0U8, 255U8 :: call
+            let icon_fill_b = rgba_color :: 0U8, 255U8, 0U8, 255U8 :: call
+            let icon_fill_c = rgba_color :: 0U8, 0U8, 255U8, 255U8 :: call
+            let icon_fill_d = rgba_color :: 255U8, 255U8, 0U8, 255U8 :: call
+            select solid_rgba_image :: 1, 1, icon_fill_a :: call:
+                when Result.Ok(raw_icon_image) =>
+                    let raw_icon = raw_icon_image.raw_image_view :: :: method
+                    present_app.set_icon :: raw_icon :: method
+                when Result.Err(_) => return 575
+            select solid_rgba_image :: 1, 1, icon_fill_b :: call:
+                when Result.Ok(icon_image) => present_app.set_icon_image :: icon_image :: method
+                when Result.Err(_) => return 576
+            let icon_images = List[RgbaImage] :: :: call
+            select solid_rgba_image :: 1, 1, icon_fill_c :: call:
+                when Result.Ok(icon_image) => icon_images.push :: icon_image :: method
+                when Result.Err(_) => return 577
+            select solid_rgba_image :: 2, 2, icon_fill_d :: call:
+                when Result.Ok(icon_image) => icon_images.push :: icon_image :: method
+                when Result.Err(_) => return 578
+            select present_app.set_icon_images :: icon_images :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) => return 579
+            let empty_icon_images = List[RgbaImage] :: :: call
+            select present_app.set_icon_images :: empty_icon_images :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) => return 580
+            present_app.clear_icon :: :: method
+            present_app.set_opacity :: 0.75F32 :: method
+            present_app.set_resizable :: false :: method
+            present_app.set_decorated :: false :: method
+            present_app.set_auto_iconify :: false :: method
+            present_app.set_floating :: true :: method
+            present_app.set_focus_on_show :: false :: method
+            present_app.set_mouse_passthrough :: true :: method
+            present_app.set_sticky_keys :: true :: method
+            present_app.set_sticky_mouse_buttons :: true :: method
+            present_app.set_lock_key_mods :: true :: method
+            present_app.hide_cursor :: :: method
+            select present_app.title :: :: method:
+                when Result.Ok(title) =>
+                    select title.find :: UPDATED_WINDOW_TITLE :: method:
+                        when Option.Some(_) => ()
+                        when Option.None => return 311
+                when Result.Err(_) => return 312
+            let owned_input_snapshot = present_app.input_snapshot :: :: method
+            let owned_keyboard_snapshot = present_app.keyboard_snapshot :: :: method
+            let owned_mouse_snapshot = present_app.mouse_snapshot :: :: method
+            select present_app.window_snapshot :: :: method:
+                when Result.Ok(owned_window_snapshot) =>
+                    let owned_pos = present_app.pos :: :: method
+                    let owned_size = present_app.size :: :: method
+                    let owned_frame_size = present_app.frame_size :: :: method
+                    let owned_framebuffer_size = present_app.framebuffer_size :: :: method
+                    let owned_content_scale = present_app.content_scale :: :: method
+                    let owned_cursor_pos = present_app.cursor_pos :: :: method
+                    let live_scancode = present_app.scancode :: KeyCode.A :: method
+                    let window_scancode = owned_window.scancode :: KeyCode.A :: method
+                    let live_key_state_raw = input_action_raw :: present_app.key_state :: KeyCode.Space :: method :: call
+                    let snapshot_key_state_raw = input_action_raw :: owned_window_snapshot.key_state :: KeyCode.Space :: method :: call
+                    let input_key_state_raw = input_action_raw :: owned_input_snapshot.key_state :: KeyCode.Space :: method :: call
+                    let keyboard_key_state_raw = input_action_raw :: owned_keyboard_snapshot.key_state :: KeyCode.Space :: method :: call
+                    let live_key_pressed = present_app.key_pressed :: KeyCode.Space :: method
+                    let snapshot_key_pressed = owned_window_snapshot.key_pressed :: KeyCode.Space :: method
+                    let input_key_pressed = owned_input_snapshot.key_pressed :: KeyCode.Space :: method
+                    let keyboard_key_pressed = owned_keyboard_snapshot.key_pressed :: KeyCode.Space :: method
+                    let live_mouse_state_raw = input_action_raw :: present_app.mouse_button_state :: MouseButton.Left :: method :: call
+                    let snapshot_mouse_state_raw = input_action_raw :: owned_window_snapshot.mouse_button_state :: MouseButton.Left :: method :: call
+                    let input_mouse_state_raw = input_action_raw :: owned_input_snapshot.mouse_button_state :: MouseButton.Left :: method :: call
+                    let mouse_snapshot_state_raw = input_action_raw :: owned_mouse_snapshot.button_state :: MouseButton.Left :: method :: call
+                    let live_mouse_pressed = present_app.mouse_button_pressed :: MouseButton.Left :: method
+                    let snapshot_mouse_pressed = owned_window_snapshot.mouse_button_pressed :: MouseButton.Left :: method
+                    let input_mouse_pressed = owned_input_snapshot.mouse_button_pressed :: MouseButton.Left :: method
+                    let mouse_snapshot_pressed = owned_mouse_snapshot.button_pressed :: MouseButton.Left :: method
+                    select:
+                        when owned_pos.x != owned_window_snapshot.pos.x => return 315
+                        when owned_pos.y != owned_window_snapshot.pos.y => return 316
+                        when owned_size.width != owned_window_snapshot.size.width => return 317
+                        when owned_size.height != owned_window_snapshot.size.height => return 318
+                        when owned_frame_size.left != owned_window_snapshot.frame_size.left => return 385
+                        when owned_frame_size.top != owned_window_snapshot.frame_size.top => return 386
+                        when owned_frame_size.right != owned_window_snapshot.frame_size.right => return 387
+                        when owned_frame_size.bottom != owned_window_snapshot.frame_size.bottom => return 388
+                        when owned_framebuffer_size.width != owned_window_snapshot.framebuffer_size.width => return 319
+                        when owned_framebuffer_size.height != owned_window_snapshot.framebuffer_size.height => return 320
+                        when owned_content_scale.x != owned_window_snapshot.content_scale.x => return 321
+                        when owned_content_scale.y != owned_window_snapshot.content_scale.y => return 322
+                        when present_app.hwnd :: :: method != owned_window_snapshot.hwnd => return 325
+                        when live_scancode != window_scancode => return 581
+                        when present_app.client_api_raw :: :: method != client_api_raw :: owned_window_snapshot.client_api :: call => return 411
+                        when present_app.opengl_profile_raw :: :: method != opengl_profile_raw :: owned_window_snapshot.opengl_profile :: call => return 412
+                        when present_app.context_creation_api_raw :: :: method != context_creation_api_raw :: owned_window_snapshot.context_creation_api :: call => return 413
+                        when present_app.context_version_major :: :: method != owned_window_snapshot.context_version_major => return 414
+                        when present_app.context_version_minor :: :: method != owned_window_snapshot.context_version_minor => return 415
+                        when present_app.current_context :: :: method != owned_window_snapshot.current_context => return 416
+                        when present_app.opengl_forward_compat :: :: method != owned_window_snapshot.opengl_forward_compat => return 417
+                        when present_app.opengl_debug_context :: :: method != owned_window_snapshot.opengl_debug_context => return 418
+                        when present_app.context_no_error :: :: method != owned_window_snapshot.context_no_error => return 419
+                        when present_app.srgb_capable :: :: method != owned_window_snapshot.srgb_capable => return 420
+                        when present_app.doublebuffered :: :: method != owned_window_snapshot.doublebuffered => return 421
+                        when present_app.opacity :: :: method != owned_window_snapshot.opacity => return 326
+                        when present_app.visible :: :: method != owned_window_snapshot.visible => return 327
+                        when present_app.focused :: :: method != owned_window_snapshot.focused => return 328
+                        when present_app.hovered :: :: method != owned_window_snapshot.hovered => return 329
+                        when present_app.floating :: :: method != owned_window_snapshot.floating => return 330
+                        when present_app.iconified :: :: method != owned_window_snapshot.iconified => return 331
+                        when present_app.maximized :: :: method != owned_window_snapshot.maximized => return 332
+                        when present_app.fullscreen :: :: method != owned_window_snapshot.fullscreen => return 333
+                        when present_app.resizable :: :: method != owned_window_snapshot.resizable => return 334
+                        when present_app.decorated :: :: method != owned_window_snapshot.decorated => return 335
+                        when present_app.auto_iconify :: :: method != owned_window_snapshot.auto_iconify => return 376
+                        when present_app.focus_on_show :: :: method != owned_window_snapshot.focus_on_show => return 377
+                        when present_app.mouse_passthrough :: :: method != owned_window_snapshot.mouse_passthrough => return 378
+                        when present_app.sticky_keys_enabled :: :: method != owned_window_snapshot.sticky_keys_enabled => return 336
+                        when present_app.sticky_mouse_buttons_enabled :: :: method != owned_window_snapshot.sticky_mouse_buttons_enabled => return 337
+                        when present_app.lock_key_mods_enabled :: :: method != owned_window_snapshot.lock_key_mods_enabled => return 338
+                        when present_app.raw_mouse_motion_enabled :: :: method != owned_window_snapshot.raw_mouse_motion_enabled => return 339
+                        when present_app.resizable :: :: method != false => return 380
+                        when present_app.decorated :: :: method != false => return 381
+                        when present_app.auto_iconify :: :: method != false => return 382
+                        when present_app.focus_on_show :: :: method != false => return 383
+                        when present_app.mouse_passthrough :: :: method != true => return 384
+                        when present_app.floating :: :: method != true => return 680
+                        when present_app.sticky_keys_enabled :: :: method != true => return 368
+                        when present_app.sticky_mouse_buttons_enabled :: :: method != true => return 369
+                        when present_app.lock_key_mods_enabled :: :: method != true => return 370
+                        when owned_input_snapshot.keyboard.sticky_keys_enabled != owned_window_snapshot.input.keyboard.sticky_keys_enabled => return 340
+                        when owned_input_snapshot.keyboard.lock_key_mods_enabled != owned_window_snapshot.input.keyboard.lock_key_mods_enabled => return 341
+                        when owned_input_snapshot.mouse.sticky_mouse_buttons_enabled != owned_window_snapshot.input.mouse.sticky_mouse_buttons_enabled => return 344
+                        when owned_input_snapshot.mouse.raw_mouse_motion_enabled != owned_window_snapshot.input.mouse.raw_mouse_motion_enabled => return 345
+                        when owned_input_snapshot.mouse.raw_mouse_motion_supported != present_app.raw_mouse_motion_supported :: :: method => return 346
+                        when owned_keyboard_snapshot.sticky_keys_enabled != true => return 372
+                        when owned_keyboard_snapshot.lock_key_mods_enabled != true => return 373
+                        when owned_mouse_snapshot.sticky_mouse_buttons_enabled != true => return 375
+                        when live_key_state_raw != snapshot_key_state_raw => return 429
+                        when input_key_state_raw != snapshot_key_state_raw => return 430
+                        when keyboard_key_state_raw != snapshot_key_state_raw => return 431
+                        when live_key_pressed != snapshot_key_pressed => return 432
+                        when input_key_pressed != snapshot_key_pressed => return 433
+                        when keyboard_key_pressed != snapshot_key_pressed => return 434
+                        when present_app.key_down :: KeyCode.Space :: method != owned_window_snapshot.input.key_down :: KeyCode.Space :: method => return 347
+                        when present_app.key_repeating :: KeyCode.Space :: method != owned_window_snapshot.input.key_repeating :: KeyCode.Space :: method => return 348
+                        when live_mouse_state_raw != snapshot_mouse_state_raw => return 435
+                        when input_mouse_state_raw != snapshot_mouse_state_raw => return 436
+                        when mouse_snapshot_state_raw != snapshot_mouse_state_raw => return 437
+                        when live_mouse_pressed != snapshot_mouse_pressed => return 438
+                        when input_mouse_pressed != snapshot_mouse_pressed => return 439
+                        when mouse_snapshot_pressed != snapshot_mouse_pressed => return 440
+                        when present_app.mouse_button_down :: MouseButton.Left :: method != owned_window_snapshot.input.mouse_button_down :: MouseButton.Left :: method => return 349
+                        when owned_keyboard_snapshot.keys_down.count :: :: method != owned_input_snapshot.keyboard.keys_down.count :: :: method => return 350
+                        when owned_keyboard_snapshot.repeating_keys.count :: :: method != owned_input_snapshot.keyboard.repeating_keys.count :: :: method => return 351
+                        when owned_mouse_snapshot.buttons_down.count :: :: method != owned_input_snapshot.mouse.buttons_down.count :: :: method => return 352
+                        else => ()
+                    select owned_window_snapshot.title:
+                        when Result.Ok(title) =>
+                            select title.find :: UPDATED_WINDOW_TITLE :: method:
+                                when Option.Some(_) => ()
+                                when Option.None => return 313
+                        when Result.Err(_) => return 314
+                    select present_app.cursor_mode :: :: method:
+                        when CursorMode.Hidden => ()
+                        when _ => return 367
+                    select owned_input_snapshot.mouse.cursor_mode:
+                        when CursorMode.Hidden => ()
+                        when _ => return 371
+                    select owned_mouse_snapshot.cursor_mode:
+                        when CursorMode.Hidden => ()
+                        when _ => return 374
+                when Result.Err(_) => return 355
+            present_app.set_floating :: false :: method
+            select:
+                when present_app.floating :: :: method => return 681
+                else => ()
+            let monitor_ids = present_app.monitor_ids :: :: method
+            select:
+                when monitor_ids.count :: :: method != present_app.monitor_count :: :: method => return 148
+                else => ()
+            let connected_joystick_ids = present_app.connected_joystick_ids :: :: method
+            select:
+                when connected_joystick_ids.count :: :: method != present_app.connected_joystick_count :: :: method => return 149
+                else => ()
+            let connected_joysticks = present_app.connected_joysticks :: :: method
+            let joystick_snapshots = present_app.joystick_snapshots :: :: method
+            let live_gamepads = present_app.gamepads :: :: method
+            let gamepad_snapshots = present_app.gamepad_snapshots :: :: method
+            let live_gamepad_ids = present_app.gamepad_ids :: :: method
+            let live_gamepad_count = present_app.gamepad_count :: :: method
+            select:
+                when connected_joysticks.count :: :: method != present_app.connected_joystick_count :: :: method => return 150
+                when joystick_snapshots.count :: :: method != present_app.connected_joystick_count :: :: method => return 150
+                when live_gamepads.count :: :: method > present_app.connected_joystick_count :: :: method => return 151
+                when gamepad_snapshots.count :: :: method > present_app.connected_joystick_count :: :: method => return 152
+                when live_gamepad_ids.count :: :: method != live_gamepad_count => return 167
+                when live_gamepads.count :: :: method != live_gamepad_count => return 168
+                when gamepad_snapshots.count :: :: method != live_gamepad_count => return 169
+                when present_app.has_gamepads :: :: method != (live_gamepad_count != 0) => return 170
+                else => ()
+            select:
+                when connected_joystick_ids.is_empty :: :: method => ()
+                else =>
+                    let first_joystick_id = connected_joystick_ids[0]
+                    select present_app.joystick_option :: first_joystick_id :: method:
+                        when Option.Some(optional_first_joystick) =>
+                            select:
+                                when optional_first_joystick.id != first_joystick_id => return 174
+                                else => ()
+                        when Option.None => return 175
+                    select present_app.joystick_snapshot_option :: first_joystick_id :: method:
+                        when Option.Some(optional_first_joystick_snapshot) =>
+                            select:
+                                when optional_first_joystick_snapshot.joystick.id != first_joystick_id => return 176
+                                else => ()
+                        when Option.None => return 177
+                    let first_joystick = present_app.joystick :: first_joystick_id :: method
+                    let first_joystick_snapshot = present_app.joystick_snapshot :: first_joystick_id :: method
+                    select:
+                        when first_joystick.id != first_joystick_id => return 153
+                        when first_joystick_snapshot.joystick.id != first_joystick_id => return 154
+                        when !first_joystick.present :: :: method => return 155
+                        when !first_joystick_snapshot.present => return 156
+                        when first_joystick.gamepad :: :: method != first_joystick_snapshot.gamepad => return 157
+                        else => ()
+            let snapshot_gamepad_ids = snapshot.gamepad_ids :: :: method
+            select:
+                when snapshot_gamepad_ids.is_empty :: :: method =>
+                    select:
+                        when present_app.has_gamepad :: 0 :: method => return 158
+                        else => ()
+                    select:
+                        when present_app.has_gamepads :: :: method => return 171
+                        when present_app.gamepad_count :: :: method != 0 => return 172
+                        else => ()
+                    select present_app.gamepad :: 0 :: method:
+                        when Option.Some(_) => return 159
+                        when Option.None => ()
+                    select present_app.gamepad_snapshot :: 0 :: method:
+                        when Option.Some(_) => return 160
+                        when Option.None => ()
+                    select present_app.gamepad_index :: 0 :: method:
+                        when Option.Some(_) => return 173
+                        when Option.None => ()
+                else =>
+                    let gamepad_id = snapshot_gamepad_ids.remove :: 0 :: method
+                    select:
+                        when !present_app.has_gamepad :: gamepad_id :: method => return 161
+                        else => ()
+                    select present_app.gamepad_index :: gamepad_id :: method:
+                        when Option.Some(index) =>
+                            select:
+                                when live_gamepad_ids[index] != gamepad_id => return 174
+                                else => ()
+                        when Option.None => return 175
+                    select present_app.gamepad :: gamepad_id :: method:
+                        when Option.Some(gamepad) =>
+                            select:
+                                when gamepad.id != gamepad_id => return 162
+                                else => ()
+                        when Option.None => return 163
+                    select present_app.gamepad_snapshot :: gamepad_id :: method:
+                        when Option.Some(gamepad_snapshot) =>
+                            select:
+                                when gamepad_snapshot.joystick.id != gamepad_id => return 164
+                                when !gamepad_snapshot.gamepad => return 165
+                                else => ()
+                        when Option.None => return 166
+            let version_info = present_app.version_info :: :: method
+            select:
+                when version_info.major != snapshot.version_info.major => return 158
+                when version_info.minor != snapshot.version_info.minor => return 159
+                when version_info.revision != snapshot.version_info.revision => return 160
+                else => ()
+            select present_app.version_string :: :: method:
+                when Result.Ok(text) =>
+                    select:
+                        when text.is_empty :: :: method => return 161
+                        else => ()
+                when Result.Err(_) => return 162
+            select present_app.current_platform :: :: method:
+                when Platform.Win32 => ()
+                when _ => return 163
+            select:
+                when !present_app.platform_supported :: Platform.Win32 :: method => return 164
+                else => ()
+            select present_app.last_error :: :: method:
+                when Result.Ok(error) =>
+                    select error:
+                        when Option.Some(info) =>
+                            select:
+                                when info.description.is_empty :: :: method => return 165
+                                else => ()
+                        when Option.None => ()
+                when Result.Err(_) => return 166
+            select:
+                when snapshot.window_count != 1 => return 2
+                else => ()
+            select snapshot.platform:
+                when Platform.Win32 => ()
+                when _ => return 3
+            let timer_value = present_app.timer_value :: :: method
+            let timer_frequency = present_app.timer_frequency :: :: method
+            select:
+                when timer_value == 0U64 => return 50
+                when timer_frequency == 0U64 => return 51
+                else => ()
+            present_app.set_time :: 0.25F64 :: method
+            select:
+                when present_app.time :: :: method < 0.25F64 => return 52
+                else => ()
+            select present_app.set_clipboard_string :: "runa_app_vulkan clipboard smoke" :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) => return 53
+            select present_app.clipboard_string :: :: method:
+                when Result.Ok(text) =>
+                    select text.find :: "runa_app_vulkan clipboard smoke" :: method:
+                        when Option.Some(_) => ()
+                        when Option.None => return 54
+                when Result.Err(_) => return 55
+            let startup_pending_window_ids = present_app.pending_window_ids :: :: method
+            select:
+                when startup_pending_window_ids.count :: :: method != 1 => return 688
+                when startup_pending_window_ids.remove :: 0 :: method != window_id => return 689
+                else => ()
+            let pending_created_window_events = present_app.pending_created_window_events :: :: method
+            select:
+                when pending_created_window_events.count :: :: method != 1 => return 601
+                else => ()
+            let pending_created_window_event = pending_created_window_events.remove :: 0 :: method
+            select pending_created_window_event.kind :: :: method:
+                when WindowEventKind.Created => ()
+                when _ => return 602
+            select:
+                when pending_created_window_event.window_id :: :: method != window_id => return 603
+                else => ()
+            let created_window_events = present_app.poll_created_window_events :: :: method
+            select:
+                when created_window_events.count :: :: method != 1 => return 36
+                else => ()
+            let created_window_event = created_window_events.remove :: 0 :: method
+            select created_window_event.kind :: :: method:
+                when WindowEventKind.Created => ()
+                when _ => return 37
+            select:
+                when created_window_event.window_id :: :: method != window_id => return 38
+                else => ()
+            select present_app.poll_window_event :: :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(window_event) =>
+                            select:
+                                when window_event.window_id :: :: method != window_id => return 39
+                                else => ()
+                        when Option.None => ()
+                when Result.Err(_) => return 40
+            select:
+                when present_app.has_pending_events :: :: method => return 56
+                when present_app.pending_event_count :: :: method != 0 => return 57
+                else => ()
+            let settled_snapshot = present_app.snapshot :: :: method
+            select:
+                when settled_snapshot.has_pending_events => return 48
+                when settled_snapshot.pending_event_count != 0 => return 49
+                else => ()
+            present_app.show :: :: method
+            let _ = present_app.poll_event_batch :: :: method
+            select present_app.window_snapshot :: :: method:
+                when Result.Ok(shown_snapshot) =>
+                    select:
+                        when !present_app.visible :: :: method => return 400
+                        when !shown_snapshot.visible => return 401
+                        else => ()
+                when Result.Err(_) => return 402
+            present_app.use_normal_cursor :: :: method
+            select present_app.cursor_mode :: :: method:
+                when CursorMode.Normal => ()
+                when _ => return 422
+            present_app.set_cursor_pos :: 12.0, 18.0 :: method
+            let _ = present_app.poll_event_batch :: :: method
+            let cursor_after_move = present_app.cursor_pos :: :: method
+            select present_app.window_snapshot :: :: method:
+                when Result.Ok(cursor_snapshot) =>
+                    select:
+                        when cursor_after_move.x != cursor_snapshot.cursor_pos.x => return 423
+                        when cursor_after_move.y != cursor_snapshot.cursor_pos.y => return 424
+                        else => ()
+                when Result.Err(_) => return 425
+            select present_app.set_standard_cursor :: StandardCursor.Crosshair :: method:
+                when Option.Some(cursor) => present_app.set_cursor :: cursor :: method
+                when Option.None => return 426
+            let cursor_fill = rgba_color :: 255U8, 64U8, 32U8, 255U8 :: call
+            select solid_rgba_image :: 2, 2, cursor_fill :: call:
+                when Result.Ok(cursor_image) =>
+                    select present_app.set_cursor_image :: cursor_image, 0, 0 :: method:
+                        when Option.Some(cursor) => present_app.set_cursor :: cursor :: method
+                        when Option.None => return 427
+                when Result.Err(_) => return 428
+            present_app.use_default_cursor :: :: method
+            let original_placement = present_app.windowed_placement :: :: method
+            present_app.set_pos :: 24, 36 :: method
+            present_app.set_size :: 68, 74 :: method
+            let _ = present_app.poll_event_batch :: :: method
+            let moved_pos = present_app.pos :: :: method
+            let moved_size = present_app.size :: :: method
+            let moved_placement = present_app.windowed_placement :: :: method
+            select present_app.window_snapshot :: :: method:
+                when Result.Ok(moved_snapshot) =>
+                    let fixed_limits = window_size_limits :: moved_size, moved_size :: call
+                    let widescreen_ratio = window_aspect_ratio :: 16, 9 :: call
+                    present_app.set_size_limits :: moved_size.width, moved_size.height, moved_size.width, moved_size.height :: method
+                    present_app.apply_size_limits :: fixed_limits :: method
+                    present_app.clear_size_limits :: :: method
+                    present_app.set_aspect_ratio :: 4, 3 :: method
+                    present_app.apply_aspect_ratio :: widescreen_ratio :: method
+                    present_app.clear_aspect_ratio :: :: method
+                    select:
+                        when moved_pos.x != 24 => return 403
+                        when moved_pos.y != 36 => return 404
+                        when moved_size.width != 68 => return 441
+                        when moved_size.height != 74 => return 442
+                        when moved_placement.pos.x != moved_pos.x => return 443
+                        when moved_placement.pos.y != moved_pos.y => return 444
+                        when moved_placement.size.width != moved_size.width => return 445
+                        when moved_placement.size.height != moved_size.height => return 446
+                        when moved_snapshot.pos.x != moved_pos.x => return 405
+                        when moved_snapshot.pos.y != moved_pos.y => return 406
+                        when moved_snapshot.size.width != moved_size.width => return 447
+                        when moved_snapshot.size.height != moved_size.height => return 448
+                        else => ()
+                when Result.Err(_) => return 407
+            select present_app.primary_monitor :: :: method:
+                when Result.Ok(primary_monitor) =>
+                    present_app.center_on :: primary_monitor :: method
+                when Result.Err(_) => return 449
+            let _ = present_app.poll_event_batch :: :: method
+            let centered_pos = present_app.pos :: :: method
+            select present_app.window_snapshot :: :: method:
+                when Result.Ok(centered_snapshot) =>
+                    select:
+                        when centered_snapshot.pos.x != centered_pos.x => return 450
+                        when centered_snapshot.pos.y != centered_pos.y => return 451
+                        else => ()
+                when Result.Err(_) => return 452
+            present_app.restore_windowed_placement :: original_placement :: method
+            let _ = present_app.poll_event_batch :: :: method
+            let restored_placement = present_app.windowed_placement :: :: method
+            select:
+                when restored_placement.pos.x != original_placement.pos.x => return 453
+                when restored_placement.pos.y != original_placement.pos.y => return 454
+                when restored_placement.size.width != original_placement.size.width => return 455
+                when restored_placement.size.height != original_placement.size.height => return 456
+                else => ()
+            present_app.hide :: :: method
+            let _ = present_app.poll_event_batch :: :: method
+            select present_app.window_snapshot :: :: method:
+                when Result.Ok(hidden_snapshot) =>
+                    select:
+                        when present_app.visible :: :: method => return 408
+                        when hidden_snapshot.visible => return 409
+                        else => ()
+                when Result.Err(_) => return 410
+            present_app.post_user_event :: 90 :: method
+            let pending_batch = present_app.take_event_batch :: :: method
+            let pending_ids = pending_batch.take_user_ids :: :: method
+            select:
+                when pending_batch.event_count :: :: method != 0 => return 58
+                when pending_ids.count :: :: method != 1 => return 59
+                when pending_ids.remove :: 0 :: method != 90 => return 60
+                else => ()
+            present_app.post_user_event :: 901 :: method
+            let poll_batch = present_app.poll_event_batch :: :: method
+            let poll_batch_ids = poll_batch.take_user_ids :: :: method
+            select:
+                when poll_batch.event_count :: :: method != 0 => return 61
+                when poll_batch_ids.count :: :: method != 1 => return 62
+                when poll_batch_ids.remove :: 0 :: method != 901 => return 63
+                else => ()
+            present_app.post_user_event :: 902 :: method
+            let wait_batch = present_app.wait_event_batch :: :: method
+            let wait_batch_ids = wait_batch.take_user_ids :: :: method
+            select:
+                when wait_batch.event_count :: :: method != 0 => return 64
+                when wait_batch_ids.count :: :: method != 1 => return 65
+                when wait_batch_ids.remove :: 0 :: method != 902 => return 66
+                else => ()
+            present_app.post_user_event :: 903 :: method
+            let timeout_batch = present_app.wait_timeout_event_batch :: 0.0 :: method
+            let timeout_batch_ids = timeout_batch.take_user_ids :: :: method
+            select:
+                when timeout_batch.event_count :: :: method != 0 => return 67
+                when timeout_batch_ids.count :: :: method != 1 => return 68
+                when timeout_batch_ids.remove :: 0 :: method != 903 => return 69
+                else => ()
+            present_app.post_user_event :: 904 :: method
+            let flow_events = present_app.events_for :: ControlFlow.Poll :: method
+            select:
+                when flow_events.count :: :: method != 1 => return 70
+                else => ()
+            let flow_event = flow_events.remove :: 0 :: method
+            select flow_event.user_id :: :: method:
+                when Option.Some(id) =>
+                    select:
+                        when id != 904 => return 71
+                        else => ()
+                when Option.None => return 72
+            present_app.post_user_event :: 905 :: method
+            let flow_batch = present_app.event_batch_for :: ControlFlow.Wait :: method
+            let flow_batch_ids = flow_batch.take_user_ids :: :: method
+            select:
+                when flow_batch.event_count :: :: method != 0 => return 73
+                when flow_batch_ids.count :: :: method != 1 => return 74
+                when flow_batch_ids.remove :: 0 :: method != 905 => return 75
+                else => ()
+            present_app.post_user_event :: 91 :: method
+            select present_app.next_user_event_for :: 999 :: method:
+                when Option.Some(_) => return 320
+                when Option.None => ()
+            select present_app.next_user_event_for :: 91 :: method:
+                when Option.Some(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method != 91 => return 321
+                        else => ()
+                when Option.None => return 322
+            select:
+                when present_app.has_pending_events :: :: method => return 323
+                when present_app.pending_event_count :: :: method != 0 => return 324
+                else => ()
+            present_app.post_user_event :: 191 :: method
+            let poll_key_changed_events = present_app.poll_key_changed_events :: :: method
+            let poll_character_events = present_app.poll_character_events :: :: method
+            let poll_character_mods_events = present_app.poll_character_mods_events :: :: method
+            let poll_mouse_button_changed_events = present_app.poll_mouse_button_changed_events :: :: method
+            let poll_cursor_moved_events = present_app.poll_cursor_moved_events :: :: method
+            let poll_scrolled_events = present_app.poll_scrolled_events :: :: method
+            let poll_dropped_path_events = present_app.poll_dropped_path_events :: :: method
+            let poll_refreshed_events = present_app.poll_refreshed_events :: :: method
+            let poll_moved_events = present_app.poll_moved_events :: :: method
+            let poll_resized_events = present_app.poll_resized_events :: :: method
+            let poll_framebuffer_resized_events = present_app.poll_framebuffer_resized_events :: :: method
+            let poll_content_scale_changed_events = present_app.poll_content_scale_changed_events :: :: method
+            let poll_focus_changed_events = present_app.poll_focus_changed_events :: :: method
+            let poll_iconified_events = present_app.poll_iconified_events :: :: method
+            let poll_maximized_events = present_app.poll_maximized_events :: :: method
+            let poll_cursor_entered_events = present_app.poll_cursor_entered_events :: :: method
+            let poll_key_changed_events_for = present_app.poll_key_changed_events_for :: window_id :: method
+            let poll_character_events_for = present_app.poll_character_events_for :: window_id :: method
+            let poll_character_mods_events_for = present_app.poll_character_mods_events_for :: window_id :: method
+            let poll_mouse_button_changed_events_for = present_app.poll_mouse_button_changed_events_for :: window_id :: method
+            let poll_cursor_moved_events_for = present_app.poll_cursor_moved_events_for :: window_id :: method
+            let poll_scrolled_events_for = present_app.poll_scrolled_events_for :: window_id :: method
+            let poll_dropped_path_events_for = present_app.poll_dropped_path_events_for :: window_id :: method
+            let poll_refreshed_events_for = present_app.poll_refreshed_events_for :: window_id :: method
+            let poll_moved_events_for = present_app.poll_moved_events_for :: window_id :: method
+            let poll_resized_events_for = present_app.poll_resized_events_for :: window_id :: method
+            let poll_framebuffer_resized_events_for = present_app.poll_framebuffer_resized_events_for :: window_id :: method
+            let poll_content_scale_changed_events_for = present_app.poll_content_scale_changed_events_for :: window_id :: method
+            let poll_focus_changed_events_for = present_app.poll_focus_changed_events_for :: window_id :: method
+            let poll_iconified_events_for = present_app.poll_iconified_events_for :: window_id :: method
+            let poll_maximized_events_for = present_app.poll_maximized_events_for :: window_id :: method
+            let poll_cursor_entered_events_for = present_app.poll_cursor_entered_events_for :: window_id :: method
+            let poll_cursor_data = present_app.poll_cursor_data :: :: method
+            let poll_scroll_data = present_app.poll_scroll_data :: :: method
+            let poll_key_data = present_app.poll_key_data :: :: method
+            let poll_character_data = present_app.poll_character_data :: :: method
+            let poll_character_mods_data = present_app.poll_character_mods_data :: :: method
+            let poll_mouse_button_data = present_app.poll_mouse_button_data :: :: method
+            let poll_dropped_paths_lists = present_app.poll_dropped_paths_lists :: :: method
+            let poll_cursor_data_for = present_app.poll_cursor_data_for :: window_id :: method
+            let poll_scroll_data_for = present_app.poll_scroll_data_for :: window_id :: method
+            let poll_key_data_for = present_app.poll_key_data_for :: window_id :: method
+            let poll_character_data_for = present_app.poll_character_data_for :: window_id :: method
+            let poll_character_mods_data_for = present_app.poll_character_mods_data_for :: window_id :: method
+            let poll_mouse_button_data_for = present_app.poll_mouse_button_data_for :: window_id :: method
+            let poll_dropped_paths_lists_for = present_app.poll_dropped_paths_lists_for :: window_id :: method
+            let poll_filtered_monitor_events = present_app.poll_monitor_events_for :: 999 :: method
+            let poll_filtered_joystick_events = present_app.poll_joystick_events_for :: 999 :: method
+            let poll_filtered_user_events = present_app.poll_user_events_for :: 191 :: method
+            select:
+                when poll_key_changed_events.count :: :: method != 0 => return 814
+                when poll_character_events.count :: :: method != 0 => return 815
+                when poll_character_mods_events.count :: :: method != 0 => return 816
+                when poll_mouse_button_changed_events.count :: :: method != 0 => return 817
+                when poll_cursor_moved_events.count :: :: method != 0 => return 818
+                when poll_scrolled_events.count :: :: method != 0 => return 819
+                when poll_dropped_path_events.count :: :: method != 0 => return 820
+                when poll_refreshed_events.count :: :: method != 0 => return 900
+                when poll_moved_events.count :: :: method != 0 => return 901
+                when poll_resized_events.count :: :: method != 0 => return 902
+                when poll_framebuffer_resized_events.count :: :: method != 0 => return 903
+                when poll_content_scale_changed_events.count :: :: method != 0 => return 904
+                when poll_focus_changed_events.count :: :: method != 0 => return 905
+                when poll_iconified_events.count :: :: method != 0 => return 906
+                when poll_maximized_events.count :: :: method != 0 => return 907
+                when poll_cursor_entered_events.count :: :: method != 0 => return 908
+                when poll_key_changed_events_for.count :: :: method != 0 => return 821
+                when poll_character_events_for.count :: :: method != 0 => return 822
+                when poll_character_mods_events_for.count :: :: method != 0 => return 823
+                when poll_mouse_button_changed_events_for.count :: :: method != 0 => return 824
+                when poll_cursor_moved_events_for.count :: :: method != 0 => return 825
+                when poll_scrolled_events_for.count :: :: method != 0 => return 826
+                when poll_dropped_path_events_for.count :: :: method != 0 => return 827
+                when poll_refreshed_events_for.count :: :: method != 0 => return 909
+                when poll_moved_events_for.count :: :: method != 0 => return 910
+                when poll_resized_events_for.count :: :: method != 0 => return 911
+                when poll_framebuffer_resized_events_for.count :: :: method != 0 => return 912
+                when poll_content_scale_changed_events_for.count :: :: method != 0 => return 913
+                when poll_focus_changed_events_for.count :: :: method != 0 => return 914
+                when poll_iconified_events_for.count :: :: method != 0 => return 915
+                when poll_maximized_events_for.count :: :: method != 0 => return 916
+                when poll_cursor_entered_events_for.count :: :: method != 0 => return 917
+                when poll_cursor_data.count :: :: method != 0 => return 700
+                when poll_scroll_data.count :: :: method != 0 => return 701
+                when poll_key_data.count :: :: method != 0 => return 702
+                when poll_character_data.count :: :: method != 0 => return 703
+                when poll_character_mods_data.count :: :: method != 0 => return 704
+                when poll_mouse_button_data.count :: :: method != 0 => return 705
+                when poll_dropped_paths_lists.count :: :: method != 0 => return 706
+                when poll_cursor_data_for.count :: :: method != 0 => return 707
+                when poll_scroll_data_for.count :: :: method != 0 => return 708
+                when poll_key_data_for.count :: :: method != 0 => return 709
+                when poll_character_data_for.count :: :: method != 0 => return 710
+                when poll_character_mods_data_for.count :: :: method != 0 => return 711
+                when poll_mouse_button_data_for.count :: :: method != 0 => return 712
+                when poll_dropped_paths_lists_for.count :: :: method != 0 => return 713
+                when poll_filtered_monitor_events.count :: :: method != 0 => return 500
+                when poll_filtered_joystick_events.count :: :: method != 0 => return 501
+                when poll_filtered_user_events.count :: :: method != 1 => return 502
+                when present_app.has_pending_events :: :: method => return 503
+                when present_app.pending_event_count :: :: method != 0 => return 504
+                else => ()
+            let poll_filtered_user_event = poll_filtered_user_events.remove :: 0 :: method
+            select:
+                when poll_filtered_user_event.user_id :: :: method != 191 => return 505
+                else => ()
+            present_app.post_user_event :: 192 :: method
+            let wait_key_changed_events = present_app.wait_key_changed_events :: :: method
+            let wait_character_events = present_app.wait_character_events :: :: method
+            let wait_character_mods_events = present_app.wait_character_mods_events :: :: method
+            let wait_mouse_button_changed_events = present_app.wait_mouse_button_changed_events :: :: method
+            let wait_cursor_moved_events = present_app.wait_cursor_moved_events :: :: method
+            let wait_scrolled_events = present_app.wait_scrolled_events :: :: method
+            let wait_dropped_path_events = present_app.wait_dropped_path_events :: :: method
+            let wait_refreshed_events = present_app.wait_refreshed_events :: :: method
+            let wait_moved_events = present_app.wait_moved_events :: :: method
+            let wait_resized_events = present_app.wait_resized_events :: :: method
+            let wait_framebuffer_resized_events = present_app.wait_framebuffer_resized_events :: :: method
+            let wait_content_scale_changed_events = present_app.wait_content_scale_changed_events :: :: method
+            let wait_focus_changed_events = present_app.wait_focus_changed_events :: :: method
+            let wait_iconified_events = present_app.wait_iconified_events :: :: method
+            let wait_maximized_events = present_app.wait_maximized_events :: :: method
+            let wait_cursor_entered_events = present_app.wait_cursor_entered_events :: :: method
+            let wait_key_changed_events_for = present_app.wait_key_changed_events_for :: window_id :: method
+            let wait_character_events_for = present_app.wait_character_events_for :: window_id :: method
+            let wait_character_mods_events_for = present_app.wait_character_mods_events_for :: window_id :: method
+            let wait_mouse_button_changed_events_for = present_app.wait_mouse_button_changed_events_for :: window_id :: method
+            let wait_cursor_moved_events_for = present_app.wait_cursor_moved_events_for :: window_id :: method
+            let wait_scrolled_events_for = present_app.wait_scrolled_events_for :: window_id :: method
+            let wait_dropped_path_events_for = present_app.wait_dropped_path_events_for :: window_id :: method
+            let wait_refreshed_events_for = present_app.wait_refreshed_events_for :: window_id :: method
+            let wait_moved_events_for = present_app.wait_moved_events_for :: window_id :: method
+            let wait_resized_events_for = present_app.wait_resized_events_for :: window_id :: method
+            let wait_framebuffer_resized_events_for = present_app.wait_framebuffer_resized_events_for :: window_id :: method
+            let wait_content_scale_changed_events_for = present_app.wait_content_scale_changed_events_for :: window_id :: method
+            let wait_focus_changed_events_for = present_app.wait_focus_changed_events_for :: window_id :: method
+            let wait_iconified_events_for = present_app.wait_iconified_events_for :: window_id :: method
+            let wait_maximized_events_for = present_app.wait_maximized_events_for :: window_id :: method
+            let wait_cursor_entered_events_for = present_app.wait_cursor_entered_events_for :: window_id :: method
+            let wait_cursor_data = present_app.wait_cursor_data :: :: method
+            let wait_scroll_data = present_app.wait_scroll_data :: :: method
+            let wait_key_data = present_app.wait_key_data :: :: method
+            let wait_character_data = present_app.wait_character_data :: :: method
+            let wait_character_mods_data = present_app.wait_character_mods_data :: :: method
+            let wait_mouse_button_data = present_app.wait_mouse_button_data :: :: method
+            let wait_dropped_paths_lists = present_app.wait_dropped_paths_lists :: :: method
+            let wait_cursor_data_for = present_app.wait_cursor_data_for :: window_id :: method
+            let wait_scroll_data_for = present_app.wait_scroll_data_for :: window_id :: method
+            let wait_key_data_for = present_app.wait_key_data_for :: window_id :: method
+            let wait_character_data_for = present_app.wait_character_data_for :: window_id :: method
+            let wait_character_mods_data_for = present_app.wait_character_mods_data_for :: window_id :: method
+            let wait_mouse_button_data_for = present_app.wait_mouse_button_data_for :: window_id :: method
+            let wait_dropped_paths_lists_for = present_app.wait_dropped_paths_lists_for :: window_id :: method
+            let wait_filtered_monitor_events = present_app.wait_monitor_events_for :: 999 :: method
+            let wait_filtered_joystick_events = present_app.wait_joystick_events_for :: 999 :: method
+            let wait_filtered_user_events = present_app.wait_user_events_for :: 192 :: method
+            select:
+                when wait_key_changed_events.count :: :: method != 0 => return 828
+                when wait_character_events.count :: :: method != 0 => return 829
+                when wait_character_mods_events.count :: :: method != 0 => return 830
+                when wait_mouse_button_changed_events.count :: :: method != 0 => return 831
+                when wait_cursor_moved_events.count :: :: method != 0 => return 832
+                when wait_scrolled_events.count :: :: method != 0 => return 833
+                when wait_dropped_path_events.count :: :: method != 0 => return 834
+                when wait_refreshed_events.count :: :: method != 0 => return 918
+                when wait_moved_events.count :: :: method != 0 => return 919
+                when wait_resized_events.count :: :: method != 0 => return 920
+                when wait_framebuffer_resized_events.count :: :: method != 0 => return 921
+                when wait_content_scale_changed_events.count :: :: method != 0 => return 922
+                when wait_focus_changed_events.count :: :: method != 0 => return 923
+                when wait_iconified_events.count :: :: method != 0 => return 924
+                when wait_maximized_events.count :: :: method != 0 => return 925
+                when wait_cursor_entered_events.count :: :: method != 0 => return 926
+                when wait_key_changed_events_for.count :: :: method != 0 => return 835
+                when wait_character_events_for.count :: :: method != 0 => return 836
+                when wait_character_mods_events_for.count :: :: method != 0 => return 837
+                when wait_mouse_button_changed_events_for.count :: :: method != 0 => return 838
+                when wait_cursor_moved_events_for.count :: :: method != 0 => return 839
+                when wait_scrolled_events_for.count :: :: method != 0 => return 840
+                when wait_dropped_path_events_for.count :: :: method != 0 => return 841
+                when wait_refreshed_events_for.count :: :: method != 0 => return 927
+                when wait_moved_events_for.count :: :: method != 0 => return 928
+                when wait_resized_events_for.count :: :: method != 0 => return 929
+                when wait_framebuffer_resized_events_for.count :: :: method != 0 => return 930
+                when wait_content_scale_changed_events_for.count :: :: method != 0 => return 931
+                when wait_focus_changed_events_for.count :: :: method != 0 => return 932
+                when wait_iconified_events_for.count :: :: method != 0 => return 933
+                when wait_maximized_events_for.count :: :: method != 0 => return 934
+                when wait_cursor_entered_events_for.count :: :: method != 0 => return 935
+                when wait_cursor_data.count :: :: method != 0 => return 714
+                when wait_scroll_data.count :: :: method != 0 => return 715
+                when wait_key_data.count :: :: method != 0 => return 716
+                when wait_character_data.count :: :: method != 0 => return 717
+                when wait_character_mods_data.count :: :: method != 0 => return 718
+                when wait_mouse_button_data.count :: :: method != 0 => return 719
+                when wait_dropped_paths_lists.count :: :: method != 0 => return 720
+                when wait_cursor_data_for.count :: :: method != 0 => return 721
+                when wait_scroll_data_for.count :: :: method != 0 => return 722
+                when wait_key_data_for.count :: :: method != 0 => return 723
+                when wait_character_data_for.count :: :: method != 0 => return 724
+                when wait_character_mods_data_for.count :: :: method != 0 => return 725
+                when wait_mouse_button_data_for.count :: :: method != 0 => return 726
+                when wait_dropped_paths_lists_for.count :: :: method != 0 => return 727
+                when wait_filtered_monitor_events.count :: :: method != 0 => return 506
+                when wait_filtered_joystick_events.count :: :: method != 0 => return 507
+                when wait_filtered_user_events.count :: :: method != 1 => return 508
+                when present_app.has_pending_events :: :: method => return 509
+                when present_app.pending_event_count :: :: method != 0 => return 510
+                else => ()
+            let wait_filtered_user_event = wait_filtered_user_events.remove :: 0 :: method
+            select:
+                when wait_filtered_user_event.user_id :: :: method != 192 => return 511
+                else => ()
+            present_app.post_user_event :: 193 :: method
+            let timeout_key_changed_events = present_app.wait_timeout_key_changed_events :: 0.0 :: method
+            let timeout_character_events = present_app.wait_timeout_character_events :: 0.0 :: method
+            let timeout_character_mods_events = present_app.wait_timeout_character_mods_events :: 0.0 :: method
+            let timeout_mouse_button_changed_events = present_app.wait_timeout_mouse_button_changed_events :: 0.0 :: method
+            let timeout_cursor_moved_events = present_app.wait_timeout_cursor_moved_events :: 0.0 :: method
+            let timeout_scrolled_events = present_app.wait_timeout_scrolled_events :: 0.0 :: method
+            let timeout_dropped_path_events = present_app.wait_timeout_dropped_path_events :: 0.0 :: method
+            let timeout_refreshed_events = present_app.wait_timeout_refreshed_events :: 0.0 :: method
+            let timeout_moved_events = present_app.wait_timeout_moved_events :: 0.0 :: method
+            let timeout_resized_events = present_app.wait_timeout_resized_events :: 0.0 :: method
+            let timeout_framebuffer_resized_events = present_app.wait_timeout_framebuffer_resized_events :: 0.0 :: method
+            let timeout_content_scale_changed_events = present_app.wait_timeout_content_scale_changed_events :: 0.0 :: method
+            let timeout_focus_changed_events = present_app.wait_timeout_focus_changed_events :: 0.0 :: method
+            let timeout_iconified_events = present_app.wait_timeout_iconified_events :: 0.0 :: method
+            let timeout_maximized_events = present_app.wait_timeout_maximized_events :: 0.0 :: method
+            let timeout_cursor_entered_events = present_app.wait_timeout_cursor_entered_events :: 0.0 :: method
+            let timeout_key_changed_events_for = present_app.wait_timeout_key_changed_events_for :: window_id, 0.0 :: method
+            let timeout_character_events_for = present_app.wait_timeout_character_events_for :: window_id, 0.0 :: method
+            let timeout_character_mods_events_for = present_app.wait_timeout_character_mods_events_for :: window_id, 0.0 :: method
+            let timeout_mouse_button_changed_events_for = present_app.wait_timeout_mouse_button_changed_events_for :: window_id, 0.0 :: method
+            let timeout_cursor_moved_events_for = present_app.wait_timeout_cursor_moved_events_for :: window_id, 0.0 :: method
+            let timeout_scrolled_events_for = present_app.wait_timeout_scrolled_events_for :: window_id, 0.0 :: method
+            let timeout_dropped_path_events_for = present_app.wait_timeout_dropped_path_events_for :: window_id, 0.0 :: method
+            let timeout_refreshed_events_for = present_app.wait_timeout_refreshed_events_for :: window_id, 0.0 :: method
+            let timeout_moved_events_for = present_app.wait_timeout_moved_events_for :: window_id, 0.0 :: method
+            let timeout_resized_events_for = present_app.wait_timeout_resized_events_for :: window_id, 0.0 :: method
+            let timeout_framebuffer_resized_events_for = present_app.wait_timeout_framebuffer_resized_events_for :: window_id, 0.0 :: method
+            let timeout_content_scale_changed_events_for = present_app.wait_timeout_content_scale_changed_events_for :: window_id, 0.0 :: method
+            let timeout_focus_changed_events_for = present_app.wait_timeout_focus_changed_events_for :: window_id, 0.0 :: method
+            let timeout_iconified_events_for = present_app.wait_timeout_iconified_events_for :: window_id, 0.0 :: method
+            let timeout_maximized_events_for = present_app.wait_timeout_maximized_events_for :: window_id, 0.0 :: method
+            let timeout_cursor_entered_events_for = present_app.wait_timeout_cursor_entered_events_for :: window_id, 0.0 :: method
+            let timeout_cursor_data = present_app.wait_timeout_cursor_data :: 0.0 :: method
+            let timeout_scroll_data = present_app.wait_timeout_scroll_data :: 0.0 :: method
+            let timeout_key_data = present_app.wait_timeout_key_data :: 0.0 :: method
+            let timeout_character_data = present_app.wait_timeout_character_data :: 0.0 :: method
+            let timeout_character_mods_data = present_app.wait_timeout_character_mods_data :: 0.0 :: method
+            let timeout_mouse_button_data = present_app.wait_timeout_mouse_button_data :: 0.0 :: method
+            let timeout_dropped_paths_lists = present_app.wait_timeout_dropped_paths_lists :: 0.0 :: method
+            let timeout_cursor_data_for = present_app.wait_timeout_cursor_data_for :: window_id, 0.0 :: method
+            let timeout_scroll_data_for = present_app.wait_timeout_scroll_data_for :: window_id, 0.0 :: method
+            let timeout_key_data_for = present_app.wait_timeout_key_data_for :: window_id, 0.0 :: method
+            let timeout_character_data_for = present_app.wait_timeout_character_data_for :: window_id, 0.0 :: method
+            let timeout_character_mods_data_for = present_app.wait_timeout_character_mods_data_for :: window_id, 0.0 :: method
+            let timeout_mouse_button_data_for = present_app.wait_timeout_mouse_button_data_for :: window_id, 0.0 :: method
+            let timeout_dropped_paths_lists_for = present_app.wait_timeout_dropped_paths_lists_for :: window_id, 0.0 :: method
+            let timeout_filtered_monitor_events = present_app.wait_timeout_monitor_events_for :: 999, 0.0 :: method
+            let timeout_filtered_joystick_events = present_app.wait_timeout_joystick_events_for :: 999, 0.0 :: method
+            let timeout_filtered_user_events = present_app.wait_timeout_user_events_for :: 193, 0.0 :: method
+            select:
+                when timeout_key_changed_events.count :: :: method != 0 => return 842
+                when timeout_character_events.count :: :: method != 0 => return 843
+                when timeout_character_mods_events.count :: :: method != 0 => return 844
+                when timeout_mouse_button_changed_events.count :: :: method != 0 => return 845
+                when timeout_cursor_moved_events.count :: :: method != 0 => return 846
+                when timeout_scrolled_events.count :: :: method != 0 => return 847
+                when timeout_dropped_path_events.count :: :: method != 0 => return 848
+                when timeout_refreshed_events.count :: :: method != 0 => return 936
+                when timeout_moved_events.count :: :: method != 0 => return 937
+                when timeout_resized_events.count :: :: method != 0 => return 938
+                when timeout_framebuffer_resized_events.count :: :: method != 0 => return 939
+                when timeout_content_scale_changed_events.count :: :: method != 0 => return 940
+                when timeout_focus_changed_events.count :: :: method != 0 => return 941
+                when timeout_iconified_events.count :: :: method != 0 => return 942
+                when timeout_maximized_events.count :: :: method != 0 => return 943
+                when timeout_cursor_entered_events.count :: :: method != 0 => return 944
+                when timeout_key_changed_events_for.count :: :: method != 0 => return 849
+                when timeout_character_events_for.count :: :: method != 0 => return 850
+                when timeout_character_mods_events_for.count :: :: method != 0 => return 851
+                when timeout_mouse_button_changed_events_for.count :: :: method != 0 => return 852
+                when timeout_cursor_moved_events_for.count :: :: method != 0 => return 853
+                when timeout_scrolled_events_for.count :: :: method != 0 => return 854
+                when timeout_dropped_path_events_for.count :: :: method != 0 => return 855
+                when timeout_refreshed_events_for.count :: :: method != 0 => return 945
+                when timeout_moved_events_for.count :: :: method != 0 => return 946
+                when timeout_resized_events_for.count :: :: method != 0 => return 947
+                when timeout_framebuffer_resized_events_for.count :: :: method != 0 => return 948
+                when timeout_content_scale_changed_events_for.count :: :: method != 0 => return 949
+                when timeout_focus_changed_events_for.count :: :: method != 0 => return 950
+                when timeout_iconified_events_for.count :: :: method != 0 => return 951
+                when timeout_maximized_events_for.count :: :: method != 0 => return 952
+                when timeout_cursor_entered_events_for.count :: :: method != 0 => return 953
+                when timeout_cursor_data.count :: :: method != 0 => return 728
+                when timeout_scroll_data.count :: :: method != 0 => return 729
+                when timeout_key_data.count :: :: method != 0 => return 730
+                when timeout_character_data.count :: :: method != 0 => return 731
+                when timeout_character_mods_data.count :: :: method != 0 => return 732
+                when timeout_mouse_button_data.count :: :: method != 0 => return 733
+                when timeout_dropped_paths_lists.count :: :: method != 0 => return 734
+                when timeout_cursor_data_for.count :: :: method != 0 => return 735
+                when timeout_scroll_data_for.count :: :: method != 0 => return 736
+                when timeout_key_data_for.count :: :: method != 0 => return 737
+                when timeout_character_data_for.count :: :: method != 0 => return 738
+                when timeout_character_mods_data_for.count :: :: method != 0 => return 739
+                when timeout_mouse_button_data_for.count :: :: method != 0 => return 740
+                when timeout_dropped_paths_lists_for.count :: :: method != 0 => return 741
+                when timeout_filtered_monitor_events.count :: :: method != 0 => return 512
+                when timeout_filtered_joystick_events.count :: :: method != 0 => return 513
+                when timeout_filtered_user_events.count :: :: method != 1 => return 514
+                when present_app.has_pending_events :: :: method => return 515
+                when present_app.pending_event_count :: :: method != 0 => return 516
+                else => ()
+            let timeout_filtered_user_event = timeout_filtered_user_events.remove :: 0 :: method
+            select:
+                when timeout_filtered_user_event.user_id :: :: method != 193 => return 517
+                else => ()
+            select prove_window_state_data_runtime :: present_app, window_id :: call:
+                when 0 => ()
+                when status => return status
+            select prove_window_state_event_single_runtime :: present_app, window_id :: call:
+                when 0 => ()
+                when status => return status
+            select prove_lifecycle_event_single_runtime :: present_app, window_id :: call:
+                when 0 => ()
+                when status => return status
+            select prove_lifecycle_event_lists_runtime :: present_app, window_id :: call:
+                when 0 => ()
+                when status => return status
+            select prove_lifecycle_ids_runtime :: present_app :: call:
+                when 0 => ()
+                when status => return status
+            select prove_lifecycle_object_runtime :: present_app :: call:
+                when 0 => ()
+                when status => return status
+            select prove_lifecycle_object_lists_runtime :: present_app :: call:
+                when 0 => ()
+                when status => return status
+            select prove_window_input_data_single_runtime :: present_app, window_id :: call:
+                when 0 => ()
+                when status => return status
+            select prove_window_input_event_single_runtime :: present_app, window_id :: call:
+                when 0 => ()
+                when status => return status
+            present_app.post_user_event :: 194 :: method
+            let poll_connected_monitor_ids = present_app.poll_connected_monitor_ids :: :: method
+            let poll_connected_monitor_events = present_app.poll_connected_monitor_events :: :: method
+            let poll_disconnected_monitor_ids = present_app.poll_disconnected_monitor_ids :: :: method
+            let poll_disconnected_monitor_events = present_app.poll_disconnected_monitor_events :: :: method
+            let poll_connected_joystick_events = present_app.poll_connected_joystick_events :: :: method
+            let poll_connected_joystick_ids = present_app.poll_connected_joystick_ids :: :: method
+            let poll_disconnected_joystick_ids = present_app.poll_disconnected_joystick_ids :: :: method
+            let poll_disconnected_joystick_events = present_app.poll_disconnected_joystick_events :: :: method
+            select:
+                when poll_connected_monitor_ids.count :: :: method != 0 => return 518
+                when poll_connected_monitor_events.count :: :: method != 0 => return 610
+                when poll_disconnected_monitor_ids.count :: :: method != 0 => return 519
+                when poll_disconnected_monitor_events.count :: :: method != 0 => return 611
+                when poll_connected_joystick_events.count :: :: method != 0 => return 520
+                when poll_connected_joystick_ids.count :: :: method != 0 => return 628
+                when poll_disconnected_joystick_ids.count :: :: method != 0 => return 521
+                when poll_disconnected_joystick_events.count :: :: method != 0 => return 612
+                when !present_app.has_pending_events :: :: method => return 522
+                when present_app.pending_event_count :: :: method != 1 => return 523
+                else => ()
+            select present_app.next_user_event :: :: method:
+                when Option.Some(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method != 194 => return 524
+                        else => ()
+                when Option.None => return 525
+            present_app.post_user_event :: 195 :: method
+            let wait_connected_monitor_ids = present_app.wait_connected_monitor_ids :: :: method
+            let wait_connected_monitor_events = present_app.wait_connected_monitor_events :: :: method
+            let wait_disconnected_monitor_ids = present_app.wait_disconnected_monitor_ids :: :: method
+            let wait_disconnected_monitor_events = present_app.wait_disconnected_monitor_events :: :: method
+            let wait_connected_joystick_events = present_app.wait_connected_joystick_events :: :: method
+            let wait_connected_joystick_ids = present_app.wait_connected_joystick_ids :: :: method
+            let wait_disconnected_joystick_ids = present_app.wait_disconnected_joystick_ids :: :: method
+            let wait_disconnected_joystick_events = present_app.wait_disconnected_joystick_events :: :: method
+            select:
+                when wait_connected_monitor_ids.count :: :: method != 0 => return 526
+                when wait_connected_monitor_events.count :: :: method != 0 => return 613
+                when wait_disconnected_monitor_ids.count :: :: method != 0 => return 527
+                when wait_disconnected_monitor_events.count :: :: method != 0 => return 614
+                when wait_connected_joystick_events.count :: :: method != 0 => return 528
+                when wait_connected_joystick_ids.count :: :: method != 0 => return 629
+                when wait_disconnected_joystick_ids.count :: :: method != 0 => return 529
+                when wait_disconnected_joystick_events.count :: :: method != 0 => return 615
+                when !present_app.has_pending_events :: :: method => return 530
+                when present_app.pending_event_count :: :: method != 1 => return 531
+                else => ()
+            select present_app.next_user_event :: :: method:
+                when Option.Some(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method != 195 => return 532
+                        else => ()
+                when Option.None => return 533
+            present_app.post_user_event :: 196 :: method
+            let timeout_connected_monitor_ids = present_app.wait_timeout_connected_monitor_ids :: 0.0 :: method
+            let timeout_connected_monitor_events = present_app.wait_timeout_connected_monitor_events :: 0.0 :: method
+            let timeout_disconnected_monitor_ids = present_app.wait_timeout_disconnected_monitor_ids :: 0.0 :: method
+            let timeout_disconnected_monitor_events = present_app.wait_timeout_disconnected_monitor_events :: 0.0 :: method
+            let timeout_connected_joystick_events = present_app.wait_timeout_connected_joystick_events :: 0.0 :: method
+            let timeout_connected_joystick_ids = present_app.wait_timeout_connected_joystick_ids :: 0.0 :: method
+            let timeout_disconnected_joystick_ids = present_app.wait_timeout_disconnected_joystick_ids :: 0.0 :: method
+            let timeout_disconnected_joystick_events = present_app.wait_timeout_disconnected_joystick_events :: 0.0 :: method
+            select:
+                when timeout_connected_monitor_ids.count :: :: method != 0 => return 534
+                when timeout_connected_monitor_events.count :: :: method != 0 => return 616
+                when timeout_disconnected_monitor_ids.count :: :: method != 0 => return 535
+                when timeout_disconnected_monitor_events.count :: :: method != 0 => return 617
+                when timeout_connected_joystick_events.count :: :: method != 0 => return 536
+                when timeout_connected_joystick_ids.count :: :: method != 0 => return 630
+                when timeout_disconnected_joystick_ids.count :: :: method != 0 => return 537
+                when timeout_disconnected_joystick_events.count :: :: method != 0 => return 618
+                when !present_app.has_pending_events :: :: method => return 538
+                when present_app.pending_event_count :: :: method != 1 => return 539
+                else => ()
+            select present_app.next_user_event :: :: method:
+                when Option.Some(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method != 196 => return 540
+                        else => ()
+                when Option.None => return 541
+            present_app.post_user_event :: 91 :: method
+            let pending_window_events = present_app.pending_window_events :: :: method
+            let pending_monitor_events = present_app.pending_monitor_events :: :: method
+            let pending_joystick_events = present_app.pending_joystick_events :: :: method
+            let pending_user_events = present_app.pending_user_events :: :: method
+            let pending_key_changed_events = present_app.pending_key_changed_events :: :: method
+            let pending_character_events = present_app.pending_character_events :: :: method
+            let pending_character_mods_events = present_app.pending_character_mods_events :: :: method
+            let pending_mouse_button_changed_events = present_app.pending_mouse_button_changed_events :: :: method
+            let pending_cursor_moved_events = present_app.pending_cursor_moved_events :: :: method
+            let pending_scrolled_events = present_app.pending_scrolled_events :: :: method
+            let pending_refreshed_events = present_app.pending_refreshed_events :: :: method
+            let pending_moved_events = present_app.pending_moved_events :: :: method
+            let pending_resized_events = present_app.pending_resized_events :: :: method
+            let pending_framebuffer_resized_events = present_app.pending_framebuffer_resized_events :: :: method
+            let pending_content_scale_changed_events = present_app.pending_content_scale_changed_events :: :: method
+            let pending_focus_changed_events = present_app.pending_focus_changed_events :: :: method
+            let pending_iconified_events = present_app.pending_iconified_events :: :: method
+            let pending_maximized_events = present_app.pending_maximized_events :: :: method
+            let pending_cursor_entered_events = present_app.pending_cursor_entered_events :: :: method
+            let pending_cursor_data = present_app.pending_cursor_data :: :: method
+            let pending_scroll_data = present_app.pending_scroll_data :: :: method
+            let pending_key_data = present_app.pending_key_data :: :: method
+            let pending_character_data = present_app.pending_character_data :: :: method
+            let pending_character_mods_data = present_app.pending_character_mods_data :: :: method
+            let pending_mouse_button_data = present_app.pending_mouse_button_data :: :: method
+            let pending_window_events_for = present_app.pending_window_events_for :: window_id :: method
+            let pending_monitor_events_for = present_app.pending_monitor_events_for :: 999 :: method
+            let pending_joystick_events_for = present_app.pending_joystick_events_for :: 999 :: method
+            let pending_user_events_for = present_app.pending_user_events_for :: 91 :: method
+            let pending_other_user_events_for = present_app.pending_user_events_for :: 999 :: method
+            let pending_key_changed_events_for = present_app.pending_key_changed_events_for :: window_id :: method
+            let pending_character_events_for = present_app.pending_character_events_for :: window_id :: method
+            let pending_character_mods_events_for = present_app.pending_character_mods_events_for :: window_id :: method
+            let pending_mouse_button_changed_events_for = present_app.pending_mouse_button_changed_events_for :: window_id :: method
+            let pending_cursor_moved_events_for = present_app.pending_cursor_moved_events_for :: window_id :: method
+            let pending_scrolled_events_for = present_app.pending_scrolled_events_for :: window_id :: method
+            let pending_refreshed_events_for = present_app.pending_refreshed_events_for :: window_id :: method
+            let pending_moved_events_for = present_app.pending_moved_events_for :: window_id :: method
+            let pending_resized_events_for = present_app.pending_resized_events_for :: window_id :: method
+            let pending_framebuffer_resized_events_for = present_app.pending_framebuffer_resized_events_for :: window_id :: method
+            let pending_content_scale_changed_events_for = present_app.pending_content_scale_changed_events_for :: window_id :: method
+            let pending_focus_changed_events_for = present_app.pending_focus_changed_events_for :: window_id :: method
+            let pending_iconified_events_for = present_app.pending_iconified_events_for :: window_id :: method
+            let pending_maximized_events_for = present_app.pending_maximized_events_for :: window_id :: method
+            let pending_cursor_entered_events_for = present_app.pending_cursor_entered_events_for :: window_id :: method
+            let pending_cursor_data_for = present_app.pending_cursor_data_for :: window_id :: method
+            let pending_scroll_data_for = present_app.pending_scroll_data_for :: window_id :: method
+            let pending_key_data_for = present_app.pending_key_data_for :: window_id :: method
+            let pending_character_data_for = present_app.pending_character_data_for :: window_id :: method
+            let pending_character_mods_data_for = present_app.pending_character_mods_data_for :: window_id :: method
+            let pending_mouse_button_data_for = present_app.pending_mouse_button_data_for :: window_id :: method
+            let pending_window_ids = present_app.pending_window_ids :: :: method
+            let pending_monitor_ids = present_app.pending_monitor_ids :: :: method
+            let pending_joystick_ids = present_app.pending_joystick_ids :: :: method
+            let pending_created_window_ids = present_app.pending_created_window_ids :: :: method
+            let pending_created_window_events = present_app.pending_created_window_events :: :: method
+            let pending_destroyed_window_ids = present_app.pending_destroyed_window_ids :: :: method
+            let pending_destroyed_window_events = present_app.pending_destroyed_window_events :: :: method
+            let pending_close_requested_window_ids = present_app.pending_close_requested_window_ids :: :: method
+            let pending_close_requested_window_events = present_app.pending_close_requested_window_events :: :: method
+            let pending_connected_monitor_ids = present_app.pending_connected_monitor_ids :: :: method
+            let pending_connected_monitor_events = present_app.pending_connected_monitor_events :: :: method
+            let pending_disconnected_monitor_ids = present_app.pending_disconnected_monitor_ids :: :: method
+            let pending_disconnected_monitor_events = present_app.pending_disconnected_monitor_events :: :: method
+            let pending_connected_joystick_events = present_app.pending_connected_joystick_events :: :: method
+            let pending_connected_joystick_ids = present_app.pending_connected_joystick_ids :: :: method
+            let pending_disconnected_joystick_ids = present_app.pending_disconnected_joystick_ids :: :: method
+            let pending_disconnected_joystick_events = present_app.pending_disconnected_joystick_events :: :: method
+            let pending_user_ids = present_app.pending_user_ids :: :: method
+            select:
+                when pending_window_events.count :: :: method != 0 => return 555
+                when pending_monitor_events.count :: :: method != 0 => return 556
+                when pending_joystick_events.count :: :: method != 0 => return 557
+                when pending_user_events.count :: :: method != 1 => return 558
+                when pending_key_changed_events.count :: :: method != 0 => return 856
+                when pending_character_events.count :: :: method != 0 => return 857
+                when pending_character_mods_events.count :: :: method != 0 => return 858
+                when pending_mouse_button_changed_events.count :: :: method != 0 => return 859
+                when pending_cursor_moved_events.count :: :: method != 0 => return 860
+                when pending_scrolled_events.count :: :: method != 0 => return 861
+                when pending_refreshed_events.count :: :: method != 0 => return 954
+                when pending_moved_events.count :: :: method != 0 => return 955
+                when pending_resized_events.count :: :: method != 0 => return 956
+                when pending_framebuffer_resized_events.count :: :: method != 0 => return 957
+                when pending_content_scale_changed_events.count :: :: method != 0 => return 958
+                when pending_focus_changed_events.count :: :: method != 0 => return 959
+                when pending_iconified_events.count :: :: method != 0 => return 960
+                when pending_maximized_events.count :: :: method != 0 => return 961
+                when pending_cursor_entered_events.count :: :: method != 0 => return 962
+                when pending_cursor_data.count :: :: method != 0 => return 742
+                when pending_scroll_data.count :: :: method != 0 => return 743
+                when pending_key_data.count :: :: method != 0 => return 744
+                when pending_character_data.count :: :: method != 0 => return 745
+                when pending_character_mods_data.count :: :: method != 0 => return 746
+                when pending_mouse_button_data.count :: :: method != 0 => return 747
+                when pending_window_events_for.count :: :: method != 0 => return 559
+                when pending_monitor_events_for.count :: :: method != 0 => return 560
+                when pending_joystick_events_for.count :: :: method != 0 => return 561
+                when pending_user_events_for.count :: :: method != 1 => return 562
+                when pending_other_user_events_for.count :: :: method != 0 => return 563
+                when pending_key_changed_events_for.count :: :: method != 0 => return 862
+                when pending_character_events_for.count :: :: method != 0 => return 863
+                when pending_character_mods_events_for.count :: :: method != 0 => return 864
+                when pending_mouse_button_changed_events_for.count :: :: method != 0 => return 865
+                when pending_cursor_moved_events_for.count :: :: method != 0 => return 866
+                when pending_scrolled_events_for.count :: :: method != 0 => return 867
+                when pending_refreshed_events_for.count :: :: method != 0 => return 963
+                when pending_moved_events_for.count :: :: method != 0 => return 964
+                when pending_resized_events_for.count :: :: method != 0 => return 965
+                when pending_framebuffer_resized_events_for.count :: :: method != 0 => return 966
+                when pending_content_scale_changed_events_for.count :: :: method != 0 => return 967
+                when pending_focus_changed_events_for.count :: :: method != 0 => return 968
+                when pending_iconified_events_for.count :: :: method != 0 => return 969
+                when pending_maximized_events_for.count :: :: method != 0 => return 970
+                when pending_cursor_entered_events_for.count :: :: method != 0 => return 971
+                when pending_cursor_data_for.count :: :: method != 0 => return 749
+                when pending_scroll_data_for.count :: :: method != 0 => return 750
+                when pending_key_data_for.count :: :: method != 0 => return 751
+                when pending_character_data_for.count :: :: method != 0 => return 752
+                when pending_character_mods_data_for.count :: :: method != 0 => return 753
+                when pending_mouse_button_data_for.count :: :: method != 0 => return 754
+                when pending_window_ids.count :: :: method != 0 => return 690
+                when pending_monitor_ids.count :: :: method != 0 => return 691
+                when pending_joystick_ids.count :: :: method != 0 => return 692
+                when pending_created_window_ids.count :: :: method != 0 => return 566
+                when pending_created_window_events.count :: :: method != 0 => return 604
+                when pending_destroyed_window_ids.count :: :: method != 0 => return 567
+                when pending_destroyed_window_events.count :: :: method != 0 => return 605
+                when pending_close_requested_window_ids.count :: :: method != 0 => return 568
+                when pending_close_requested_window_events.count :: :: method != 0 => return 606
+                when pending_connected_monitor_ids.count :: :: method != 0 => return 569
+                when pending_connected_monitor_events.count :: :: method != 0 => return 607
+                when pending_disconnected_monitor_ids.count :: :: method != 0 => return 570
+                when pending_disconnected_monitor_events.count :: :: method != 0 => return 608
+                when pending_connected_joystick_events.count :: :: method != 0 => return 571
+                when pending_connected_joystick_ids.count :: :: method != 0 => return 631
+                when pending_disconnected_joystick_ids.count :: :: method != 0 => return 572
+                when pending_disconnected_joystick_events.count :: :: method != 0 => return 609
+                when pending_user_ids.count :: :: method != 1 => return 573
+                when !present_app.has_pending_events :: :: method => return 76
+                when present_app.pending_event_count :: :: method != 1 => return 77
+                when !present_app.has_pending_user_events :: :: method => return 542
+                when present_app.pending_user_event_count :: :: method != 1 => return 543
+                when present_app.has_pending_window_events :: :: method => return 544
+                when present_app.pending_window_event_count :: :: method != 0 => return 545
+                when present_app.has_pending_monitor_events :: :: method => return 546
+                when present_app.pending_monitor_event_count :: :: method != 0 => return 547
+                when present_app.has_pending_joystick_events :: :: method => return 548
+                when present_app.pending_joystick_event_count :: :: method != 0 => return 549
+                else => ()
+            select present_app.next_user_event :: :: method:
+                when Option.Some(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method != 91 => return 78
+                        else => ()
+                when Option.None => return 79
+            select:
+                when present_app.has_pending_events :: :: method => return 80
+                when present_app.pending_event_count :: :: method != 0 => return 81
+                when present_app.has_pending_user_events :: :: method => return 550
+                when present_app.pending_user_event_count :: :: method != 0 => return 551
+                when present_app.has_pending_window_events :: :: method => return 552
+                when present_app.has_pending_monitor_events :: :: method => return 553
+                when present_app.has_pending_joystick_events :: :: method => return 554
+                else => ()
+            let pending_user_event = pending_user_events.remove :: 0 :: method
+            let pending_user_event_for = pending_user_events_for.remove :: 0 :: method
+            let pending_user_id = pending_user_ids.remove :: 0 :: method
+            select:
+                when pending_user_event.user_id :: :: method != 91 => return 564
+                when pending_user_event_for.user_id :: :: method != 91 => return 565
+                when pending_user_id != 91 => return 574
+                else => ()
+            present_app.post_user_event :: 92 :: method
+            select present_app.wait_timeout :: 0.0 :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(app_event) =>
+                            select app_event.user_id :: :: method:
+                                when Option.Some(id) =>
+                                    select:
+                                        when id != 92 => return 82
+                                        else => ()
+                                when Option.None => return 83
+                        when Option.None => return 84
+                when Result.Err(_) => return 85
+            present_app.post_user_event :: 93 :: method
+            select present_app.poll :: :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(app_event) =>
+                            select app_event.user_id :: :: method:
+                                when Option.Some(id) =>
+                                    select:
+                                        when id != 93 => return 86
+                                        else => ()
+                                when Option.None => return 87
+                        when Option.None => return 88
+                when Result.Err(_) => return 89
+            present_app.post_user_event :: 94 :: method
+            select present_app.wait :: :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(app_event) =>
+                            select app_event.user_id :: :: method:
+                                when Option.Some(id) =>
+                                    select:
+                                        when id != 94 => return 90
+                                        else => ()
+                                when Option.None => return 91
+                        when Option.None => return 92
+                when Result.Err(_) => return 93
+            repeat:
+                select present_app.next_window_event :: :: method:
+                    when Option.Some(_) => ()
+                    when Option.None => break
+            present_app.post_user_event :: 95 :: method
+            select present_app.wait_timeout_window_event :: 0.0 :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(window_event) =>
+                            select:
+                                when window_event.window_id :: :: method != window_id => return 94
+                                else => ()
+                        when Option.None => ()
+                when Result.Err(_) => return 95
+            select present_app.next_user_event :: :: method:
+                when Option.Some(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method != 95 => return 96
+                        else => ()
+                when Option.None => return 97
+            select present_app.next_event :: :: method:
+                when Option.Some(_) => return 98
+                when Option.None => ()
+            select present_app.next_monitor_event :: :: method:
+                when Option.Some(_) => return 99
+                when Option.None => ()
+            select present_app.next_joystick_event :: :: method:
+                when Option.Some(_) => return 100
+                when Option.None => ()
+            present_app.post_user_event :: 96 :: method
+            select present_app.poll_user_event_for :: 999 :: method:
+                when Result.Ok(Option.Some(_)) => return 325
+                when Result.Ok(Option.None) => ()
+                when Result.Err(_) => return 326
+            select present_app.poll_user_event_for :: 96 :: method:
+                when Result.Ok(Option.Some(user_event)) =>
+                    select:
+                        when user_event.user_id :: :: method != 96 => return 327
+                        else => ()
+                when _ => return 328
+            present_app.post_user_event :: 96 :: method
+            select present_app.poll_user_event :: :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(user_event) =>
+                            select:
+                                when user_event.user_id :: :: method != 96 => return 81
+                                else => ()
+                        when Option.None => return 82
+                when Result.Err(_) => return 83
+            present_app.post_user_event :: 97 :: method
+            let polled_user_ids = present_app.poll_user_ids :: :: method
+            select:
+                when polled_user_ids.count :: :: method != 1 => return 84
+                when polled_user_ids.remove :: 0 :: method != 97 => return 85
+                else => ()
+            present_app.post_user_event :: 98 :: method
+            let polled_user_events = present_app.poll_user_events :: :: method
+            select:
+                when polled_user_events.count :: :: method != 1 => return 86
+                else => ()
+            let polled_user_event = polled_user_events.remove :: 0 :: method
+            select:
+                when polled_user_event.user_id :: :: method != 98 => return 87
+                else => ()
+            present_app.post_user_event :: 99 :: method
+            select present_app.wait_user_event_for :: 99 :: method:
+                when Result.Ok(Option.Some(user_event)) =>
+                    select:
+                        when user_event.user_id :: :: method != 99 => return 329
+                        else => ()
+                when _ => return 330
+            present_app.post_user_event :: 99 :: method
+            select present_app.wait_user_event :: :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(user_event) =>
+                            select:
+                                when user_event.user_id :: :: method != 99 => return 88
+                                else => ()
+                        when Option.None => return 89
+                when Result.Err(_) => return 90
+            present_app.post_user_event :: 100 :: method
+            let waited_user_ids = present_app.wait_user_ids :: :: method
+            select:
+                when waited_user_ids.count :: :: method != 1 => return 91
+                when waited_user_ids.remove :: 0 :: method != 100 => return 92
+                else => ()
+            present_app.post_user_event :: 101 :: method
+            let waited_user_events = present_app.wait_user_events :: :: method
+            select:
+                when waited_user_events.count :: :: method != 1 => return 93
+                else => ()
+            let waited_user_event = waited_user_events.remove :: 0 :: method
+            select:
+                when waited_user_event.user_id :: :: method != 101 => return 94
+                else => ()
+            present_app.post_user_event :: 102 :: method
+            select present_app.wait_timeout_user_event_for :: 102, 0.0 :: method:
+                when Result.Ok(Option.Some(user_event)) =>
+                    select:
+                        when user_event.user_id :: :: method != 102 => return 331
+                        else => ()
+                when _ => return 332
+            present_app.post_user_event :: 102 :: method
+            select present_app.wait_timeout_user_event :: 0.0 :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(user_event) =>
+                            select:
+                                when user_event.user_id :: :: method != 102 => return 95
+                                else => ()
+                        when Option.None => return 96
+                when Result.Err(_) => return 97
+            present_app.post_user_event :: 103 :: method
+            let timeout_user_ids = present_app.wait_timeout_user_ids :: 0.0 :: method
+            select:
+                when timeout_user_ids.count :: :: method != 1 => return 98
+                when timeout_user_ids.remove :: 0 :: method != 103 => return 99
+                else => ()
+            present_app.post_user_event :: 104 :: method
+            let timeout_user_events = present_app.wait_timeout_user_events :: 0.0 :: method
+            select:
+                when timeout_user_events.count :: :: method != 1 => return 100
+                else => ()
+            let timeout_user_event = timeout_user_events.remove :: 0 :: method
+            select:
+                when timeout_user_event.user_id :: :: method != 104 => return 101
+                else => ()
+            present_app.post_user_event :: 105 :: method
+            select present_app.poll_monitor_event_for :: 91 :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(_) => return 333
+                        when Option.None => ()
+                when Result.Err(_) => return 334
+            select present_app.poll_monitor_event :: :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(_) => return 102
+                        when Option.None => ()
+                when Result.Err(_) => return 103
+            select present_app.next_user_event :: :: method:
+                when Option.Some(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method != 105 => return 104
+                        else => ()
+                when Option.None => return 105
+            present_app.post_user_event :: 106 :: method
+            select present_app.poll_joystick_event_for :: 101 :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(_) => return 335
+                        when Option.None => ()
+                when Result.Err(_) => return 336
+            select present_app.poll_joystick_event :: :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(_) => return 106
+                        when Option.None => ()
+                when Result.Err(_) => return 107
+            select present_app.next_user_event :: :: method:
+                when Option.Some(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method != 106 => return 108
+                        else => ()
+                when Option.None => return 109
+            present_app.post_user_event :: 107 :: method
+            let polled_monitor_events = present_app.poll_monitor_events :: :: method
+            select:
+                when !polled_monitor_events.is_empty :: :: method => return 110
+                else => ()
+            select present_app.next_user_event :: :: method:
+                when Option.Some(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method != 107 => return 111
+                        else => ()
+                when Option.None => return 112
+            present_app.post_user_event :: 108 :: method
+            let polled_joystick_events = present_app.poll_joystick_events :: :: method
+            select:
+                when !polled_joystick_events.is_empty :: :: method => return 113
+                else => ()
+            select present_app.next_user_event :: :: method:
+                when Option.Some(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method != 108 => return 114
+                        else => ()
+                when Option.None => return 115
+            present_app.post_user_event :: 109 :: method
+            select present_app.wait_monitor_event_for :: 91 :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(_) => return 337
+                        when Option.None => ()
+                when Result.Err(_) => return 338
+            select present_app.wait_monitor_event :: :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(_) => return 116
+                        when Option.None => ()
+                when Result.Err(_) => return 117
+            select present_app.next_user_event :: :: method:
+                when Option.Some(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method != 109 => return 118
+                        else => ()
+                when Option.None => return 119
+            present_app.post_user_event :: 110 :: method
+            select present_app.wait_joystick_event_for :: 101 :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(_) => return 339
+                        when Option.None => ()
+                when Result.Err(_) => return 340
+            select present_app.wait_joystick_event :: :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(_) => return 120
+                        when Option.None => ()
+                when Result.Err(_) => return 121
+            select present_app.next_user_event :: :: method:
+                when Option.Some(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method != 110 => return 122
+                        else => ()
+                when Option.None => return 123
+            present_app.post_user_event :: 111 :: method
+            let waited_monitor_events = present_app.wait_monitor_events :: :: method
+            select:
+                when !waited_monitor_events.is_empty :: :: method => return 124
+                else => ()
+            select present_app.next_user_event :: :: method:
+                when Option.Some(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method != 111 => return 125
+                        else => ()
+                when Option.None => return 126
+            present_app.post_user_event :: 112 :: method
+            let waited_joystick_events = present_app.wait_joystick_events :: :: method
+            select:
+                when !waited_joystick_events.is_empty :: :: method => return 127
+                else => ()
+            select present_app.next_user_event :: :: method:
+                when Option.Some(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method != 112 => return 128
+                        else => ()
+                when Option.None => return 129
+            select present_app.wait_timeout_monitor_event :: 0.0 :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(_) => return 130
+                        when Option.None => ()
+                when Result.Err(_) => return 131
+            present_app.post_user_event :: 113 :: method
+            select present_app.wait_timeout_monitor_event_for :: 91, 0.0 :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(_) => return 341
+                        when Option.None => ()
+                when Result.Err(_) => return 342
+            select present_app.next_user_event :: :: method:
+                when Option.Some(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method != 113 => return 343
+                        else => ()
+                when Option.None => return 344
+            select present_app.wait_timeout_joystick_event :: 0.0 :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(_) => return 132
+                        when Option.None => ()
+                when Result.Err(_) => return 133
+            present_app.post_user_event :: 114 :: method
+            select present_app.wait_timeout_joystick_event_for :: 101, 0.0 :: method:
+                when Result.Ok(event) =>
+                    select event:
+                        when Option.Some(_) => return 345
+                        when Option.None => ()
+                when Result.Err(_) => return 346
+            select present_app.next_user_event :: :: method:
+                when Option.Some(user_event) =>
+                    select:
+                        when user_event.user_id :: :: method != 114 => return 347
+                        else => ()
+                when Option.None => return 348
+            let timeout_monitor_events = present_app.wait_timeout_monitor_events :: 0.0 :: method
+            let timeout_joystick_events = present_app.wait_timeout_joystick_events :: 0.0 :: method
+            select:
+                when !timeout_monitor_events.is_empty :: :: method => return 134
+                when !timeout_joystick_events.is_empty :: :: method => return 135
+                else => ()
+            select present_app.current_context_window :: :: method:
+                when Result.Ok(_) => return 188
+                when Result.Err(AppError.NoCurrentContext) => ()
+                when Result.Err(_) => return 189
+            select present_app.create_hidden_window :: "runa_app_vulkan_aux", 1, 1 :: method:
+                when Result.Ok(aux_window) =>
+                    let aux_window_id = aux_window.id
+                    let pending_created_windows = present_app.pending_created_windows :: :: method
+                    let pending_created_window_snapshots = present_app.pending_created_window_snapshots :: :: method
+                    let pending_created_windows_for = present_app.pending_created_windows_for :: aux_window_id :: method
+                    let pending_created_window_snapshots_for = present_app.pending_created_window_snapshots_for :: aux_window_id :: method
+                    select:
+                        when pending_created_windows.count :: :: method != 1 => return 2801
+                        when pending_created_windows.remove :: 0 :: method.id != aux_window_id => return 2802
+                        when pending_created_window_snapshots.count :: :: method != 1 => return 2803
+                        when pending_created_window_snapshots.remove :: 0 :: method.window.id != aux_window_id => return 2804
+                        when pending_created_windows_for.count :: :: method != 1 => return 2805
+                        when pending_created_windows_for.remove :: 0 :: method.id != aux_window_id => return 2806
+                        when pending_created_window_snapshots_for.count :: :: method != 1 => return 2807
+                        when pending_created_window_snapshots_for.remove :: 0 :: method.window.id != aux_window_id => return 2808
+                        else => ()
+                    let aux_created_ids = present_app.poll_created_window_ids :: :: method
+                    select:
+                        when aux_created_ids.count :: :: method != 1 => return 190
+                        when aux_created_ids.remove :: 0 :: method != aux_window_id => return 191
+                        when present_app.window_count :: :: method != 2 => return 192
+                        when !present_app.window_exists :: aux_window_id :: method => return 193
+                        when !present_app.has_window :: aux_window_id :: method => return 292
+                        else => ()
+                    select:
+                        when !present_app.has_auxiliary_windows :: :: method => return 217
+                        when present_app.auxiliary_window_count :: :: method != 1 => return 218
+                        else => ()
+                    let auxiliary_ids = present_app.auxiliary_window_ids :: :: method
+                    select:
+                        when auxiliary_ids.count :: :: method != 1 => return 219
+                        when auxiliary_ids.remove :: 0 :: method != aux_window_id => return 220
+                        else => ()
+                    select present_app.auxiliary_window :: aux_window_id :: method:
+                        when Option.Some(auxiliary_window) =>
+                            select:
+                                when auxiliary_window.id != aux_window_id => return 221
+                                else => ()
+                        when Option.None => return 222
+                    select present_app.auxiliary_window :: window_id :: method:
+                        when Option.Some(_) => return 223
+                        when Option.None => ()
+                    let auxiliary_windows = present_app.auxiliary_windows_snapshot :: :: method
+                    select:
+                        when auxiliary_windows.count :: :: method != 1 => return 224
+                        when auxiliary_windows.remove :: 0 :: method.id != aux_window_id => return 225
+                        else => ()
+                    select present_app.auxiliary_window_snapshot :: aux_window_id :: method:
+                        when Option.Some(auxiliary_window_snapshot) =>
+                            select:
+                                when auxiliary_window_snapshot.window.id != aux_window_id => return 226
+                                else => ()
+                        when Option.None => return 227
+                    select present_app.auxiliary_window_snapshot :: window_id :: method:
+                        when Option.Some(_) => return 228
+                        when Option.None => ()
+                    let auxiliary_snapshots = present_app.auxiliary_window_snapshots :: :: method
+                    select:
+                        when auxiliary_snapshots.count :: :: method != 1 => return 229
+                        when auxiliary_snapshots.remove :: 0 :: method.window.id != aux_window_id => return 230
+                        else => ()
+                    select present_app.window_by_id :: aux_window_id :: method:
+                        when Result.Ok(found_window) =>
+                            select:
+                                when found_window.id != aux_window_id => return 194
+                                else => ()
+                        when Result.Err(_) => return 195
+                    select present_app.window_snapshot_by_id :: aux_window_id :: method:
+                        when Result.Ok(aux_window_snapshot) =>
+                            select:
+                                when aux_window_snapshot.window.id != aux_window_id => return 196
+                                else => ()
+                        when Result.Err(_) => return 197
+                    select present_app.window_snapshot :: :: method:
+                        when Result.Ok(owned_window_snapshot) =>
+                            select:
+                                when owned_window_snapshot.window.id != window_id => return 198
+                                else => ()
+                        when Result.Err(_) => return 199
+                    let refreshed_snapshot = present_app.snapshot :: :: method
+                    select:
+                        when refreshed_snapshot.window_count != 2 => return 200
+                        else => ()
+                    select present_app.window_index :: aux_window_id :: method:
+                        when Option.Some(index) =>
+                            select:
+                                when refreshed_snapshot.windows[index].window.id != aux_window_id => return 294
+                                else => ()
+                        when Option.None => return 295
+                    select present_app.destroy_auxiliary_window_by_id :: window_id :: method:
+                        when Result.Err(VulkanPresentRuntimeError.OwnedWindowProtected) => ()
+                        when _ => return 201
+                    select present_app.destroy_auxiliary_window_by_id :: aux_window_id :: method:
+                        when Result.Ok(_) => ()
+                        when _ => return 202
+                    let aux_destroyed_events = present_app.poll_destroyed_window_events :: :: method
+                    select:
+                        when aux_destroyed_events.count :: :: method != 1 => return 203
+                        when present_app.window_count :: :: method != 1 => return 205
+                        when present_app.window_exists :: aux_window_id :: method => return 206
+                        when present_app.has_window :: aux_window_id :: method => return 296
+                        else => ()
+                    let aux_destroyed_event = aux_destroyed_events.remove :: 0 :: method
+                    select aux_destroyed_event.kind :: :: method:
+                        when WindowEventKind.Destroyed => ()
+                        when _ => return 204
+                    select:
+                        when aux_destroyed_event.window_id :: :: method != aux_window_id => return 293
+                        else => ()
+                    select present_app.window_by_id_option :: aux_window_id :: method:
+                        when Option.Some(_) => return 297
+                        when Option.None => ()
+                    select present_app.window_snapshot_by_id_option :: aux_window_id :: method:
+                        when Option.Some(_) => return 298
+                        when Option.None => ()
+                    select present_app.auxiliary_window :: aux_window_id :: method:
+                        when Option.Some(_) => return 299
+                        when Option.None => ()
+                    select present_app.auxiliary_window_snapshot :: aux_window_id :: method:
+                        when Option.Some(_) => return 300
+                        when Option.None => ()
+                    select present_app.create_hidden_window :: "runa_app_vulkan_aux_close", 1, 1 :: method:
+                        when Result.Ok(aux_close_window) =>
+                            let aux_close_id = aux_close_window.id
+                            let aux_close_created_ids = present_app.poll_created_window_ids :: :: method
+                            select:
+                                when aux_close_created_ids.count :: :: method != 1 => return 207
+                                when aux_close_created_ids.remove :: 0 :: method != aux_close_id => return 208
+                                else => ()
+                            present_app.close_auxiliary_windows :: :: method
+                            let aux_close_events = present_app.wait_timeout_close_requested_window_events :: 0.0 :: method
+                            select:
+                                when aux_close_events.count :: :: method != 1 => return 209
+                                else => ()
+                            let aux_close_event = aux_close_events.remove :: 0 :: method
+                            select aux_close_event.kind :: :: method:
+                                when WindowEventKind.CloseRequested => ()
+                                when _ => return 210
+                            select:
+                                when aux_close_event.window_id :: :: method != aux_close_id => return 211
+                                else => ()
+                            select:
+                                when !present_app.has_close_requested_auxiliary_windows :: :: method => return 225
+                                when present_app.auxiliary_close_requested_window_count :: :: method != 1 => return 226
+                                else => ()
+                            select:
+                                when !present_app.auxiliary_window_close_requested :: aux_close_id :: method => return 227
+                                when present_app.auxiliary_window_close_requested :: window_id :: method => return 228
+                                else => ()
+                            let auxiliary_close_ids = present_app.auxiliary_close_requested_window_ids :: :: method
+                            select:
+                                when auxiliary_close_ids.count :: :: method != 1 => return 229
+                                when auxiliary_close_ids.remove :: 0 :: method != aux_close_id => return 230
+                                else => ()
+                            select present_app.auxiliary_close_requested_window :: aux_close_id :: method:
+                                when Option.Some(auxiliary_close_window) =>
+                                    select:
+                                        when auxiliary_close_window.id != aux_close_id => return 231
+                                        else => ()
+                                when Option.None => return 232
+                            select present_app.auxiliary_close_requested_window :: window_id :: method:
+                                when Option.Some(_) => return 233
+                                when Option.None => ()
+                            let auxiliary_closing_windows = present_app.auxiliary_close_requested_windows :: :: method
+                            select:
+                                when auxiliary_closing_windows.count :: :: method != 1 => return 234
+                                when auxiliary_closing_windows.remove :: 0 :: method.id != aux_close_id => return 235
+                                else => ()
+                            select present_app.auxiliary_close_requested_window_snapshot :: aux_close_id :: method:
+                                when Option.Some(auxiliary_closing_snapshot) =>
+                                    select:
+                                        when auxiliary_closing_snapshot.window.id != aux_close_id => return 236
+                                        else => ()
+                                when Option.None => return 237
+                            select present_app.auxiliary_close_requested_window_snapshot :: window_id :: method:
+                                when Option.Some(_) => return 238
+                                when Option.None => ()
+                            let auxiliary_closing_snapshots = present_app.auxiliary_close_requested_window_snapshots :: :: method
+                            select:
+                                when auxiliary_closing_snapshots.count :: :: method != 1 => return 239
+                                when auxiliary_closing_snapshots.remove :: 0 :: method.window.id != aux_close_id => return 240
+                                else => ()
+                            select:
+                                when present_app.destroy_auxiliary_close_requested_windows :: :: method != 1 => return 211
+                                else => ()
+                            let aux_close_destroyed_ids = present_app.poll_destroyed_window_ids :: :: method
+                            select:
+                                when aux_close_destroyed_ids.count :: :: method != 1 => return 212
+                                when aux_close_destroyed_ids.remove :: 0 :: method != aux_close_id => return 213
+                                when present_app.has_close_requested_auxiliary_windows :: :: method => return 233
+                                when present_app.auxiliary_close_requested_window_count :: :: method != 0 => return 234
+                                when present_app.has_auxiliary_windows :: :: method => return 235
+                                when present_app.auxiliary_window_count :: :: method != 0 => return 236
+                                when present_app.destroy_all_auxiliary_windows :: :: method != 0 => return 214
+                                else => ()
+                            select:
+                                when present_app.auxiliary_window_close_requested :: aux_close_id :: method => return 241
+                                else => ()
+                            select present_app.auxiliary_close_requested_window :: aux_close_id :: method:
+                                when Option.Some(_) => return 242
+                                when Option.None => ()
+                            select present_app.auxiliary_close_requested_window_snapshot :: aux_close_id :: method:
+                                when Option.Some(_) => return 243
+                                when Option.None => ()
+                            select present_app.create_hidden_window :: "runa_app_vulkan_aux_poll_single", 1, 1 :: method:
+                                when Result.Ok(aux_poll_single) =>
+                                    let aux_poll_single_id = aux_poll_single.id
+                                    select present_app.poll_window_event_for :: aux_poll_single_id :: method:
+                                        when Result.Ok(Option.Some(window_event)) =>
+                                            select:
+                                                when window_event.window_id :: :: method != aux_poll_single_id => return 237
+                                                else => ()
+                                        when _ => return 238
+                                    select present_app.destroy_auxiliary_window_by_id :: aux_poll_single_id :: method:
+                                        when Result.Ok(_) => ()
+                                        when _ => return 239
+                                    let aux_poll_single_destroyed_ids = present_app.poll_destroyed_window_ids :: :: method
+                                    select:
+                                        when aux_poll_single_destroyed_ids.count :: :: method != 1 => return 240
+                                        when aux_poll_single_destroyed_ids.remove :: 0 :: method != aux_poll_single_id => return 241
+                                        else => ()
+                                when Result.Err(_) => return 242
+                            select present_app.create_hidden_window :: "runa_app_vulkan_aux_poll_list", 1, 1 :: method:
+                                when Result.Ok(aux_poll_list) =>
+                                    let aux_poll_list_id = aux_poll_list.id
+                                    let aux_poll_list_events = present_app.poll_window_events_for :: aux_poll_list_id :: method
+                                    select:
+                                        when aux_poll_list_events.count :: :: method != 1 => return 243
+                                        when aux_poll_list_events.remove :: 0 :: method.window_id :: :: method != aux_poll_list_id => return 244
+                                        else => ()
+                                    select present_app.destroy_auxiliary_window_by_id :: aux_poll_list_id :: method:
+                                        when Result.Ok(_) => ()
+                                        when _ => return 245
+                                    let aux_poll_list_destroyed_ids = present_app.poll_destroyed_window_ids :: :: method
+                                    select:
+                                        when aux_poll_list_destroyed_ids.count :: :: method != 1 => return 246
+                                        when aux_poll_list_destroyed_ids.remove :: 0 :: method != aux_poll_list_id => return 247
+                                        else => ()
+                                when Result.Err(_) => return 248
+                            select present_app.create_hidden_window :: "runa_app_vulkan_aux_wait_single", 1, 1 :: method:
+                                when Result.Ok(aux_wait_single) =>
+                                    let aux_wait_single_id = aux_wait_single.id
+                                    select present_app.wait_window_event_for :: aux_wait_single_id :: method:
+                                        when Result.Ok(Option.Some(window_event)) =>
+                                            select:
+                                                when window_event.window_id :: :: method != aux_wait_single_id => return 249
+                                                else => ()
+                                        when _ => return 250
+                                    select present_app.destroy_auxiliary_window_by_id :: aux_wait_single_id :: method:
+                                        when Result.Ok(_) => ()
+                                        when _ => return 251
+                                    let aux_wait_single_destroyed_ids = present_app.poll_destroyed_window_ids :: :: method
+                                    select:
+                                        when aux_wait_single_destroyed_ids.count :: :: method != 1 => return 252
+                                        when aux_wait_single_destroyed_ids.remove :: 0 :: method != aux_wait_single_id => return 253
+                                        else => ()
+                                when Result.Err(_) => return 254
+                            select present_app.create_hidden_window :: "runa_app_vulkan_aux_wait_list", 1, 1 :: method:
+                                when Result.Ok(aux_wait_list) =>
+                                    let aux_wait_list_id = aux_wait_list.id
+                                    let aux_wait_list_events = present_app.wait_window_events_for :: aux_wait_list_id :: method
+                                    select:
+                                        when aux_wait_list_events.count :: :: method != 1 => return 255
+                                        when aux_wait_list_events.remove :: 0 :: method.window_id :: :: method != aux_wait_list_id => return 256
+                                        else => ()
+                                    select present_app.destroy_auxiliary_window_by_id :: aux_wait_list_id :: method:
+                                        when Result.Ok(_) => ()
+                                        when _ => return 257
+                                    let aux_wait_list_destroyed_ids = present_app.poll_destroyed_window_ids :: :: method
+                                    select:
+                                        when aux_wait_list_destroyed_ids.count :: :: method != 1 => return 258
+                                        when aux_wait_list_destroyed_ids.remove :: 0 :: method != aux_wait_list_id => return 259
+                                        else => ()
+                                when Result.Err(_) => return 260
+                            select present_app.create_hidden_window :: "runa_app_vulkan_aux_next", 1, 1 :: method:
+                                when Result.Ok(aux_next_window) =>
+                                    let aux_next_id = aux_next_window.id
+                                    select present_app.next_window_event_for :: aux_next_id :: method:
+                                        when Option.Some(window_event) =>
+                                            select:
+                                                when window_event.window_id :: :: method != aux_next_id => return 261
+                                                else => ()
+                                        when Option.None => return 262
+                                    select present_app.destroy_auxiliary_window_by_id :: aux_next_id :: method:
+                                        when Result.Ok(_) => ()
+                                        when _ => return 263
+                                    let aux_next_destroyed_ids = present_app.poll_destroyed_window_ids :: :: method
+                                    select:
+                                        when aux_next_destroyed_ids.count :: :: method != 1 => return 264
+                                        when aux_next_destroyed_ids.remove :: 0 :: method != aux_next_id => return 265
+                                        else => ()
+                                when Result.Err(_) => return 266
+                            select present_app.create_hidden_window :: "runa_app_vulkan_aux_timeout_single", 1, 1 :: method:
+                                when Result.Ok(aux_timeout_single) =>
+                                    let aux_timeout_single_id = aux_timeout_single.id
+                                    select present_app.wait_timeout_window_event_for :: aux_timeout_single_id, 0.0 :: method:
+                                        when Result.Ok(Option.Some(window_event)) =>
+                                            select:
+                                                when window_event.window_id :: :: method != aux_timeout_single_id => return 267
+                                                else => ()
+                                        when _ => return 268
+                                    select present_app.destroy_auxiliary_window_by_id :: aux_timeout_single_id :: method:
+                                        when Result.Ok(_) => ()
+                                        when _ => return 269
+                                    let aux_timeout_single_destroyed_ids = present_app.poll_destroyed_window_ids :: :: method
+                                    select:
+                                        when aux_timeout_single_destroyed_ids.count :: :: method != 1 => return 270
+                                        when aux_timeout_single_destroyed_ids.remove :: 0 :: method != aux_timeout_single_id => return 271
+                                        else => ()
+                                when Result.Err(_) => return 272
+                            select present_app.create_hidden_window :: "runa_app_vulkan_aux_timeout_list", 1, 1 :: method:
+                                when Result.Ok(aux_timeout_list) =>
+                                    let aux_timeout_list_id = aux_timeout_list.id
+                                    let aux_timeout_list_events = present_app.wait_timeout_window_events_for :: aux_timeout_list_id, 0.0 :: method
+                                    select:
+                                        when aux_timeout_list_events.count :: :: method != 1 => return 273
+                                        when aux_timeout_list_events.remove :: 0 :: method.window_id :: :: method != aux_timeout_list_id => return 274
+                                        else => ()
+                                    select present_app.destroy_auxiliary_window_by_id :: aux_timeout_list_id :: method:
+                                        when Result.Ok(_) => ()
+                                        when _ => return 275
+                                    let aux_timeout_list_destroyed_ids = present_app.poll_destroyed_window_ids :: :: method
+                                    select:
+                                        when aux_timeout_list_destroyed_ids.count :: :: method != 1 => return 276
+                                        when aux_timeout_list_destroyed_ids.remove :: 0 :: method != aux_timeout_list_id => return 277
+                                        else => ()
+                                when Result.Err(_) => return 278
+                            select present_app.primary_monitor :: :: method:
+                                when Result.Ok(primary_monitor) =>
+                                    let centered_spec = hidden_window_spec :: "runa_app_vulkan_aux_centered_on", 1, 1 :: call
+                                    select present_app.create_centered_window_on :: centered_spec, primary_monitor :: method:
+                                        when Result.Ok(aux_centered_on) =>
+                                            let aux_centered_on_id = aux_centered_on.id
+                                            let aux_centered_on_created_ids = present_app.poll_created_window_ids :: :: method
+                                            select:
+                                                when aux_centered_on_created_ids.count :: :: method != 1 => return 279
+                                                when aux_centered_on_created_ids.remove :: 0 :: method != aux_centered_on_id => return 280
+                                                else => ()
+                                            select present_app.destroy_auxiliary_window_by_id :: aux_centered_on_id :: method:
+                                                when Result.Ok(_) => ()
+                                                when _ => return 281
+                                            let aux_centered_on_destroyed_ids = present_app.poll_destroyed_window_ids :: :: method
+                                            select:
+                                                when aux_centered_on_destroyed_ids.count :: :: method != 1 => return 282
+                                                when aux_centered_on_destroyed_ids.remove :: 0 :: method != aux_centered_on_id => return 283
+                                                else => ()
+                                        when Result.Err(_) => return 284
+                                when Result.Err(_) => return 285
+                            let primary_centered_spec = hidden_window_spec :: "runa_app_vulkan_aux_primary_centered", 1, 1 :: call
+                            select present_app.create_primary_centered_window :: primary_centered_spec :: method:
+                                when Result.Ok(aux_primary_centered) =>
+                                    let aux_primary_centered_id = aux_primary_centered.id
+                                    let aux_primary_centered_created_ids = present_app.poll_created_window_ids :: :: method
+                                    select:
+                                        when aux_primary_centered_created_ids.count :: :: method != 1 => return 286
+                                        when aux_primary_centered_created_ids.remove :: 0 :: method != aux_primary_centered_id => return 287
+                                        else => ()
+                                    select present_app.destroy_auxiliary_window_by_id :: aux_primary_centered_id :: method:
+                                        when Result.Ok(_) => ()
+                                        when _ => return 288
+                                    let aux_primary_centered_destroyed_ids = present_app.poll_destroyed_window_ids :: :: method
+                                    select:
+                                        when aux_primary_centered_destroyed_ids.count :: :: method != 1 => return 289
+                                        when aux_primary_centered_destroyed_ids.remove :: 0 :: method != aux_primary_centered_id => return 290
+                                        else => ()
+                                when Result.Err(_) => return 291
+                        when Result.Err(_) => return 215
+                when Result.Err(_) => return 216
+            select snapshot.window_index :: window_id :: method:
+                when Option.Some(index) =>
+                    select:
+                        when index != 0 => return 21
+                        else => ()
+                when Option.None => return 22
+            select present_app.window_index :: window_id :: method:
+                when Option.Some(index) =>
+                    select:
+                        when index != 0 => return 297
+                        else => ()
+                when Option.None => return 298
+            select present_app.window_snapshot :: :: method:
+                when Result.Ok(window_snapshot) =>
+                    select:
+                        when window_snapshot.window.id != window_id => return 40
+                        else => ()
+                when Result.Err(_) => return 41
+            select snapshot.current_context_window_index :: :: method:
+                when Option.Some(_) => return 23
+                when Option.None => ()
+            select present_app.current_context_window_index :: :: method:
+                when Option.Some(_) => return 299
+                when Option.None => ()
+            select snapshot.primary_monitor_id:
+                when Option.Some(primary_monitor_id) =>
+                    select:
+                        when !present_app.has_monitor :: primary_monitor_id :: method => return 300
+                        else => ()
+                    select present_app.primary_monitor_id :: :: method:
+                        when Result.Ok(found_primary_monitor_id) =>
+                            select:
+                                when found_primary_monitor_id != primary_monitor_id => return 42
+                                else => ()
+                        when Result.Err(_) => return 43
+                    select present_app.primary_monitor_snapshot :: :: method:
+                        when Result.Ok(primary_monitor_snapshot) =>
+                            select:
+                                when primary_monitor_snapshot.id != primary_monitor_id => return 44
+                                else => ()
+                        when Result.Err(_) => return 45
+                    select present_app.monitor_snapshot :: primary_monitor_id :: method:
+                        when Result.Ok(primary_monitor_snapshot) =>
+                            select:
+                                when primary_monitor_snapshot.id != primary_monitor_id => return 46
+                                else => ()
+                        when Result.Err(_) => return 47
+                    select snapshot.primary_monitor_index :: :: method:
+                        when Option.Some(index) =>
+                            select:
+                                when snapshot.monitors[index].id != primary_monitor_id => return 24
+                                else => ()
+                        when Option.None => return 25
+                    select present_app.primary_monitor_index :: :: method:
+                        when Option.Some(index) =>
+                            select:
+                                when snapshot.monitors[index].id != primary_monitor_id => return 301
+                                else => ()
+                        when Option.None => return 302
+                    select snapshot.monitor_index :: primary_monitor_id :: method:
+                        when Option.Some(index) =>
+                            select:
+                                when snapshot.monitors[index].id != primary_monitor_id => return 26
+                                else => ()
+                        when Option.None => return 27
+                    select present_app.monitor_index :: primary_monitor_id :: method:
+                        when Option.Some(index) =>
+                            select:
+                                when snapshot.monitors[index].id != primary_monitor_id => return 303
+                                else => ()
+                        when Option.None => return 304
+                when Option.None => return 28
+            select:
+                when snapshot.connected_joystick_count == 0 =>
+                    select snapshot.joystick_index :: 0 :: method:
+                        when Option.Some(_) => return 29
+                        when Option.None => ()
+                    select:
+                        when present_app.has_joystick :: 0 :: method => return 305
+                        else => ()
+                    select present_app.joystick_option :: 0 :: method:
+                        when Option.Some(_) => return 309
+                        when Option.None => ()
+                    select present_app.joystick_snapshot_option :: 0 :: method:
+                        when Option.Some(_) => return 310
+                        when Option.None => ()
+                else =>
+                    let joystick_snapshot = snapshot.joysticks[0]
+                    select:
+                        when !present_app.has_joystick :: joystick_snapshot.joystick.id :: method => return 306
+                        else => ()
+                    select present_app.joystick_option :: joystick_snapshot.joystick.id :: method:
+                        when Option.Some(optional_joystick) =>
+                            select:
+                                when optional_joystick.id != joystick_snapshot.joystick.id => return 311
+                                else => ()
+                        when Option.None => return 312
+                    select present_app.joystick_snapshot_option :: joystick_snapshot.joystick.id :: method:
+                        when Option.Some(optional_joystick_snapshot) =>
+                            select:
+                                when optional_joystick_snapshot.joystick.id != joystick_snapshot.joystick.id => return 313
+                                else => ()
+                        when Option.None => return 314
+                    select snapshot.joystick_index :: joystick_snapshot.joystick.id :: method:
+                        when Option.Some(index) =>
+                            select:
+                                when snapshot.joysticks[index].joystick.id != joystick_snapshot.joystick.id => return 30
+                                else => ()
+                        when Option.None => return 31
+                    select present_app.joystick_index :: joystick_snapshot.joystick.id :: method:
+                        when Option.Some(index) =>
+                            select:
+                                when snapshot.joysticks[index].joystick.id != joystick_snapshot.joystick.id => return 307
+                                else => ()
+                        when Option.None => return 308
+            let present_snapshot = present_app.present_snapshot :: :: method
+            let extent = present_app.surface_extent :: :: method
+            select:
+                when present_snapshot.window_id != window_id => return 12
+                when present_snapshot.surface_width :: :: method != extent.width => return 13
+                when present_snapshot.surface_height :: :: method != extent.height => return 14
+                when present_snapshot.swapchain_image_count == 0 => return 15
+                when present_snapshot.preferred_image_count == 0 => return 16
+                when present_snapshot.presented_once => return 17
+                else => ()
+            let layout_status = check_vulkan_surface_layout :: present_app, present_snapshot, extent :: call
+            select:
+                when layout_status != 0 =>
+                    let _ = present_app.destroy :: :: method
+                    return 3900 + layout_status
+                else => ()
+            let memory_status = check_vulkan_memory_helpers :: present_app, present_snapshot :: call
+            select:
+                when memory_status != 0 =>
+                    let _ = present_app.destroy :: :: method
+                    return 4000 + memory_status
+                else => ()
+            let binding_status = check_vulkan_present_bindings :: present_app, present_snapshot :: call
+            select:
+                when binding_status != 0 =>
+                    let _ = present_app.destroy :: :: method
+                    return 4100 + binding_status
+                else => ()
+            let allocation_status = check_vulkan_allocation_helpers :: present_app, present_snapshot :: call
+            select:
+                when allocation_status != 0 =>
+                    let _ = present_app.destroy :: :: method
+                    return 4200 + allocation_status
+                else => ()
+            let upload_status = check_vulkan_upload_plan_helpers :: present_app :: call
+            select:
+                when upload_status != 0 =>
+                    let _ = present_app.destroy :: :: method
+                    return 4300 + upload_status
+                else => ()
+            let transfer_image_status = check_vulkan_transfer_destination_image_helpers :: present_app :: call
+            select:
+                when transfer_image_status != 0 =>
+                    let _ = present_app.destroy :: :: method
+                    return 4400 + transfer_image_status
+                else => ()
+            let present_status = check_present_pixel_path :: present_app, present_snapshot, extent :: call
+            select:
+                when present_status != 0 =>
+                    let _ = present_app.destroy :: :: method
+                    return present_status
+                else => ()
+            present_app.set_should_close :: false :: method
+            select:
+                when present_app.should_close :: :: method => return 389
+                else => ()
+            present_app.set_size :: 72, 80 :: method
+            let _ = present_app.poll_event_batch :: :: method
+            let resized_size = present_app.size :: :: method
+            select:
+                when resized_size.width != 72 => return 390
+                when resized_size.height != 80 => return 391
+                else => ()
+            let resized_frame_size = present_app.frame_size :: :: method
+            select present_app.window_snapshot :: :: method:
+                when Result.Ok(resized_snapshot) =>
+                    select:
+                        when resized_snapshot.size.width != resized_size.width => return 392
+                        when resized_snapshot.size.height != resized_size.height => return 393
+                        when resized_snapshot.frame_size.left != resized_frame_size.left => return 394
+                        when resized_snapshot.frame_size.top != resized_frame_size.top => return 395
+                        when resized_snapshot.frame_size.right != resized_frame_size.right => return 396
+                        when resized_snapshot.frame_size.bottom != resized_frame_size.bottom => return 397
+                        else => ()
+                when Result.Err(_) => return 398
+            let _ = present_app.take_pending_events :: :: method
+            select:
+                when present_app.close_requested :: :: method => return 173
+                when present_app.has_close_requested_windows :: :: method => return 174
+                when present_app.close_requested_window_count :: :: method != 0 => return 175
+                when present_app.window_close_requested :: window_id :: method => return 188
+                else => ()
+            select present_app.close_requested_window :: window_id :: method:
+                when Option.Some(_) => return 189
+                when Option.None => ()
+            select present_app.close_requested_window_snapshot :: window_id :: method:
+                when Option.Some(_) => return 190
+                when Option.None => ()
+            present_app.close :: :: method
+            let closing_event_ids = present_app.wait_timeout_close_requested_window_ids :: 0.0 :: method
+            select:
+                when closing_event_ids.count :: :: method != 1 => return 176
+                when closing_event_ids.remove :: 0 :: method != window_id => return 177
+                else => ()
+            select:
+                when !present_app.close_requested :: :: method => return 178
+                when !present_app.should_close :: :: method => return 399
+                when !present_app.has_close_requested_windows :: :: method => return 179
+                when present_app.close_requested_window_count :: :: method != 1 => return 180
+                when !present_app.window_close_requested :: window_id :: method => return 191
+                else => ()
+            let close_requested_ids = present_app.close_requested_window_ids :: :: method
+            select:
+                when close_requested_ids.count :: :: method != 1 => return 181
+                when close_requested_ids.remove :: 0 :: method != window_id => return 182
+                else => ()
+            select present_app.close_requested_window :: window_id :: method:
+                when Option.Some(closing_window) =>
+                    select:
+                        when closing_window.id != window_id => return 192
+                        else => ()
+                when Option.None => return 193
+            select present_app.close_requested_window_snapshot :: window_id :: method:
+                when Option.Some(closing_snapshot_lookup) =>
+                    select:
+                        when closing_snapshot_lookup.window.id != window_id => return 194
+                        when !closing_snapshot_lookup.should_close => return 195
+                        else => ()
+                when Option.None => return 196
+            let closing_windows = present_app.close_requested_windows :: :: method
+            select:
+                when closing_windows.count :: :: method != 1 => return 183
+                when closing_windows.remove :: 0 :: method.id != window_id => return 184
+                else => ()
+            let closing_snapshots = present_app.close_requested_window_snapshots :: :: method
+            select:
+                when closing_snapshots.count :: :: method != 1 => return 185
+                else => ()
+            let closing_snapshot = closing_snapshots.remove :: 0 :: method
+            select:
+                when closing_snapshot.window.id != window_id => return 186
+                when !closing_snapshot.should_close => return 187
+                else => ()
+            select present_app.destroy :: :: method:
+                when Result.Ok(_) => return 0
+                when Result.Err(_) => return 6
+        when Result.Err(err) =>
+            select err:
+                when VulkanPresentAppError.AppInit(app_err) =>
+                    select app_err:
+                        when AppError.InitFailed => return 1
+                        when AppError.InvalidWindowSpec => return 2
+                        when AppError.VideoModeNotFound => return 3
+                        when AppError.MailboxAllocFailed => return 4
+                        when AppError.WindowCreateFailed => return 5
+                        when AppError.WindowNotFound => return 6
+                        when AppError.TextDecode(_) => return 7
+                        when AppError.NoCurrentContext => return 10
+                        when AppError.CurrentContextWindowNotTracked => return 11
+                        when AppError.MonitorNotFound => return 12
+                        when AppError.PrimaryMonitorUnavailable => return 13
+                when VulkanPresentAppError.WindowCreate(_) => return 8
+                when VulkanPresentAppError.PresentBootstrap(_) => return 9

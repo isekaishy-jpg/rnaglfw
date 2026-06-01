@@ -1,0 +1,235 @@
+use std.{Option, Result}
+
+use present.{VK_COMMAND_BUFFER_LEVEL_PRIMARY, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, VK_STRUCTURE_TYPE_SUBMIT_INFO, VK_SUCCESS, VkCommandBuffer, VkCommandBufferAllocateInfo, VkCommandBufferBeginInfo, VkCommandPool, VkCommandPoolCreateInfo, VkSemaphore, VkSemaphoreCreateInfo, VkSubmitInfo, VulkanCommandResources, VulkanPresentApp, VulkanPresentContext, VulkanPresentError, VulkanSemaphoreResource}
+
+impl VulkanCommandResources:
+    fn command_pool_handle(read self) -> VkCommandPool:
+        return self.command_pool
+
+    fn command_buffer_handle(read self) -> VkCommandBuffer:
+        return self.command_buffer
+
+    fn valid(read self) -> Bool:
+        return self.command_pool != 0U64 && !self.command_buffer.is_null :: :: method
+
+impl VulkanSemaphoreResource:
+    fn semaphore_handle(read self) -> VkSemaphore:
+        return self.semaphore
+
+    fn valid(read self) -> Bool:
+        return self.semaphore != 0U64
+
+impl VulkanPresentContext:
+    fn command_resources(read self) -> Result[VulkanCommandResources, VulkanPresentError]:
+        let command_pool: VkCommandPool = 0U64
+        let command_buffer: VkCommandBuffer = null
+        let command_pool_info = VkCommandPoolCreateInfo :: :: call
+            stype = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO
+            pnext = null
+            flags = 0
+            queuefamily_index = self.queuefamily
+        let command_pool_ptr: *edit VkCommandPool = #unsafe &raw edit command_pool
+        let command_pool_info_ptr: *read VkCommandPoolCreateInfo = #unsafe &raw read command_pool_info
+        let command_pool_result = #unsafe self.create_command_pool :: self.device, command_pool_info_ptr, null, command_pool_ptr :: call
+        select:
+            when command_pool_result != VK_SUCCESS =>
+                let error = VulkanPresentError.CommandPoolCreateFailed :: command_pool_result :: call
+                return Result.Err :: error :: call
+            when command_pool == 0U64 =>
+                let error = VulkanPresentError.CommandPoolCreateFailed :: command_pool_result :: call
+                return Result.Err :: error :: call
+            else => ()
+        let command_buffer_info = VkCommandBufferAllocateInfo :: :: call
+            stype = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO
+            pnext = null
+            command_pool = command_pool
+            level = VK_COMMAND_BUFFER_LEVEL_PRIMARY
+            command_buffer_count = 1
+        let command_buffer_ptr: *edit VkCommandBuffer = #unsafe &raw edit command_buffer
+        let command_buffer_info_ptr: *read VkCommandBufferAllocateInfo = #unsafe &raw read command_buffer_info
+        let command_buffer_result = #unsafe self.allocate_command_buffers :: self.device, command_buffer_info_ptr, command_buffer_ptr :: call
+        select:
+            when command_buffer_result != VK_SUCCESS =>
+                #unsafe self.destroy_command_pool :: self.device, command_pool, null :: call
+                let error = VulkanPresentError.CommandBufferAllocateFailed :: command_buffer_result :: call
+                return Result.Err :: error :: call
+            when command_buffer.is_null :: :: method =>
+                #unsafe self.destroy_command_pool :: self.device, command_pool, null :: call
+                let error = VulkanPresentError.CommandBufferAllocateFailed :: command_buffer_result :: call
+                return Result.Err :: error :: call
+            else => ()
+        let resources = VulkanCommandResources :: :: call
+            command_pool = command_pool
+            command_buffer = command_buffer
+        return Result.Ok :: resources :: call
+
+    fn destroy_command_resources(read self, take resources: VulkanCommandResources) -> Unit:
+        select:
+            when resources.command_pool != 0U64 => #unsafe self.destroy_command_pool :: self.device, resources.command_pool, null :: call
+            else => ()
+        return
+
+    fn begin_command_resources(read self, read resources: VulkanCommandResources) -> Result[Unit, VulkanPresentError]:
+        let begin_info = VkCommandBufferBeginInfo :: :: call
+            stype = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
+            pnext = null
+            flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+            inheritance_info = null
+        let begin_info_ptr: *read VkCommandBufferBeginInfo = #unsafe &raw read begin_info
+        let begin_result = #unsafe self.begin_command_buffer :: resources.command_buffer, begin_info_ptr :: call
+        select:
+            when begin_result != VK_SUCCESS =>
+                let error = VulkanPresentError.CommandBufferBeginFailed :: begin_result :: call
+                return Result.Err :: error :: call
+            else => return Result.Ok :: :: call
+
+    fn end_command_resources(read self, read resources: VulkanCommandResources) -> Result[Unit, VulkanPresentError]:
+        let end_result = #unsafe self.end_command_buffer :: resources.command_buffer :: call
+        select:
+            when end_result != VK_SUCCESS =>
+                let error = VulkanPresentError.CommandBufferEndFailed :: end_result :: call
+                return Result.Err :: error :: call
+            else => return Result.Ok :: :: call
+
+    fn semaphore_resource(read self) -> Result[VulkanSemaphoreResource, VulkanPresentError]:
+        let semaphore: VkSemaphore = 0U64
+        let semaphore_info = VkSemaphoreCreateInfo :: :: call
+            stype = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
+            pnext = null
+            flags = 0
+        let semaphore_ptr: *edit VkSemaphore = #unsafe &raw edit semaphore
+        let semaphore_info_ptr: *read VkSemaphoreCreateInfo = #unsafe &raw read semaphore_info
+        let semaphore_result = #unsafe self.create_semaphore :: self.device, semaphore_info_ptr, null, semaphore_ptr :: call
+        select:
+            when semaphore_result != VK_SUCCESS =>
+                let error = VulkanPresentError.SemaphoreCreateFailed :: semaphore_result :: call
+                return Result.Err :: error :: call
+            when semaphore == 0U64 =>
+                let error = VulkanPresentError.SemaphoreCreateFailed :: semaphore_result :: call
+                return Result.Err :: error :: call
+            else => ()
+        let resource = VulkanSemaphoreResource :: :: call
+            semaphore = semaphore
+        return Result.Ok :: resource :: call
+
+    fn destroy_semaphore_resource(read self, take semaphore: VulkanSemaphoreResource) -> Unit:
+        select:
+            when semaphore.semaphore != 0U64 => #unsafe self.destroy_semaphore :: self.device, semaphore.semaphore, null :: call
+            else => ()
+        return
+
+    fn submit_command_resources(read self, read resources: VulkanCommandResources) -> Result[Unit, VulkanPresentError]:
+        let command_buffers: [VkCommandBuffer; 1] = [resources.command_buffer]
+        let command_buffer_ptr: *read VkCommandBuffer = #unsafe &raw read command_buffers[0]
+        let submit_info = VkSubmitInfo :: :: call
+            stype = VK_STRUCTURE_TYPE_SUBMIT_INFO
+            pnext = null
+            wait_semaphore_count = 0
+            wait_semaphores = null
+            wait_dst_stage_mask = null
+            command_buffer_count = 1
+            command_buffers = command_buffer_ptr
+            signal_semaphore_count = 0
+            signal_semaphores = null
+        let submit_info_ptr: *read VkSubmitInfo = #unsafe &raw read submit_info
+        let submit_result = #unsafe self.queue_submit :: self.queue, 1, submit_info_ptr, 0U64 :: call
+        select:
+            when submit_result != VK_SUCCESS =>
+                let error = VulkanPresentError.SubmitFailed :: submit_result :: call
+                return Result.Err :: error :: call
+            else => ()
+        let wait_result = #unsafe self.queue_wait_idle :: self.queue :: call
+        select:
+            when wait_result != VK_SUCCESS =>
+                let error = VulkanPresentError.QueueWaitIdleFailed :: wait_result :: call
+                return Result.Err :: error :: call
+            else => return Result.Ok :: :: call
+
+    fn submit_command_resources_async(read self, read resources: VulkanCommandResources, read wait: Option[VulkanSemaphoreResource], wait_stage_mask: CUInt, read signal: Option[VulkanSemaphoreResource]) -> Result[Unit, VulkanPresentError]:
+        let wait_count: CUInt = 0
+        let wait_semaphores: [VkSemaphore; 1] = [0U64]
+        let wait_stage_masks: [CUInt; 1] = [wait_stage_mask]
+        let wait_semaphore_ptr: *read VkSemaphore = null
+        let wait_stage_mask_ptr: *read CUInt = null
+        select wait:
+            when Option.Some(resource) =>
+                wait_count = 1
+                wait_semaphores[0] = resource.semaphore
+                wait_semaphore_ptr = #unsafe &raw read wait_semaphores[0]
+                wait_stage_mask_ptr = #unsafe &raw read wait_stage_masks[0]
+            when Option.None => ()
+        let signal_count: CUInt = 0
+        let signal_semaphores: [VkSemaphore; 1] = [0U64]
+        let signal_semaphore_ptr: *read VkSemaphore = null
+        select signal:
+            when Option.Some(resource) =>
+                signal_count = 1
+                signal_semaphores[0] = resource.semaphore
+                signal_semaphore_ptr = #unsafe &raw read signal_semaphores[0]
+            when Option.None => ()
+        let command_buffers: [VkCommandBuffer; 1] = [resources.command_buffer]
+        let command_buffer_ptr: *read VkCommandBuffer = #unsafe &raw read command_buffers[0]
+        let submit_info = VkSubmitInfo :: :: call
+            stype = VK_STRUCTURE_TYPE_SUBMIT_INFO
+            pnext = null
+            wait_semaphore_count = wait_count
+            wait_semaphores = wait_semaphore_ptr
+            wait_dst_stage_mask = wait_stage_mask_ptr
+            command_buffer_count = 1
+            command_buffers = command_buffer_ptr
+            signal_semaphore_count = signal_count
+            signal_semaphores = signal_semaphore_ptr
+        let submit_info_ptr: *read VkSubmitInfo = #unsafe &raw read submit_info
+        let submit_result = #unsafe self.queue_submit :: self.queue, 1, submit_info_ptr, 0U64 :: call
+        select:
+            when submit_result != VK_SUCCESS =>
+                let error = VulkanPresentError.SubmitFailed :: submit_result :: call
+                return Result.Err :: error :: call
+            else => return Result.Ok :: :: call
+
+    fn wait_queue_idle(read self) -> Result[Unit, VulkanPresentError]:
+        let wait_result = #unsafe self.queue_wait_idle :: self.queue :: call
+        select:
+            when wait_result != VK_SUCCESS =>
+                let error = VulkanPresentError.QueueWaitIdleFailed :: wait_result :: call
+                return Result.Err :: error :: call
+            else => return Result.Ok :: :: call
+
+    fn wait_device_idle(read self) -> Result[Unit, VulkanPresentError]:
+        let wait_result = #unsafe self.device_wait_idle :: self.device :: call
+        select:
+            when wait_result != VK_SUCCESS =>
+                let error = VulkanPresentError.DeviceWaitIdleFailed :: wait_result :: call
+                return Result.Err :: error :: call
+            else => return Result.Ok :: :: call
+
+impl VulkanPresentApp:
+    fn command_resources(read self) -> Result[VulkanCommandResources, VulkanPresentError]:
+        return self.context.command_resources :: :: method
+
+    fn destroy_command_resources(read self, take resources: VulkanCommandResources) -> Unit:
+        return self.context.destroy_command_resources :: resources :: method
+
+    fn begin_command_resources(read self, read resources: VulkanCommandResources) -> Result[Unit, VulkanPresentError]:
+        return self.context.begin_command_resources :: resources :: method
+
+    fn end_command_resources(read self, read resources: VulkanCommandResources) -> Result[Unit, VulkanPresentError]:
+        return self.context.end_command_resources :: resources :: method
+
+    fn semaphore_resource(read self) -> Result[VulkanSemaphoreResource, VulkanPresentError]:
+        return self.context.semaphore_resource :: :: method
+
+    fn destroy_semaphore_resource(read self, take semaphore: VulkanSemaphoreResource) -> Unit:
+        return self.context.destroy_semaphore_resource :: semaphore :: method
+
+    fn submit_command_resources(read self, read resources: VulkanCommandResources) -> Result[Unit, VulkanPresentError]:
+        return self.context.submit_command_resources :: resources :: method
+
+    fn submit_command_resources_async(read self, read resources: VulkanCommandResources, read wait: Option[VulkanSemaphoreResource], wait_stage_mask: CUInt, read signal: Option[VulkanSemaphoreResource]) -> Result[Unit, VulkanPresentError]:
+        return self.context.submit_command_resources_async :: resources, wait, wait_stage_mask, signal :: method
+
+    fn wait_queue_idle(read self) -> Result[Unit, VulkanPresentError]:
+        return self.context.wait_queue_idle :: :: method
+
+    fn wait_device_idle(read self) -> Result[Unit, VulkanPresentError]:
+        return self.context.wait_device_idle :: :: method

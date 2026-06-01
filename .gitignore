@@ -1,0 +1,12 @@
+/target/
+**/target/
+/.codex-tmp-*
+*.log
+*.tmp
+*.out
+.DS_Store
+Thumbs.db
+.vs/
+**/vendor/linking/
+**/vendor/*/.git/
+**/vendor/*/build/

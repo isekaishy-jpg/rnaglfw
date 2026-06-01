@@ -1,0 +1,263 @@
+use std.{List, Option, Result, Str}
+use bridge.{TextDecodeError, copy_c_string, maybe_c_string}
+use event.JoystickId
+use glfw.{GlfwGamepadState, glfw_gamepad_name, glfw_gamepad_state}
+use glfw.{glfw_joystick_axes, glfw_joystick_buttons, glfw_joystick_guid}
+use glfw.{glfw_joystick_hats, glfw_joystick_is_gamepad, glfw_joystick_name}
+use glfw.{glfw_joystick_present, glfw_update_gamepad_mappings}
+
+pub enum GamepadButton:
+    A
+    B
+    X
+    Y
+    LeftBumper
+    RightBumper
+    Back
+    Start
+    Guide
+    LeftThumb
+    RightThumb
+    DPadUp
+    DPadRight
+    DPadDown
+    DPadLeft
+
+pub enum GamepadAxis:
+    LeftX
+    LeftY
+    RightX
+    RightY
+    LeftTrigger
+    RightTrigger
+
+pub struct HatState:
+    up_down: Bool
+    right_down: Bool
+    down_down: Bool
+    left_down: Bool
+
+pub struct GamepadState:
+    pub(package) raw: GlfwGamepadState
+
+pub struct Joystick:
+    pub id: JoystickId
+
+fn gamepad_button_value(button: GamepadButton) -> CInt:
+    select button:
+        when GamepadButton.A => return 0
+        when GamepadButton.B => return 1
+        when GamepadButton.X => return 2
+        when GamepadButton.Y => return 3
+        when GamepadButton.LeftBumper => return 4
+        when GamepadButton.RightBumper => return 5
+        when GamepadButton.Back => return 6
+        when GamepadButton.Start => return 7
+        when GamepadButton.Guide => return 8
+        when GamepadButton.LeftThumb => return 9
+        when GamepadButton.RightThumb => return 10
+        when GamepadButton.DPadUp => return 11
+        when GamepadButton.DPadRight => return 12
+        when GamepadButton.DPadDown => return 13
+        when GamepadButton.DPadLeft => return 14
+    return 0
+
+fn gamepad_axis_value(axis: GamepadAxis) -> CInt:
+    select axis:
+        when GamepadAxis.LeftX => return 0
+        when GamepadAxis.LeftY => return 1
+        when GamepadAxis.RightX => return 2
+        when GamepadAxis.RightY => return 3
+        when GamepadAxis.LeftTrigger => return 4
+        when GamepadAxis.RightTrigger => return 5
+    return 0
+
+pub fn hat_state_from_raw(raw: CUnsignedChar) -> HatState:
+    let up_down = (raw & 1) != 0
+    let right_down = (raw & 2) != 0
+    let down_down = (raw & 4) != 0
+    let left_down = (raw & 8) != 0
+    return HatState :: :: call
+        up_down = up_down
+        right_down = right_down
+        down_down = down_down
+        left_down = left_down
+
+pub fn hat_state_raw(read state: HatState) -> CInt:
+    let raw: CInt = 0
+    select:
+        when state.up :: :: method => raw = raw | 1
+        else => ()
+    select:
+        when state.right :: :: method => raw = raw | 2
+        else => ()
+    select:
+        when state.down :: :: method => raw = raw | 4
+        else => ()
+    select:
+        when state.left :: :: method => raw = raw | 8
+        else => ()
+    return raw
+
+pub fn joystick_from_id(id: JoystickId) -> Joystick:
+    return Joystick :: id :: call
+
+pub fn update_gamepad_mappings(mappings: Str) -> Result[Bool, TextDecodeError]:
+    select maybe_c_string :: mappings :: call:
+        when Result.Ok(text) =>
+            let chars_ptr = text.as_ptr :: :: method
+            let updated = glfw_update_gamepad_mappings :: chars_ptr :: call
+            return Result.Ok :: updated :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+impl HatState:
+    fn centered(read self) -> Bool:
+        return !self.up_down && !self.right_down && !self.down_down && !self.left_down
+
+    fn up(read self) -> Bool:
+        return self.up_down
+
+    fn right(read self) -> Bool:
+        return self.right_down
+
+    fn down(read self) -> Bool:
+        return self.down_down
+
+    fn left(read self) -> Bool:
+        return self.left_down
+
+    fn any(read self) -> Bool:
+        return self.up_down || self.right_down || self.down_down || self.left_down
+
+impl GamepadState:
+    fn button_down(read self, button: GamepadButton) -> Bool:
+        let raw_button = gamepad_button_value :: button :: call
+        select self.raw.button :: raw_button :: method:
+            when Option.Some(value) => return value != 0
+            when Option.None => return false
+
+    fn button_up(read self, button: GamepadButton) -> Bool:
+        return !self.button_down :: button :: method
+
+    fn axis(read self, axis: GamepadAxis) -> F32:
+        let raw_axis = gamepad_axis_value :: axis :: call
+        select self.raw.axis :: raw_axis :: method:
+            when Option.Some(value) => return value
+            when Option.None => return 0.0F32
+
+    fn left_stick_x(read self) -> F32:
+        return self.axis :: GamepadAxis.LeftX :: method
+
+    fn left_stick_y(read self) -> F32:
+        return self.axis :: GamepadAxis.LeftY :: method
+
+    fn right_stick_x(read self) -> F32:
+        return self.axis :: GamepadAxis.RightX :: method
+
+    fn right_stick_y(read self) -> F32:
+        return self.axis :: GamepadAxis.RightY :: method
+
+    fn left_trigger(read self) -> F32:
+        return self.axis :: GamepadAxis.LeftTrigger :: method
+
+    fn right_trigger(read self) -> F32:
+        return self.axis :: GamepadAxis.RightTrigger :: method
+
+impl Joystick:
+    fn available(read self) -> Bool:
+        return glfw_joystick_present :: self.id :: call
+
+    fn present(read self) -> Bool:
+        return self.available :: :: method
+
+    fn gamepad(read self) -> Bool:
+        return glfw_joystick_is_gamepad :: self.id :: call
+
+    fn name_text(read self) -> Result[Str, TextDecodeError]:
+        let raw_name = glfw_joystick_name :: self.id :: call
+        return copy_c_string :: raw_name :: call
+
+    fn guid_text(read self) -> Result[Str, TextDecodeError]:
+        let raw_guid = glfw_joystick_guid :: self.id :: call
+        return copy_c_string :: raw_guid :: call
+
+    fn gamepad_name_text(read self) -> Result[Str, TextDecodeError]:
+        let raw_name = glfw_gamepad_name :: self.id :: call
+        return copy_c_string :: raw_name :: call
+
+    fn axis_count(read self) -> CInt:
+        let axes = glfw_joystick_axes :: self.id :: call
+        return axes.count :: :: method
+
+    fn axis_at(read self, index: CInt) -> Option[F32]:
+        let axes = glfw_joystick_axes :: self.id :: call
+        return axes.at :: index :: method
+
+    fn axes(read self) -> List[F32]:
+        let values = List[F32] :: :: call
+        let axes = glfw_joystick_axes :: self.id :: call
+        let count = axes.count :: :: method
+        let scan: CInt = 0
+        repeat while scan < count:
+            select axes.at :: scan :: method:
+                when Option.Some(value) => values.push :: value :: method
+                when Option.None => ()
+            scan = scan + 1
+        return values
+
+    fn button_count(read self) -> CInt:
+        let buttons = glfw_joystick_buttons :: self.id :: call
+        return buttons.count :: :: method
+
+    fn button_at(read self, index: CInt) -> Option[Bool]:
+        let buttons = glfw_joystick_buttons :: self.id :: call
+        select buttons.at :: index :: method:
+            when Option.Some(value) =>
+                let down = value != 0
+                return Option.Some :: down :: call
+            when Option.None => return Option.None
+
+    fn buttons(read self) -> List[Bool]:
+        let values = List[Bool] :: :: call
+        let buttons = glfw_joystick_buttons :: self.id :: call
+        let count = buttons.count :: :: method
+        let scan: CInt = 0
+        repeat while scan < count:
+            select buttons.at :: scan :: method:
+                when Option.Some(value) => values.push :: (value != 0) :: method
+                when Option.None => ()
+            scan = scan + 1
+        return values
+
+    fn hat_count(read self) -> CInt:
+        let hats = glfw_joystick_hats :: self.id :: call
+        return hats.count :: :: method
+
+    fn hat_at(read self, index: CInt) -> Option[HatState]:
+        let hats = glfw_joystick_hats :: self.id :: call
+        select hats.at :: index :: method:
+            when Option.Some(value) =>
+                let state = hat_state_from_raw :: value :: call
+                return Option.Some :: state :: call
+            when Option.None => return Option.None
+
+    fn hats(read self) -> List[HatState]:
+        let values = List[HatState] :: :: call
+        let hats = glfw_joystick_hats :: self.id :: call
+        let count = hats.count :: :: method
+        let scan: CInt = 0
+        repeat while scan < count:
+            select hats.at :: scan :: method:
+                when Option.Some(value) =>
+                    let state = hat_state_from_raw :: value :: call
+                    values.push :: state :: method
+                when Option.None => ()
+            scan = scan + 1
+        return values
+
+    fn gamepad_state(read self) -> Option[GamepadState]:
+        select glfw_gamepad_state :: self.id :: call:
+            when Option.Some(raw) =>
+                let state = GamepadState :: raw :: call
+                return Option.Some :: state :: call
+            when Option.None => return Option.None

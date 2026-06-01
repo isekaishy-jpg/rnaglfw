@@ -1,0 +1,147 @@
+use std.Option
+
+use runa_app_vulkan.{VulkanPresentApp, VulkanPresentSnapshot}
+
+fn single_memory_type_bits(index: CUInt) -> Option[CUInt]:
+    select:
+        when index >= 32 => return Option.None
+        else => ()
+    let bits: CUInt = 1
+    let scan: CUInt = 0
+    repeat while scan < index:
+        bits = bits + bits
+        scan = scan + 1
+    return Option.Some :: bits :: call
+
+fn first_device_local_memory_type_index(read present_app: VulkanPresentApp) -> Option[CUInt]:
+    let count = present_app.memory_type_count :: :: method
+    let scan: CUInt = 0
+    repeat while scan < count:
+        select present_app.memory_type :: scan :: method:
+            when Option.Some(memory_type) =>
+                select:
+                    when memory_type.device_local :: :: method => return Option.Some :: scan :: call
+                    else => ()
+            when Option.None => return Option.None
+        scan = scan + 1
+    return Option.None
+
+pub fn check_vulkan_memory_helpers(read present_app: VulkanPresentApp, read present_snapshot: VulkanPresentSnapshot) -> I32:
+    let app_memory_type_count = present_app.memory_type_count :: :: method
+    let app_memory_heap_count = present_app.memory_heap_count :: :: method
+    let snapshot_memory_type_count = present_snapshot.memory_type_count :: :: method
+    let snapshot_memory_heap_count = present_snapshot.memory_heap_count :: :: method
+    select:
+        when app_memory_type_count != snapshot_memory_type_count => return 1
+        when app_memory_heap_count != snapshot_memory_heap_count => return 2
+        when present_app.host_visible_memory_type_count :: :: method == 0 => return 3
+        when present_app.host_coherent_memory_type_count :: :: method == 0 => return 4
+        when present_app.staging_memory_type_count :: :: method == 0 => return 5
+        when !present_app.has_staging_memory_type :: :: method => return 6
+        when present_snapshot.staging_memory_type_count :: :: method != present_app.staging_memory_type_count :: :: method => return 7
+        when present_snapshot.device_local_memory_type_count :: :: method > snapshot_memory_type_count => return 8
+        when present_snapshot.device_local_memory_heap_count :: :: method > snapshot_memory_heap_count => return 9
+        when present_snapshot.has_staging_memory_type :: :: method != present_app.has_staging_memory_type :: :: method => return 10
+        else => ()
+    select present_app.first_staging_memory_type_index :: :: method:
+        when Option.Some(staging_index) =>
+            select present_snapshot.first_staging_memory_type_index :: :: method:
+                when Option.Some(snapshot_staging_index) =>
+                    select:
+                        when snapshot_staging_index != staging_index => return 11
+                        else => ()
+                when Option.None => return 11
+            select present_app.memory_type :: staging_index :: method:
+                when Option.Some(memory_type) =>
+                    select:
+                        when !memory_type.host_visible :: :: method => return 12
+                        when !memory_type.host_coherent :: :: method => return 13
+                        when !memory_type.staging_compatible :: :: method => return 14
+                        else => ()
+                    select present_snapshot.memory_type :: staging_index :: method:
+                        when Option.Some(snapshot_memory_type) =>
+                            select:
+                                when snapshot_memory_type.property_flags != memory_type.property_flags => return 15
+                                when snapshot_memory_type.heap_index != memory_type.heap_index => return 16
+                                else => ()
+                        when Option.None => return 17
+                    select single_memory_type_bits :: staging_index :: call:
+                        when Option.Some(staging_bits) =>
+                            select:
+                                when !present_app.memory_type_supported :: staging_index, staging_bits :: method => return 18
+                                when !present_snapshot.memory_type_supported :: staging_index, staging_bits :: method => return 19
+                                else => ()
+                            let app_staging_matches = present_app.compatible_memory_type_indices :: staging_bits :: method
+                            let snapshot_staging_matches = present_snapshot.compatible_memory_type_indices :: staging_bits :: method
+                            select:
+                                when app_staging_matches.count :: :: method != 1 => return 20
+                                when snapshot_staging_matches.count :: :: method != 1 => return 21
+                                when app_staging_matches[0] != staging_index => return 22
+                                when snapshot_staging_matches[0] != staging_index => return 23
+                                else => ()
+                            select present_app.host_visible_memory_type_index :: staging_bits :: method:
+                                when Option.Some(host_visible_index) =>
+                                    select:
+                                        when host_visible_index != staging_index => return 24
+                                        else => ()
+                                when Option.None => return 25
+                            select present_app.host_coherent_memory_type_index :: staging_bits :: method:
+                                when Option.Some(host_coherent_index) =>
+                                    select:
+                                        when host_coherent_index != staging_index => return 26
+                                        else => ()
+                                when Option.None => return 27
+                            select present_app.staging_memory_type_index :: staging_bits :: method:
+                                when Option.Some(selected_index) =>
+                                    select:
+                                        when selected_index != staging_index => return 28
+                                        else => ()
+                                when Option.None => return 29
+                            select present_snapshot.staging_memory_type_index :: staging_bits :: method:
+                                when Option.Some(selected_index) =>
+                                    select:
+                                        when selected_index != staging_index => return 30
+                                        else => ()
+                                when Option.None => return 31
+                        when Option.None => return 32
+                when Option.None => return 33
+        when Option.None => return 34
+    select:
+        when app_memory_heap_count == 0 => return 35
+        else => ()
+    select present_app.memory_heap :: 0 :: method:
+        when Option.Some(memory_heap) =>
+            select present_snapshot.memory_heap :: 0 :: method:
+                when Option.Some(snapshot_memory_heap) =>
+                    select:
+                        when snapshot_memory_heap.size != memory_heap.size => return 36
+                        when snapshot_memory_heap.flags != memory_heap.flags => return 37
+                        else => ()
+                when Option.None => return 38
+        when Option.None => return 39
+    select:
+        when present_app.device_local_memory_type_count :: :: method == 0 => ()
+        else =>
+            select first_device_local_memory_type_index :: present_app :: call:
+                when Option.Some(device_local_index) =>
+                    select single_memory_type_bits :: device_local_index :: call:
+                        when Option.Some(device_local_bits) =>
+                            select:
+                                when !present_app.memory_type_supported :: device_local_index, device_local_bits :: method => return 40
+                                when !present_snapshot.memory_type_supported :: device_local_index, device_local_bits :: method => return 41
+                                else => ()
+                            select present_app.device_local_memory_type_index :: device_local_bits :: method:
+                                when Option.Some(selected_index) =>
+                                    select:
+                                        when selected_index != device_local_index => return 42
+                                        else => ()
+                                when Option.None => return 43
+                            select present_snapshot.device_local_memory_type_index :: device_local_bits :: method:
+                                when Option.Some(selected_index) =>
+                                    select:
+                                        when selected_index != device_local_index => return 44
+                                        else => ()
+                                when Option.None => return 45
+                        when Option.None => return 46
+                when Option.None => return 47
+    return 0

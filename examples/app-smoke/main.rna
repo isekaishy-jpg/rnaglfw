@@ -1,0 +1,2793 @@
+use std.{List, Option, Result, Str}
+use runa_app.{AnglePlatformType, AnglePlatformTypeOverride, AppEvent}
+use runa_app.{AppClipboardError, AppEventKind, BoolOverride, ClientApi}
+use runa_app.ContextCreationApi
+use runa_app.{CursorMode, PlatformOverride, WaylandLibdecorMode}
+use runa_app.WaylandLibdecorOverride
+use runa_app.GamepadButton
+use runa_app.{InputAction, KeyCode, MouseButton, OpenGlProfile}
+use runa_app.{JoystickEvent, JoystickEventKind, MonitorEvent, MonitorEventKind}
+use runa_app.{UserEvent, UserEventKind, WindowEvent, WindowEventKind}
+use runa_app.{angle_platform_type_from_raw, angle_platform_type_raw}
+use runa_app.app_init_config
+use runa_app.{app_event_batch_from_events, app_init_config_with_joystick_hat_buttons}
+use runa_app.{app_create_window, app_init_with, win32_app_init_config}
+use runa_app.{cursor_mode_from_raw, cursor_mode_raw}
+use runa_app.fullscreen_window_spec_with_video_mode
+use runa_app.{gl_proc_address, key_name_from_key}
+use runa_app.monitor_gamma_ramp
+use runa_app.modifiers_from_raw
+use runa_app.{Platform, opengl_compat_debug_srgb_window_spec, opengl_compat_window_spec}
+use runa_app.{egl_opengl_es_window_spec, egl_opengl_window_spec}
+use runa_app.{opengl_core_debug_srgb_window_spec, opengl_debug_srgb_window_spec}
+use runa_app.{opengl_debug_window_spec, opengl_es_window_spec, opengl_srgb_window_spec}
+use runa_app.{opengl_window_spec, osmesa_opengl_window_spec}
+use runa_app.{floating_window_spec, maximized_window_spec, mouse_passthrough_window_spec}
+use runa_app.{cocoa_frame_named_window_spec, wayland_app_id_window_spec}
+use runa_app.{positioned_window_spec, unfocused_window_spec}
+use runa_app.{runtime_platform_raw, runtime_platform_supported}
+use runa_app.{RgbaImage, rgba_color, solid_rgba_image}
+use runa_app.size
+use runa_app.{Size, window_aspect_ratio, window_aspect_ratio_from_size}
+use runa_app.GlfwVkInstance
+use runa_app.vulkan_window_spec
+use runa_app.{window_max_size_limits, window_min_size_limits, window_no_size_limits}
+use runa_app.window_size_limits
+use runa_app.{vulkan_instance_proc_address, vulkan_required_instance_extensions}
+use runa_app.vulkan_supported
+use runa_app.window_spec
+use runa_app.{window_spec_single_buffered, window_spec_with_color_bits}
+use runa_app.{window_spec_with_cocoa_frame_name, window_spec_with_wayland_app_id}
+use runa_app.{window_spec_with_client_api, window_spec_with_context_creation_api}
+use runa_app.{window_spec_with_context_no_error, window_spec_with_depth_stencil_bits}
+use runa_app.{window_spec_floating, window_spec_maximized, window_spec_unfocused}
+use runa_app.{window_spec_with_multisampling, window_spec_with_opengl_forward_compat}
+use runa_app.{window_spec_with_default_position, window_spec_with_mouse_passthrough}
+use runa_app.window_spec_with_opengl_profile
+use runa_app.window_spec_with_vulkan
+use runa_app.{window_spec_with_default_refresh_rate, window_spec_with_refresh_rate}
+use runa_app.{window_spec_with_position, window_spec_without_auto_iconify}
+use runa_app.{window_spec_with_opengl_debug_context, window_spec_with_shared_context}
+use runa_app.{window_spec_with_srgb, window_spec_without_center_cursor}
+use runa_app.{window_spec_windowed, window_spec_without_cocoa_frame_name}
+use runa_app.{window_spec_without_focus_on_show, window_spec_without_scale_to_monitor}
+use runa_app.window_spec_without_shared_context
+use runa_app.{window_spec_with_win32_keyboard_menu, window_spec_with_win32_showdefault}
+use runa_app.{win32_keyboard_menu_window_spec, win32_showdefault_window_spec}
+use runa_app.{x11_class_named_window_spec, x11_instance_named_window_spec}
+use runa_app.{window_spec_without_wayland_app_id, window_spec_without_x11_class_name}
+use runa_app.window_spec_without_x11_instance_name
+use runa_app.{window_spec_with_x11_class_name, window_spec_with_x11_instance_name}
+use runa_app.{wayland_libdecor_mode_from_raw, wayland_libdecor_mode_raw}
+
+fn main() -> I32:
+    let helper_config = win32_app_init_config :: :: call
+    select helper_config.platform:
+        when PlatformOverride.Selected(Platform.Win32) => ()
+        when _ => return 2
+    let helper_config = app_init_config_with_joystick_hat_buttons :: helper_config, true :: call
+    select helper_config.joystick_hat_buttons:
+        when BoolOverride.Enabled => ()
+        when _ => return 3
+    let config = app_init_config :: :: call
+    let config = config.on_platform :: Platform.Win32 :: method
+    let config = config.with_joystick_hat_buttons :: true :: method
+    let config = config.with_angle_platform_type :: AnglePlatformType.D3D11 :: method
+    let config = config.with_cocoa_chdir_resources :: false :: method
+    let config = config.with_cocoa_menubar :: false :: method
+    let config = config.with_x11_xcb_vulkan_surface :: true :: method
+    let config = config.with_wayland_libdecor :: WaylandLibdecorMode.Prefer :: method
+    select config.platform:
+        when PlatformOverride.Selected(Platform.Win32) => ()
+        when _ => return 5
+    select config.joystick_hat_buttons:
+        when BoolOverride.Enabled => ()
+        when _ => return 6
+    select config.angle_platform_type:
+        when AnglePlatformTypeOverride.Selected(AnglePlatformType.D3D11) => ()
+        when _ => return 8
+    select config.cocoa_chdir_resources:
+        when BoolOverride.Disabled => ()
+        when _ => return 9
+    select config.cocoa_menubar:
+        when BoolOverride.Disabled => ()
+        when _ => return 10
+    select config.x11_xcb_vulkan_surface:
+        when BoolOverride.Enabled => ()
+        when _ => return 11
+    select config.wayland_libdecor:
+        when WaylandLibdecorOverride.Selected(WaylandLibdecorMode.Prefer) => ()
+        when _ => return 12
+    let cleared_config = config.without_joystick_hat_buttons_override :: :: method
+    let cleared_config = cleared_config.without_platform_override :: :: method
+    let cleared_config = cleared_config.without_angle_platform_type_override :: :: method
+    let cleared_config = cleared_config.without_cocoa_chdir_resources_override :: :: method
+    let cleared_config = cleared_config.without_cocoa_menubar_override :: :: method
+    let cleared_config = cleared_config.without_x11_xcb_vulkan_surface_override :: :: method
+    let cleared_config = cleared_config.without_wayland_libdecor_override :: :: method
+    select cleared_config.joystick_hat_buttons:
+        when BoolOverride.Default => ()
+        when _ => return 13
+    select cleared_config.platform:
+        when PlatformOverride.Default => ()
+        when _ => return 14
+    select cleared_config.angle_platform_type:
+        when AnglePlatformTypeOverride.Default => ()
+        when _ => return 15
+    select cleared_config.cocoa_chdir_resources:
+        when BoolOverride.Default => ()
+        when _ => return 16
+    select cleared_config.cocoa_menubar:
+        when BoolOverride.Default => ()
+        when _ => return 17
+    select cleared_config.x11_xcb_vulkan_surface:
+        when BoolOverride.Default => ()
+        when _ => return 18
+    select cleared_config.wayland_libdecor:
+        when WaylandLibdecorOverride.Default => ()
+        when _ => return 19
+    let runtime_config = app_init_config :: :: call
+    let runtime_config = runtime_config.on_platform :: Platform.Win32 :: method
+    let runtime_config = runtime_config.with_joystick_hat_buttons :: true :: method
+    select angle_platform_type_from_raw :: angle_platform_type_raw :: AnglePlatformType.D3D11 :: call :: call:
+        when AnglePlatformType.D3D11 => ()
+        when _ => return 20
+    select wayland_libdecor_mode_from_raw :: wayland_libdecor_mode_raw :: WaylandLibdecorMode.Prefer :: call :: call:
+        when WaylandLibdecorMode.Prefer => ()
+        when _ => return 21
+    let min_size = size :: 320, 240 :: call
+    let max_size = size :: 1920, 1080 :: call
+    let limits = window_size_limits :: min_size, max_size :: call
+    select:
+        when limits.min_width != 320 => return 22
+        when limits.min_height != 240 => return 23
+        when limits.max_width != 1920 => return 24
+        when limits.max_height != 1080 => return 25
+        else => ()
+    let min_only_limits = window_min_size_limits :: min_size :: call
+    select:
+        when min_only_limits.min_width != 320 => return 26
+        when min_only_limits.max_width != 0 - 1 => return 27
+        else => ()
+    let max_only_limits = window_max_size_limits :: max_size :: call
+    select:
+        when max_only_limits.min_width != 0 - 1 => return 28
+        when max_only_limits.max_height != 1080 => return 29
+        else => ()
+    let no_limits = window_no_size_limits :: :: call
+    select:
+        when no_limits.min_width != 0 - 1 => return 30
+        when no_limits.max_height != 0 - 1 => return 31
+        else => ()
+    let widescreen = window_aspect_ratio :: 16, 9 :: call
+    select:
+        when widescreen.numerator != 16 => return 32
+        when widescreen.denominator != 9 => return 33
+        else => ()
+    let ratio_from_size = window_aspect_ratio_from_size :: max_size :: call
+    select:
+        when ratio_from_size.numerator != 1920 => return 34
+        when ratio_from_size.denominator != 1080 => return 35
+        else => ()
+    select app_init_with :: runtime_config :: call:
+        when Result.Ok(app) =>
+            let version = app.version_info :: :: method
+            select:
+                when version.major < 3 =>
+                    app.terminate :: :: method
+                    return 101
+                else => ()
+            select app.version_string :: :: method:
+                when Result.Ok(version_text) =>
+                    select:
+                        when version_text.is_empty :: :: method =>
+                            app.terminate :: :: method
+                            return 102
+                        else => ()
+                when Result.Err(_) =>
+                    app.terminate :: :: method
+                    return 103
+            let current_platform = app.current_platform :: :: method
+            select:
+                when !app.platform_supported :: current_platform :: method =>
+                    app.terminate :: :: method
+                    return 104
+                when !runtime_platform_supported :: current_platform :: call =>
+                    app.terminate :: :: method
+                    return 105
+                else => ()
+            select current_platform:
+                when Platform.Win32 => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 106
+            select app.last_error :: :: method:
+                when Result.Ok(Option.Some(_)) => ()
+                when Result.Ok(Option.None) => ()
+                when Result.Err(_) =>
+                    app.terminate :: :: method
+                    return 107
+            let _ = app.timer_value :: :: method
+            let frequency = app.timer_frequency :: :: method
+            select:
+                when frequency == 0U64 =>
+                    app.terminate :: :: method
+                    return 108
+                else => ()
+            app.set_time :: 0.0 :: method
+            let elapsed = app.time :: :: method
+            select:
+                when elapsed < 0.0 =>
+                    app.terminate :: :: method
+                    return 109
+                when elapsed > 2.0 =>
+                    app.terminate :: :: method
+                    return 110
+                else => ()
+            select app.clipboard_string :: :: method:
+                when Result.Err(AppClipboardError.WindowUnavailable) => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 111
+            select app.set_clipboard_string :: "pre-window clipboard" :: method:
+                when Result.Err(AppClipboardError.WindowUnavailable) => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 112
+            let spec = opengl_window_spec :: "runa_app smoke", 640, 480, 1, 0 :: call
+            select spec.client_api:
+                when ClientApi.OpenGl => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 11
+            select spec.opengl_profile:
+                when OpenGlProfile.Any => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 12
+            select spec.context_creation_api:
+                when ContextCreationApi.Native => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 13
+            let spec = window_spec_with_cocoa_frame_name :: spec, "runa-app-smoke-frame" :: call
+            let spec = window_spec_with_x11_class_name :: spec, "runa-app-smoke" :: call
+            let spec = window_spec_with_x11_instance_name :: spec, "runa-app-smoke-instance" :: call
+            let spec = window_spec_with_wayland_app_id :: spec, "dev.runa.rnaglfw.app-smoke" :: call
+            let es_spec = opengl_es_window_spec :: "es spec", 64, 64, 2, 0 :: call
+            select es_spec.client_api:
+                when ClientApi.OpenGlEs => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 244
+            select es_spec.context_creation_api:
+                when ContextCreationApi.Native => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 245
+            let egl_spec = egl_opengl_window_spec :: "egl spec", 64, 64, 3, 3 :: call
+            select egl_spec.client_api:
+                when ClientApi.OpenGl => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 246
+            select egl_spec.context_creation_api:
+                when ContextCreationApi.Egl => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 247
+            let egl_es_spec = egl_opengl_es_window_spec :: "egl es spec", 64, 64, 2, 0 :: call
+            select egl_es_spec.client_api:
+                when ClientApi.OpenGlEs => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 248
+            select egl_es_spec.context_creation_api:
+                when ContextCreationApi.Egl => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 249
+            let osmesa_spec = osmesa_opengl_window_spec :: "osmesa spec", 64, 64, 3, 3 :: call
+            select osmesa_spec.client_api:
+                when ClientApi.OpenGl => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 250
+            select osmesa_spec.context_creation_api:
+                when ContextCreationApi.OsMesa => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 251
+            let typed_client_api_spec = window_spec_with_client_api :: egl_spec, ClientApi.OpenGlEs :: call
+            select typed_client_api_spec.client_api:
+                when ClientApi.OpenGlEs => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 252
+            let typed_creation_api_spec = window_spec_with_context_creation_api :: typed_client_api_spec, ContextCreationApi.Egl :: call
+            select typed_creation_api_spec.context_creation_api:
+                when ContextCreationApi.Egl => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 253
+            let typed_profile_spec = window_spec_with_opengl_profile :: typed_creation_api_spec, OpenGlProfile.Core :: call
+            select typed_profile_spec.opengl_profile:
+                when OpenGlProfile.Core => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 254
+            let explicit_vulkan_spec = vulkan_window_spec :: "vulkan spec", 64, 64 :: call
+            select explicit_vulkan_spec.client_api:
+                when ClientApi.None => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 265
+            select explicit_vulkan_spec.context_creation_api:
+                when ContextCreationApi.Native => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 266
+            let typed_vulkan_base = window_spec :: "typed vulkan", 64, 64 :: call
+            let typed_vulkan_spec = window_spec_with_vulkan :: typed_vulkan_base :: call
+            select typed_vulkan_spec.client_api:
+                when ClientApi.None => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 267
+            let fluent_vulkan_base = opengl_window_spec :: "fluent vulkan", 64, 64, 3, 3 :: call
+            let fluent_vulkan_spec = fluent_vulkan_base.with_vulkan :: :: method
+            select fluent_vulkan_spec.client_api:
+                when ClientApi.None => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 268
+            select fluent_vulkan_spec.opengl_profile:
+                when OpenGlProfile.Any => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 269
+            let compat_spec = opengl_compat_window_spec :: "compat spec", 64, 64, 1, 0 :: call
+            select compat_spec.opengl_profile:
+                when OpenGlProfile.Compat => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 14
+            let hidden_mode = CursorMode.Hidden
+            let hidden_mode_raw = cursor_mode_raw :: hidden_mode :: call
+            select cursor_mode_from_raw :: hidden_mode_raw :: call:
+                when CursorMode.Hidden => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 15
+            let debug_spec = opengl_debug_window_spec :: "debug spec", 64, 64, 1, 0 :: call
+            select:
+                when !debug_spec.opengl_debug_context =>
+                    app.terminate :: :: method
+                    return 18
+                else => ()
+            let srgb_spec = opengl_srgb_window_spec :: "srgb spec", 64, 64, 1, 0 :: call
+            select:
+                when !srgb_spec.srgb_capable =>
+                    app.terminate :: :: method
+                    return 19
+                else => ()
+            let debug_srgb_spec = opengl_debug_srgb_window_spec :: "debug srgb spec", 64, 64, 1, 0 :: call
+            select:
+                when !debug_srgb_spec.opengl_debug_context =>
+                    app.terminate :: :: method
+                    return 20
+                when !debug_srgb_spec.srgb_capable =>
+                    app.terminate :: :: method
+                    return 21
+                else => ()
+            let core_debug_srgb_spec = opengl_core_debug_srgb_window_spec :: "core debug srgb spec", 64, 64, 1, 0 :: call
+            select core_debug_srgb_spec.opengl_profile:
+                when OpenGlProfile.Core => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 212
+            select:
+                when !core_debug_srgb_spec.opengl_debug_context =>
+                    app.terminate :: :: method
+                    return 213
+                when !core_debug_srgb_spec.srgb_capable =>
+                    app.terminate :: :: method
+                    return 214
+                else => ()
+            let compat_debug_srgb_spec = opengl_compat_debug_srgb_window_spec :: "compat debug srgb spec", 64, 64, 1, 0 :: call
+            select compat_debug_srgb_spec.opengl_profile:
+                when OpenGlProfile.Compat => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 215
+            select:
+                when !compat_debug_srgb_spec.opengl_debug_context =>
+                    app.terminate :: :: method
+                    return 216
+                when !compat_debug_srgb_spec.srgb_capable =>
+                    app.terminate :: :: method
+                    return 217
+                else => ()
+            let positioned_spec = positioned_window_spec :: "positioned spec", 64, 64, 123, 456 :: call
+            select:
+                when positioned_spec.x != 123 =>
+                    app.terminate :: :: method
+                    return 219
+                when positioned_spec.y != 456 =>
+                    app.terminate :: :: method
+                    return 220
+                else => ()
+            let unfocused_spec = unfocused_window_spec :: "unfocused spec", 64, 64 :: call
+            select:
+                when unfocused_spec.focused =>
+                    app.terminate :: :: method
+                    return 221
+                else => ()
+            let floating_spec = floating_window_spec :: "floating spec", 64, 64 :: call
+            select:
+                when !floating_spec.floating =>
+                    app.terminate :: :: method
+                    return 222
+                else => ()
+            let maximized_spec = maximized_window_spec :: "maximized spec", 64, 64 :: call
+            select:
+                when !maximized_spec.maximized =>
+                    app.terminate :: :: method
+                    return 223
+                else => ()
+            let mouse_passthrough_spec = mouse_passthrough_window_spec :: "mouse passthrough spec", 64, 64 :: call
+            select:
+                when !mouse_passthrough_spec.mouse_passthrough =>
+                    app.terminate :: :: method
+                    return 224
+                else => ()
+            let keyboard_menu_spec = win32_keyboard_menu_window_spec :: "keyboard menu spec", 64, 64 :: call
+            select:
+                when !keyboard_menu_spec.win32_keyboard_menu =>
+                    app.terminate :: :: method
+                    return 225
+                else => ()
+            let showdefault_spec = win32_showdefault_window_spec :: "showdefault spec", 64, 64 :: call
+            select:
+                when !showdefault_spec.win32_showdefault =>
+                    app.terminate :: :: method
+                    return 226
+                else => ()
+            let cocoa_frame_spec = cocoa_frame_named_window_spec :: "cocoa frame spec", 64, 64, "rnaglfw-frame" :: call
+            select cocoa_frame_spec.cocoa_frame_name:
+                when Option.Some(name) =>
+                    select:
+                        when name.is_empty :: :: method =>
+                            app.terminate :: :: method
+                            return 227
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 228
+            let x11_class_spec = x11_class_named_window_spec :: "x11 class spec", 64, 64, "rnaglfw-class" :: call
+            select x11_class_spec.x11_class_name:
+                when Option.Some(name) =>
+                    select:
+                        when name.is_empty :: :: method =>
+                            app.terminate :: :: method
+                            return 229
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 230
+            let x11_instance_spec = x11_instance_named_window_spec :: "x11 instance spec", 64, 64, "rnaglfw-instance" :: call
+            select x11_instance_spec.x11_instance_name:
+                when Option.Some(name) =>
+                    select:
+                        when name.is_empty :: :: method =>
+                            app.terminate :: :: method
+                            return 231
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 240
+            let wayland_app_id_spec = wayland_app_id_window_spec :: "wayland app id spec", 64, 64, "dev.runa.rnaglfw.spec" :: call
+            select wayland_app_id_spec.wayland_app_id:
+                when Option.Some(app_id) =>
+                    select:
+                        when app_id.is_empty :: :: method =>
+                            app.terminate :: :: method
+                            return 241
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 242
+            let cleared_named_spec = window_spec :: "cleared named spec", 64, 64 :: call
+            let cleared_named_spec = window_spec_with_cocoa_frame_name :: cleared_named_spec, "frame-name" :: call
+            let cleared_named_spec = window_spec_with_x11_class_name :: cleared_named_spec, "class-name" :: call
+            let cleared_named_spec = window_spec_with_x11_instance_name :: cleared_named_spec, "instance-name" :: call
+            let cleared_named_spec = window_spec_with_wayland_app_id :: cleared_named_spec, "dev.runa.clear" :: call
+            let cleared_named_spec = window_spec_without_cocoa_frame_name :: cleared_named_spec :: call
+            let cleared_named_spec = window_spec_without_x11_class_name :: cleared_named_spec :: call
+            let cleared_named_spec = window_spec_without_x11_instance_name :: cleared_named_spec :: call
+            let cleared_named_spec = window_spec_without_wayland_app_id :: cleared_named_spec :: call
+            select cleared_named_spec.cocoa_frame_name:
+                when Option.None => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 1140
+            select cleared_named_spec.x11_class_name:
+                when Option.None => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 1141
+            select cleared_named_spec.x11_instance_name:
+                when Option.None => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 1142
+            select cleared_named_spec.wayland_app_id:
+                when Option.None => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 1143
+            let multisample_base = opengl_window_spec :: "multisample base", 64, 64, 1, 0 :: call
+            let multisample_spec = window_spec_with_multisampling :: multisample_base, 4 :: call
+            select:
+                when multisample_spec.samples != 4 =>
+                    app.terminate :: :: method
+                    return 22
+                else => ()
+            let no_error_base = opengl_window_spec :: "no error base", 64, 64, 1, 0 :: call
+            let no_error_spec = window_spec_with_context_no_error :: no_error_base :: call
+            select:
+                when !no_error_spec.context_no_error =>
+                    app.terminate :: :: method
+                    return 23
+                else => ()
+            let forward_base = opengl_window_spec :: "forward base", 64, 64, 1, 0 :: call
+            let forward_spec = window_spec_with_opengl_forward_compat :: forward_base :: call
+            select:
+                when !forward_spec.opengl_forward_compat =>
+                    app.terminate :: :: method
+                    return 24
+                else => ()
+            let single_buffer_base = opengl_window_spec :: "single buffer base", 64, 64, 1, 0 :: call
+            let single_buffer_spec = window_spec_single_buffered :: single_buffer_base :: call
+            select:
+                when single_buffer_spec.doublebuffer =>
+                    app.terminate :: :: method
+                    return 25
+                else => ()
+            let helper_debug_base = opengl_window_spec :: "helper debug base", 64, 64, 1, 0 :: call
+            let helper_debug_spec = window_spec_with_opengl_debug_context :: helper_debug_base :: call
+            select:
+                when !helper_debug_spec.opengl_debug_context =>
+                    app.terminate :: :: method
+                    return 26
+                else => ()
+            let helper_srgb_base = opengl_window_spec :: "helper srgb base", 64, 64, 1, 0 :: call
+            let helper_srgb_spec = window_spec_with_srgb :: helper_srgb_base :: call
+            select:
+                when !helper_srgb_spec.srgb_capable =>
+                    app.terminate :: :: method
+                    return 27
+                else => ()
+            let color_bits_base = opengl_window_spec :: "color bits base", 64, 64, 1, 0 :: call
+            let color_bits_spec = window_spec_with_color_bits :: color_bits_base, 5, 6, 5, 0 :: call
+            select:
+                when color_bits_spec.red_bits != 5 =>
+                    app.terminate :: :: method
+                    return 901
+                when color_bits_spec.green_bits != 6 =>
+                    app.terminate :: :: method
+                    return 902
+                when color_bits_spec.blue_bits != 5 =>
+                    app.terminate :: :: method
+                    return 903
+                when color_bits_spec.alpha_bits != 0 =>
+                    app.terminate :: :: method
+                    return 904
+                else => ()
+            let depth_stencil_base = opengl_window_spec :: "depth stencil base", 64, 64, 1, 0 :: call
+            let depth_stencil_spec = window_spec_with_depth_stencil_bits :: depth_stencil_base, 24, 8 :: call
+            select:
+                when depth_stencil_spec.depth_bits != 24 =>
+                    app.terminate :: :: method
+                    return 905
+                when depth_stencil_spec.stencil_bits != 8 =>
+                    app.terminate :: :: method
+                    return 906
+                else => ()
+            let refresh_rate_base = opengl_window_spec :: "refresh rate base", 64, 64, 1, 0 :: call
+            let refresh_rate_spec = window_spec_with_refresh_rate :: refresh_rate_base, 144 :: call
+            select:
+                when refresh_rate_spec.refresh_rate != 144 =>
+                    app.terminate :: :: method
+                    return 907
+                else => ()
+            let default_refresh_rate_spec = window_spec_with_default_refresh_rate :: refresh_rate_spec :: call
+            select:
+                when default_refresh_rate_spec.refresh_rate != 0 - 1 =>
+                    app.terminate :: :: method
+                    return 1144
+                else => ()
+            let positioned_base = opengl_window_spec :: "positioned base", 64, 64, 1, 0 :: call
+            let positioned_spec = window_spec_with_position :: positioned_base, 120, 240 :: call
+            select:
+                when positioned_spec.x != 120 =>
+                    app.terminate :: :: method
+                    return 918
+                when positioned_spec.y != 240 =>
+                    app.terminate :: :: method
+                    return 919
+                else => ()
+            let default_position_spec = window_spec_with_default_position :: positioned_spec :: call
+            select:
+                when default_position_spec.x != 0 - 2147483647 - 1 =>
+                    app.terminate :: :: method
+                    return 920
+                when default_position_spec.y != 0 - 2147483647 - 1 =>
+                    app.terminate :: :: method
+                    return 921
+                else => ()
+            let unfocused_base = opengl_window_spec :: "unfocused base", 64, 64, 1, 0 :: call
+            let unfocused_spec = window_spec_unfocused :: unfocused_base :: call
+            select:
+                when unfocused_spec.focused =>
+                    app.terminate :: :: method
+                    return 922
+                else => ()
+            let no_auto_iconify_base = opengl_window_spec :: "no auto iconify base", 64, 64, 1, 0 :: call
+            let no_auto_iconify_spec = window_spec_without_auto_iconify :: no_auto_iconify_base :: call
+            select:
+                when no_auto_iconify_spec.auto_iconify =>
+                    app.terminate :: :: method
+                    return 923
+                else => ()
+            let floating_base = opengl_window_spec :: "floating base", 64, 64, 1, 0 :: call
+            let floating_spec = window_spec_floating :: floating_base :: call
+            select:
+                when !floating_spec.floating =>
+                    app.terminate :: :: method
+                    return 924
+                else => ()
+            let maximized_base = opengl_window_spec :: "maximized base", 64, 64, 1, 0 :: call
+            let maximized_spec = window_spec_maximized :: maximized_base :: call
+            select:
+                when !maximized_spec.maximized =>
+                    app.terminate :: :: method
+                    return 925
+                else => ()
+            let no_center_cursor_base = opengl_window_spec :: "no center cursor base", 64, 64, 1, 0 :: call
+            let no_center_cursor_spec = window_spec_without_center_cursor :: no_center_cursor_base :: call
+            select:
+                when no_center_cursor_spec.center_cursor =>
+                    app.terminate :: :: method
+                    return 926
+                else => ()
+            let no_focus_on_show_base = opengl_window_spec :: "no focus on show base", 64, 64, 1, 0 :: call
+            let no_focus_on_show_spec = window_spec_without_focus_on_show :: no_focus_on_show_base :: call
+            select:
+                when no_focus_on_show_spec.focus_on_show =>
+                    app.terminate :: :: method
+                    return 927
+                else => ()
+            let mouse_passthrough_base = opengl_window_spec :: "mouse passthrough base", 64, 64, 1, 0 :: call
+            let mouse_passthrough_spec = window_spec_with_mouse_passthrough :: mouse_passthrough_base :: call
+            select:
+                when !mouse_passthrough_spec.mouse_passthrough =>
+                    app.terminate :: :: method
+                    return 928
+                else => ()
+            let keyboard_menu_base = opengl_window_spec :: "keyboard menu base", 64, 64, 1, 0 :: call
+            let keyboard_menu_spec = window_spec_with_win32_keyboard_menu :: keyboard_menu_base :: call
+            select:
+                when !keyboard_menu_spec.win32_keyboard_menu =>
+                    app.terminate :: :: method
+                    return 929
+                else => ()
+            let showdefault_base = opengl_window_spec :: "showdefault base", 64, 64, 1, 0 :: call
+            let showdefault_spec = window_spec_with_win32_showdefault :: showdefault_base :: call
+            select:
+                when !showdefault_spec.win32_showdefault =>
+                    app.terminate :: :: method
+                    return 930
+                else => ()
+            let no_scale_to_monitor_base = opengl_window_spec :: "no scale monitor base", 64, 64, 1, 0 :: call
+            let no_scale_to_monitor_spec = window_spec_without_scale_to_monitor :: no_scale_to_monitor_base :: call
+            select:
+                when no_scale_to_monitor_spec.scale_to_monitor =>
+                    app.terminate :: :: method
+                    return 931
+                else => ()
+            let fluent_spec = window_spec :: "fluent base", 64, 48 :: call
+            let fluent_spec = fluent_spec.with_title :: "fluent renamed" :: method
+            let fluent_spec = fluent_spec.with_size :: 320, 180 :: method
+            let fluent_spec = fluent_spec.with_position :: 10, 20 :: method
+            let fluent_spec = fluent_spec.with_hidden :: :: method
+            let fluent_spec = fluent_spec.with_fixed_size :: :: method
+            let fluent_spec = fluent_spec.with_undecorated :: :: method
+            let fluent_spec = fluent_spec.with_unfocused :: :: method
+            let fluent_spec = fluent_spec.without_auto_iconify :: :: method
+            let fluent_spec = fluent_spec.with_floating :: :: method
+            let fluent_spec = fluent_spec.with_maximized :: :: method
+            let fluent_spec = fluent_spec.without_center_cursor :: :: method
+            let fluent_spec = fluent_spec.with_transparent_framebuffer :: :: method
+            let fluent_spec = fluent_spec.without_focus_on_show :: :: method
+            let fluent_spec = fluent_spec.with_mouse_passthrough :: :: method
+            let fluent_spec = fluent_spec.without_scale_to_monitor :: :: method
+            let fluent_spec = fluent_spec.with_win32_keyboard_menu :: :: method
+            let fluent_spec = fluent_spec.with_win32_showdefault :: :: method
+            let fluent_spec = fluent_spec.with_cocoa_frame_name :: "fluent-frame" :: method
+            let fluent_spec = fluent_spec.with_x11_class_name :: "fluent-class" :: method
+            let fluent_spec = fluent_spec.with_x11_instance_name :: "fluent-instance" :: method
+            let fluent_spec = fluent_spec.with_wayland_app_id :: "dev.runa.fluent" :: method
+            select:
+                when fluent_spec.width != 320 =>
+                    app.terminate :: :: method
+                    return 932
+                when fluent_spec.height != 180 =>
+                    app.terminate :: :: method
+                    return 933
+                when fluent_spec.x != 10 =>
+                    app.terminate :: :: method
+                    return 934
+                when fluent_spec.y != 20 =>
+                    app.terminate :: :: method
+                    return 935
+                when fluent_spec.visible =>
+                    app.terminate :: :: method
+                    return 936
+                when fluent_spec.resizable =>
+                    app.terminate :: :: method
+                    return 937
+                when fluent_spec.decorated =>
+                    app.terminate :: :: method
+                    return 938
+                when fluent_spec.focused =>
+                    app.terminate :: :: method
+                    return 939
+                when fluent_spec.auto_iconify =>
+                    app.terminate :: :: method
+                    return 940
+                when !fluent_spec.floating =>
+                    app.terminate :: :: method
+                    return 941
+                when !fluent_spec.maximized =>
+                    app.terminate :: :: method
+                    return 942
+                when fluent_spec.center_cursor =>
+                    app.terminate :: :: method
+                    return 943
+                when !fluent_spec.transparent_framebuffer =>
+                    app.terminate :: :: method
+                    return 944
+                when fluent_spec.focus_on_show =>
+                    app.terminate :: :: method
+                    return 945
+                when !fluent_spec.mouse_passthrough =>
+                    app.terminate :: :: method
+                    return 946
+                when fluent_spec.scale_to_monitor =>
+                    app.terminate :: :: method
+                    return 947
+                when !fluent_spec.win32_keyboard_menu =>
+                    app.terminate :: :: method
+                    return 948
+                when !fluent_spec.win32_showdefault =>
+                    app.terminate :: :: method
+                    return 949
+                else => ()
+            select fluent_spec.cocoa_frame_name:
+                when Option.Some(name) =>
+                    select:
+                        when name.is_empty :: :: method =>
+                            app.terminate :: :: method
+                            return 950
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 951
+            select fluent_spec.x11_class_name:
+                when Option.Some(name) =>
+                    select:
+                        when name.is_empty :: :: method =>
+                            app.terminate :: :: method
+                            return 952
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 953
+            select fluent_spec.x11_instance_name:
+                when Option.Some(name) =>
+                    select:
+                        when name.is_empty :: :: method =>
+                            app.terminate :: :: method
+                            return 954
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 955
+            select fluent_spec.wayland_app_id:
+                when Option.Some(app_id) =>
+                    select:
+                        when app_id.is_empty :: :: method =>
+                            app.terminate :: :: method
+                            return 956
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 957
+            let symmetric_spec = window_spec :: "symmetric spec", 64, 64 :: call
+            let symmetric_spec = symmetric_spec.with_visible :: false :: method
+            let symmetric_spec = symmetric_spec.with_resizable :: false :: method
+            let symmetric_spec = symmetric_spec.with_decorated :: false :: method
+            let symmetric_spec = symmetric_spec.with_focused :: false :: method
+            let symmetric_spec = symmetric_spec.with_auto_iconify :: false :: method
+            let symmetric_spec = symmetric_spec.with_floating_enabled :: true :: method
+            let symmetric_spec = symmetric_spec.with_maximized_enabled :: true :: method
+            let symmetric_spec = symmetric_spec.with_center_cursor :: false :: method
+            let symmetric_spec = symmetric_spec.with_transparent_framebuffer_enabled :: true :: method
+            let symmetric_spec = symmetric_spec.with_focus_on_show :: false :: method
+            let symmetric_spec = symmetric_spec.with_mouse_passthrough_enabled :: true :: method
+            let symmetric_spec = symmetric_spec.with_scale_to_monitor :: false :: method
+            let symmetric_spec = symmetric_spec.with_win32_keyboard_menu_enabled :: true :: method
+            let symmetric_spec = symmetric_spec.with_win32_showdefault_enabled :: true :: method
+            let symmetric_spec = symmetric_spec.with_cocoa_frame_name :: "temporary-frame" :: method
+            let symmetric_spec = symmetric_spec.with_x11_class_name :: "temporary-class" :: method
+            let symmetric_spec = symmetric_spec.with_x11_instance_name :: "temporary-instance" :: method
+            let symmetric_spec = symmetric_spec.with_wayland_app_id :: "temporary.app" :: method
+            let symmetric_spec = symmetric_spec.with_visible :: true :: method
+            let symmetric_spec = symmetric_spec.with_resizable :: true :: method
+            let symmetric_spec = symmetric_spec.with_decorated :: true :: method
+            let symmetric_spec = symmetric_spec.with_focused :: true :: method
+            let symmetric_spec = symmetric_spec.with_auto_iconify :: true :: method
+            let symmetric_spec = symmetric_spec.with_floating_enabled :: false :: method
+            let symmetric_spec = symmetric_spec.with_maximized_enabled :: false :: method
+            let symmetric_spec = symmetric_spec.with_center_cursor :: true :: method
+            let symmetric_spec = symmetric_spec.with_transparent_framebuffer_enabled :: false :: method
+            let symmetric_spec = symmetric_spec.with_focus_on_show :: true :: method
+            let symmetric_spec = symmetric_spec.with_mouse_passthrough_enabled :: false :: method
+            let symmetric_spec = symmetric_spec.with_scale_to_monitor :: true :: method
+            let symmetric_spec = symmetric_spec.with_win32_keyboard_menu_enabled :: false :: method
+            let symmetric_spec = symmetric_spec.with_win32_showdefault_enabled :: false :: method
+            let symmetric_spec = symmetric_spec.without_cocoa_frame_name :: :: method
+            let symmetric_spec = symmetric_spec.without_x11_class_name :: :: method
+            let symmetric_spec = symmetric_spec.without_x11_instance_name :: :: method
+            let symmetric_spec = symmetric_spec.without_wayland_app_id :: :: method
+            select:
+                when !symmetric_spec.visible =>
+                    app.terminate :: :: method
+                    return 975
+                when !symmetric_spec.resizable =>
+                    app.terminate :: :: method
+                    return 976
+                when !symmetric_spec.decorated =>
+                    app.terminate :: :: method
+                    return 977
+                when !symmetric_spec.focused =>
+                    app.terminate :: :: method
+                    return 978
+                when !symmetric_spec.auto_iconify =>
+                    app.terminate :: :: method
+                    return 979
+                when symmetric_spec.floating =>
+                    app.terminate :: :: method
+                    return 980
+                when symmetric_spec.maximized =>
+                    app.terminate :: :: method
+                    return 981
+                when !symmetric_spec.center_cursor =>
+                    app.terminate :: :: method
+                    return 982
+                when symmetric_spec.transparent_framebuffer =>
+                    app.terminate :: :: method
+                    return 983
+                when !symmetric_spec.focus_on_show =>
+                    app.terminate :: :: method
+                    return 984
+                when symmetric_spec.mouse_passthrough =>
+                    app.terminate :: :: method
+                    return 985
+                when !symmetric_spec.scale_to_monitor =>
+                    app.terminate :: :: method
+                    return 986
+                when symmetric_spec.win32_keyboard_menu =>
+                    app.terminate :: :: method
+                    return 987
+                when symmetric_spec.win32_showdefault =>
+                    app.terminate :: :: method
+                    return 988
+                else => ()
+            select symmetric_spec.cocoa_frame_name:
+                when Option.None => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 989
+            select symmetric_spec.x11_class_name:
+                when Option.None => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 990
+            select symmetric_spec.x11_instance_name:
+                when Option.None => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 991
+            select symmetric_spec.wayland_app_id:
+                when Option.None => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 992
+            let fluent_graphics_spec = window_spec :: "fluent graphics", 64, 64 :: call
+            let fluent_graphics_spec = fluent_graphics_spec.with_opengl_core_debug_srgb :: 4, 1 :: method
+            let fluent_graphics_spec = fluent_graphics_spec.with_context_creation_api :: ContextCreationApi.Egl :: method
+            let fluent_graphics_spec = fluent_graphics_spec.with_color_bits :: 8, 8, 8, 8 :: method
+            let fluent_graphics_spec = fluent_graphics_spec.with_depth_stencil_bits :: 24, 8 :: method
+            let fluent_graphics_spec = fluent_graphics_spec.with_multisampling :: 4 :: method
+            let fluent_graphics_spec = fluent_graphics_spec.with_refresh_rate :: 165 :: method
+            let fluent_graphics_spec = fluent_graphics_spec.with_opengl_forward_compat :: :: method
+            let fluent_graphics_spec = fluent_graphics_spec.with_context_no_error :: :: method
+            let fluent_graphics_spec = fluent_graphics_spec.with_single_buffered :: :: method
+            select fluent_graphics_spec.client_api:
+                when ClientApi.OpenGl => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 958
+            select fluent_graphics_spec.opengl_profile:
+                when OpenGlProfile.Core => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 959
+            select fluent_graphics_spec.context_creation_api:
+                when ContextCreationApi.Egl => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 961
+            select:
+                when fluent_graphics_spec.context_version_major != 4 || fluent_graphics_spec.context_version_minor != 1 =>
+                    app.terminate :: :: method
+                    return 960
+                when fluent_graphics_spec.red_bits != 8 || fluent_graphics_spec.green_bits != 8 || fluent_graphics_spec.blue_bits != 8 || fluent_graphics_spec.alpha_bits != 8 =>
+                    app.terminate :: :: method
+                    return 962
+                when fluent_graphics_spec.depth_bits != 24 || fluent_graphics_spec.stencil_bits != 8 =>
+                    app.terminate :: :: method
+                    return 963
+                when fluent_graphics_spec.samples != 4 =>
+                    app.terminate :: :: method
+                    return 964
+                when fluent_graphics_spec.refresh_rate != 165 =>
+                    app.terminate :: :: method
+                    return 965
+                when !fluent_graphics_spec.srgb_capable =>
+                    app.terminate :: :: method
+                    return 966
+                when !fluent_graphics_spec.opengl_debug_context =>
+                    app.terminate :: :: method
+                    return 967
+                when !fluent_graphics_spec.opengl_forward_compat =>
+                    app.terminate :: :: method
+                    return 968
+                when !fluent_graphics_spec.context_no_error =>
+                    app.terminate :: :: method
+                    return 969
+                when fluent_graphics_spec.doublebuffer =>
+                    app.terminate :: :: method
+                    return 970
+                else => ()
+            let fluent_default_refresh_spec = window_spec :: "fluent default refresh", 64, 64 :: call
+            let fluent_default_refresh_spec = fluent_default_refresh_spec.with_refresh_rate :: 120 :: method
+            let fluent_default_refresh_spec = fluent_default_refresh_spec.with_default_refresh_rate :: :: method
+            select:
+                when fluent_default_refresh_spec.refresh_rate != 0 - 1 =>
+                    app.terminate :: :: method
+                    return 1145
+                else => ()
+            let fluent_egl_es_spec = window_spec :: "fluent egl es", 64, 64 :: call
+            let fluent_egl_es_spec = fluent_egl_es_spec.with_egl_opengl_es :: 2, 0 :: method
+            select fluent_egl_es_spec.client_api:
+                when ClientApi.OpenGlEs => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 971
+            select fluent_egl_es_spec.context_creation_api:
+                when ContextCreationApi.Egl => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 972
+            select:
+                when fluent_egl_es_spec.context_version_major != 2 || fluent_egl_es_spec.context_version_minor != 0 =>
+                    app.terminate :: :: method
+                    return 973
+                else => ()
+            let fluent_osmesa_spec = window_spec :: "fluent osmesa", 64, 64 :: call
+            let fluent_osmesa_spec = fluent_osmesa_spec.with_osmesa_opengl :: 3, 3 :: method
+            select fluent_osmesa_spec.client_api:
+                when ClientApi.OpenGl => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 974
+            select fluent_osmesa_spec.context_creation_api:
+                when ContextCreationApi.OsMesa => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 975
+            select:
+                when fluent_osmesa_spec.context_version_major != 3 || fluent_osmesa_spec.context_version_minor != 3 =>
+                    app.terminate :: :: method
+                    return 976
+                else => ()
+            let fluent_compat_debug_spec = window_spec :: "fluent compat debug", 64, 64 :: call
+            let fluent_compat_debug_spec = fluent_compat_debug_spec.with_opengl_compat_debug :: 2, 1 :: method
+            select fluent_compat_debug_spec.opengl_profile:
+                when OpenGlProfile.Compat => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 977
+            select:
+                when !fluent_compat_debug_spec.opengl_debug_context =>
+                    app.terminate :: :: method
+                    return 978
+                when fluent_compat_debug_spec.context_version_major != 2 || fluent_compat_debug_spec.context_version_minor != 1 =>
+                    app.terminate :: :: method
+                    return 979
+                else => ()
+            let ramp_red = List[CUShort] :: :: call
+            let ramp_green = List[CUShort] :: :: call
+            let ramp_blue = List[CUShort] :: :: call
+            let zero_short: CUShort = 0
+            ramp_red.push :: zero_short :: method
+            ramp_green.push :: zero_short :: method
+            ramp_blue.push :: zero_short :: method
+            select monitor_gamma_ramp :: ramp_red, ramp_green, ramp_blue :: call:
+                when Result.Ok(ramp) =>
+                    select:
+                        when ramp.size :: :: method != 1 =>
+                            app.terminate :: :: method
+                            return 915
+                        else => ()
+                when Result.Err(_) =>
+                    app.terminate :: :: method
+                    return 916
+            let moved_event = WindowEvent.Moved :: :: call
+                id = 77
+                x = 11
+                y = 22
+            select moved_event.kind :: :: method:
+                when WindowEventKind.Moved => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 141
+            select moved_event.moved_data :: :: method:
+                when Option.Some(move_data) =>
+                    select:
+                        when move_data.x != 11 || move_data.y != 22 =>
+                            app.terminate :: :: method
+                            return 142
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 143
+            let key_event = WindowEvent.KeyChanged :: :: call
+                id = 77
+                key = KeyCode.A
+                scancode = 1
+                action = InputAction.Press
+                mods = modifiers_from_raw :: 0x0001 :: call
+            select key_event.key_data :: :: method:
+                when Option.Some(key_data) =>
+                    select:
+                        when key_data.scancode != 1 =>
+                            app.terminate :: :: method
+                            return 145
+                        when !key_data.mods.shift :: :: method =>
+                            app.terminate :: :: method
+                            return 147
+                        else => ()
+                    select key_data.key:
+                        when KeyCode.A => ()
+                        when _ =>
+                            app.terminate :: :: method
+                            return 144
+                    select key_data.action:
+                        when InputAction.Press => ()
+                        when _ =>
+                            app.terminate :: :: method
+                            return 146
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 148
+            let dropped_paths = List[Str] :: :: call
+            let first_path = "first.txt"
+            let second_path = "second.txt"
+            dropped_paths.push :: first_path :: method
+            dropped_paths.push :: second_path :: method
+            let dropped_count_event = WindowEvent.DroppedPaths :: :: call
+                id = 77
+                paths = dropped_paths
+            select dropped_count_event.dropped_path_count :: :: method:
+                when Option.Some(path_count) =>
+                    select:
+                        when path_count != 2 =>
+                            app.terminate :: :: method
+                            return 149
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 150
+            let dropped_paths_again = List[Str] :: :: call
+            let first_path_again = "first.txt"
+            let second_path_again = "second.txt"
+            dropped_paths_again.push :: first_path_again :: method
+            dropped_paths_again.push :: second_path_again :: method
+            let dropped_event = WindowEvent.DroppedPaths :: :: call
+                id = 77
+                paths = dropped_paths_again
+            select dropped_event.take_dropped_paths :: :: method:
+                when Option.Some(paths) =>
+                    select:
+                        when paths.count :: :: method != 2 =>
+                            app.terminate :: :: method
+                            return 151
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 152
+            let monitor_event = MonitorEvent.Connected :: :: call
+                id = 9
+            select monitor_event.kind :: :: method:
+                when MonitorEventKind.Connected => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 153
+            select:
+                when !monitor_event.connected :: :: method =>
+                    app.terminate :: :: method
+                    return 154
+                else => ()
+            let joystick_event = JoystickEvent.Connected :: :: call
+                id = 3
+                gamepad = true
+            select joystick_event.kind :: :: method:
+                when JoystickEventKind.Connected => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 155
+            select joystick_event.gamepad :: :: method:
+                when Option.Some(gamepad) =>
+                    select:
+                        when !gamepad =>
+                            app.terminate :: :: method
+                            return 156
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 157
+            let user_signal = UserEvent.Signaled :: :: call
+                id = 5
+            select user_signal.kind :: :: method:
+                when UserEventKind.Signaled => ()
+            let refreshed_event = WindowEvent.Refreshed :: :: call
+                id = 33
+            let wrapped_window_event = AppEvent.Window :: refreshed_event :: call
+            select wrapped_window_event.take_window_event :: :: method:
+                when Option.Some(window_event) =>
+                    select:
+                        when window_event.window_id :: :: method != 33 =>
+                            app.terminate :: :: method
+                            return 159
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 160
+            let connected_monitor_event = MonitorEvent.Connected :: :: call
+                id = 12
+            let wrapped_monitor_event = AppEvent.Monitor :: connected_monitor_event :: call
+            select wrapped_monitor_event.take_monitor_event :: :: method:
+                when Option.Some(payload) =>
+                    select:
+                        when payload.monitor_id :: :: method != 12 =>
+                            app.terminate :: :: method
+                            return 161
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 162
+            let connected_joystick_event = JoystickEvent.Connected :: :: call
+                id = 4
+                gamepad = false
+            let wrapped_joystick_event = AppEvent.Joystick :: connected_joystick_event :: call
+            select wrapped_joystick_event.take_joystick_event :: :: method:
+                when Option.Some(payload) =>
+                    select payload.gamepad :: :: method:
+                        when Option.Some(gamepad) =>
+                            select:
+                                when gamepad =>
+                                    app.terminate :: :: method
+                                    return 163
+                                else => ()
+                        when Option.None =>
+                            app.terminate :: :: method
+                            return 164
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 165
+            let signaled_event = UserEvent.Signaled :: :: call
+                id = 6
+            let wrapped_user_event = AppEvent.User :: signaled_event :: call
+            select wrapped_user_event.take_user_event :: :: method:
+                when Option.Some(payload) =>
+                    select:
+                        when payload.user_id :: :: method != 6 =>
+                            app.terminate :: :: method
+                            return 166
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 167
+            let filtered_a = WindowEvent.Refreshed :: :: call
+                id = 77
+            let filtered_b = WindowEvent.Moved :: :: call
+                id = 77
+                x = 1
+                y = 2
+            let filtered_c = WindowEvent.Refreshed :: :: call
+                id = 88
+            let filtered_wrapped_a = AppEvent.Window :: filtered_a :: call
+            let filtered_wrapped_b = AppEvent.Window :: filtered_b :: call
+            let filtered_wrapped_c = AppEvent.Window :: filtered_c :: call
+            let filtered_batch_events = List[AppEvent] :: :: call
+            filtered_batch_events.push :: filtered_wrapped_a :: method
+            filtered_batch_events.push :: filtered_wrapped_b :: method
+            filtered_batch_events.push :: filtered_wrapped_c :: method
+            let filtered_batch = app_event_batch_from_events :: filtered_batch_events :: call
+            let filtered_window_events = filtered_batch.take_window_events_for :: 77 :: method
+            select:
+                when filtered_window_events.count :: :: method != 2 =>
+                    app.terminate :: :: method
+                    return 168
+                when filtered_batch.window_count :: :: method != 1 =>
+                    app.terminate :: :: method
+                    return 169
+                else => ()
+            let remaining_filtered = filtered_batch.take_windows :: :: method
+            select:
+                when remaining_filtered.count :: :: method != 1 =>
+                    app.terminate :: :: method
+                    return 170
+                when remaining_filtered.remove :: 0 :: method.window_id :: :: method != 88 =>
+                    app.terminate :: :: method
+                    return 171
+                else => ()
+            let created_lifecycle = WindowEvent.Created :: :: call
+                id = 41
+            let close_lifecycle = WindowEvent.CloseRequested :: :: call
+                id = 42
+            let destroyed_lifecycle = WindowEvent.Destroyed :: :: call
+                id = 43
+            let connected_monitor = MonitorEvent.Connected :: :: call
+                id = 51
+            let disconnected_monitor = MonitorEvent.Disconnected :: :: call
+                id = 52
+            let connected_pad = JoystickEvent.Connected :: :: call
+                id = 61
+                gamepad = true
+            let disconnected_pad = JoystickEvent.Disconnected :: :: call
+                id = 62
+            let lifecycle_user = UserEvent.Signaled :: :: call
+                id = 71
+            let lifecycle_window_created = AppEvent.Window :: created_lifecycle :: call
+            let lifecycle_window_close = AppEvent.Window :: close_lifecycle :: call
+            let lifecycle_window_destroyed = AppEvent.Window :: destroyed_lifecycle :: call
+            let lifecycle_monitor_connected = AppEvent.Monitor :: connected_monitor :: call
+            let lifecycle_monitor_disconnected = AppEvent.Monitor :: disconnected_monitor :: call
+            let lifecycle_joystick_connected = AppEvent.Joystick :: connected_pad :: call
+            let lifecycle_joystick_disconnected = AppEvent.Joystick :: disconnected_pad :: call
+            let lifecycle_user_event = AppEvent.User :: lifecycle_user :: call
+            let lifecycle_events = List[AppEvent] :: :: call
+            lifecycle_events.push :: lifecycle_window_created :: method
+            lifecycle_events.push :: lifecycle_window_close :: method
+            lifecycle_events.push :: lifecycle_window_destroyed :: method
+            lifecycle_events.push :: lifecycle_monitor_connected :: method
+            lifecycle_events.push :: lifecycle_monitor_disconnected :: method
+            lifecycle_events.push :: lifecycle_joystick_connected :: method
+            lifecycle_events.push :: lifecycle_joystick_disconnected :: method
+            lifecycle_events.push :: lifecycle_user_event :: method
+            let lifecycle_batch = app_event_batch_from_events :: lifecycle_events :: call
+            let created_ids = lifecycle_batch.take_created_window_ids :: :: method
+            let close_ids = lifecycle_batch.take_close_requested_window_ids :: :: method
+            let destroyed_ids = lifecycle_batch.take_destroyed_window_ids :: :: method
+            let connected_monitor_ids = lifecycle_batch.take_connected_monitor_ids :: :: method
+            let disconnected_monitor_ids = lifecycle_batch.take_disconnected_monitor_ids :: :: method
+            let connected_joysticks = lifecycle_batch.take_connected_joystick_events :: :: method
+            let disconnected_joystick_ids = lifecycle_batch.take_disconnected_joystick_ids :: :: method
+            let user_ids = lifecycle_batch.take_user_ids :: :: method
+            select:
+                when created_ids.count :: :: method != 1 =>
+                    app.terminate :: :: method
+                    return 172
+                when close_ids.count :: :: method != 1 =>
+                    app.terminate :: :: method
+                    return 173
+                when destroyed_ids.count :: :: method != 1 =>
+                    app.terminate :: :: method
+                    return 174
+                when connected_monitor_ids.count :: :: method != 1 =>
+                    app.terminate :: :: method
+                    return 175
+                when disconnected_monitor_ids.count :: :: method != 1 =>
+                    app.terminate :: :: method
+                    return 176
+                when connected_joysticks.count :: :: method != 1 =>
+                    app.terminate :: :: method
+                    return 177
+                when disconnected_joystick_ids.count :: :: method != 1 =>
+                    app.terminate :: :: method
+                    return 178
+                when user_ids.count :: :: method != 1 =>
+                    app.terminate :: :: method
+                    return 179
+                else => ()
+            select:
+                when created_ids.remove :: 0 :: method != 41 =>
+                    app.terminate :: :: method
+                    return 180
+                when close_ids.remove :: 0 :: method != 42 =>
+                    app.terminate :: :: method
+                    return 181
+                when destroyed_ids.remove :: 0 :: method != 43 =>
+                    app.terminate :: :: method
+                    return 182
+                when connected_monitor_ids.remove :: 0 :: method != 51 =>
+                    app.terminate :: :: method
+                    return 183
+                when disconnected_monitor_ids.remove :: 0 :: method != 52 =>
+                    app.terminate :: :: method
+                    return 184
+                when disconnected_joystick_ids.remove :: 0 :: method != 62 =>
+                    app.terminate :: :: method
+                    return 185
+                when user_ids.remove :: 0 :: method != 71 =>
+                    app.terminate :: :: method
+                    return 186
+                else => ()
+            let connected_joystick = connected_joysticks.remove :: 0 :: method
+            select:
+                when connected_joystick.joystick_id :: :: method != 61 =>
+                    app.terminate :: :: method
+                    return 187
+                else => ()
+            select connected_joystick.gamepad :: :: method:
+                when Option.Some(gamepad) =>
+                    select:
+                        when !gamepad =>
+                            app.terminate :: :: method
+                            return 188
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 189
+            select:
+                when !lifecycle_batch.is_empty :: :: method =>
+                    app.terminate :: :: method
+                    return 190
+                else => ()
+            select app_create_window :: app, spec :: call:
+                when Result.Ok(window) =>
+                    let window_id = window.id
+                    select window.client_api :: :: method:
+                        when ClientApi.OpenGl => ()
+                        when _ =>
+                            app.terminate :: :: method
+                            return 15
+                    select window.opengl_profile :: :: method:
+                        when OpenGlProfile.Any => ()
+                        when OpenGlProfile.Core => ()
+                        when OpenGlProfile.Compat => ()
+                        when _ =>
+                            app.terminate :: :: method
+                            return 16
+                    select window.context_creation_api :: :: method:
+                        when ContextCreationApi.Native => ()
+                        when ContextCreationApi.Egl => ()
+                        when ContextCreationApi.OsMesa => ()
+                        when _ =>
+                            app.terminate :: :: method
+                            return 17
+                    let context_major = window.context_version_major :: :: method
+                    let context_minor = window.context_version_minor :: :: method
+                    let _ = window.opengl_forward_compat :: :: method
+                    let _ = window.opengl_debug_context :: :: method
+                    let _ = window.context_no_error :: :: method
+                    let _ = window.srgb_capable :: :: method
+                    select:
+                        when context_major < 1 =>
+                            app.terminate :: :: method
+                            return 28
+                        when context_minor < 0 =>
+                            app.terminate :: :: method
+                            return 29
+                        when !window.doublebuffered :: :: method =>
+                            app.terminate :: :: method
+                            return 31
+                        else => ()
+                    select:
+                        when window.current_context :: :: method =>
+                            app.terminate :: :: method
+                            return 201
+                        else => ()
+                    window.make_context_current :: :: method
+                    select:
+                        when !window.current_context :: :: method =>
+                            app.terminate :: :: method
+                            return 202
+                        else => ()
+                    select window.set_title :: "runa_app smoke active" :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 203
+                    select window.title :: :: method:
+                        when Result.Ok(title) =>
+                            select title.find :: "runa_app smoke active" :: method:
+                                when Option.Some(0) => ()
+                                when _ =>
+                                    app.terminate :: :: method
+                                    return 204
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 205
+                    let hwnd = window.hwnd :: :: method
+                    select:
+                        when hwnd.is_null :: :: method =>
+                            app.terminate :: :: method
+                            return 1150
+                        else => ()
+                    select window.set_clipboard_string :: "rnaglfw clipboard smoke" :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 1151
+                    select window.clipboard_string :: :: method:
+                        when Result.Ok(text) =>
+                            select text.find :: "rnaglfw clipboard smoke" :: method:
+                                when Option.Some(0) => ()
+                                when _ =>
+                                    app.terminate :: :: method
+                                    return 1152
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 1153
+                    select app.clipboard_string :: :: method:
+                        when Result.Ok(text) =>
+                            select text.find :: "rnaglfw clipboard smoke" :: method:
+                                when Option.Some(0) => ()
+                                when _ =>
+                                    app.terminate :: :: method
+                                    return 1253
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 1254
+                    select app.set_clipboard_string :: "rnaglfw app clipboard smoke" :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 1255
+                    select window.clipboard_string :: :: method:
+                        when Result.Ok(text) =>
+                            select text.find :: "rnaglfw app clipboard smoke" :: method:
+                                when Option.Some(0) => ()
+                                when _ =>
+                                    app.terminate :: :: method
+                                    return 1256
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 1257
+                    let placement = window.windowed_placement :: :: method
+                    window.restore_windowed_placement :: placement :: method
+                    let _ = window.key_state :: KeyCode.A :: method
+                    let _ = window.scancode :: KeyCode.A :: method
+                    window.hide_cursor :: :: method
+                    select window.cursor_mode :: :: method:
+                        when CursorMode.Hidden => ()
+                        when _ =>
+                            app.terminate :: :: method
+                            return 918
+                    window.use_normal_cursor :: :: method
+                    select window.cursor_mode :: :: method:
+                        when CursorMode.Normal => ()
+                        when _ =>
+                            app.terminate :: :: method
+                            return 919
+                    window.set_sticky_keys :: true :: method
+                    select:
+                        when !window.sticky_keys_enabled :: :: method =>
+                            app.terminate :: :: method
+                            return 920
+                        else => ()
+                    window.set_sticky_keys :: false :: method
+                    window.set_sticky_mouse_buttons :: true :: method
+                    select:
+                        when !window.sticky_mouse_buttons_enabled :: :: method =>
+                            app.terminate :: :: method
+                            return 921
+                        else => ()
+                    window.set_sticky_mouse_buttons :: false :: method
+                    window.set_lock_key_mods :: true :: method
+                    select:
+                        when !window.lock_key_mods_enabled :: :: method =>
+                            app.terminate :: :: method
+                            return 922
+                        else => ()
+                    window.set_lock_key_mods :: false :: method
+                    window.set_raw_mouse_motion :: false :: method
+                    select:
+                        when window.raw_mouse_motion_enabled :: :: method =>
+                            app.terminate :: :: method
+                            return 923
+                        else => ()
+                    let keyboard_snapshot = window.keyboard_snapshot :: :: method
+                    select:
+                        when keyboard_snapshot.sticky_keys_enabled != window.sticky_keys_enabled :: :: method =>
+                            app.terminate :: :: method
+                            return 1294
+                        when keyboard_snapshot.lock_key_mods_enabled != window.lock_key_mods_enabled :: :: method =>
+                            app.terminate :: :: method
+                            return 1295
+                        when keyboard_snapshot.key_down :: KeyCode.A :: method != window.key_down :: KeyCode.A :: method =>
+                            app.terminate :: :: method
+                            return 1296
+                        when keyboard_snapshot.key_repeating :: KeyCode.A :: method != window.key_repeating :: KeyCode.A :: method =>
+                            app.terminate :: :: method
+                            return 1297
+                        else => ()
+                    let mouse_snapshot = window.mouse_snapshot :: :: method
+                    let live_cursor_pos = window.cursor_pos :: :: method
+                    let live_cursor_mode_value = window.cursor_mode :: :: method
+                    let mouse_snapshot_cursor_mode = cursor_mode_raw :: mouse_snapshot.cursor_mode :: call
+                    let live_cursor_mode = cursor_mode_raw :: live_cursor_mode_value :: call
+                    select:
+                        when mouse_snapshot.cursor_pos.x != live_cursor_pos.x =>
+                            app.terminate :: :: method
+                            return 1298
+                        when mouse_snapshot.cursor_pos.y != live_cursor_pos.y =>
+                            app.terminate :: :: method
+                            return 1299
+                        when mouse_snapshot_cursor_mode != live_cursor_mode =>
+                            app.terminate :: :: method
+                            return 1300
+                        when mouse_snapshot.sticky_mouse_buttons_enabled != window.sticky_mouse_buttons_enabled :: :: method =>
+                            app.terminate :: :: method
+                            return 1301
+                        when mouse_snapshot.raw_mouse_motion_supported != window.raw_mouse_motion_supported :: :: method =>
+                            app.terminate :: :: method
+                            return 1302
+                        when mouse_snapshot.raw_mouse_motion_enabled != window.raw_mouse_motion_enabled :: :: method =>
+                            app.terminate :: :: method
+                            return 1303
+                        when mouse_snapshot.button_down :: MouseButton.Left :: method != window.mouse_button_down :: MouseButton.Left :: method =>
+                            app.terminate :: :: method
+                            return 1304
+                        else => ()
+                    let input_snapshot = window.input_snapshot :: :: method
+                    select:
+                        when input_snapshot.key_down :: KeyCode.A :: method != window.key_down :: KeyCode.A :: method =>
+                            app.terminate :: :: method
+                            return 1305
+                        when input_snapshot.key_repeating :: KeyCode.A :: method != window.key_repeating :: KeyCode.A :: method =>
+                            app.terminate :: :: method
+                            return 1306
+                        when input_snapshot.mouse_button_down :: MouseButton.Left :: method != window.mouse_button_down :: MouseButton.Left :: method =>
+                            app.terminate :: :: method
+                            return 1307
+                        else => ()
+                    select key_name_from_key :: KeyCode.A :: call:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) => ()
+                    select:
+                        when app.window_count :: :: method != 1 =>
+                            app.terminate :: :: method
+                            return 993
+                        else => ()
+                    select app.window :: window_id :: method:
+                        when Result.Ok(tracked_window) =>
+                            select:
+                                when tracked_window.id != window_id =>
+                                    app.terminate :: :: method
+                                    return 994
+                                when !tracked_window.current_context :: :: method =>
+                                    app.terminate :: :: method
+                                    return 995
+                                else => ()
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 996
+                    select app.current_context_window :: :: method:
+                        when Result.Ok(current_window) =>
+                            select:
+                                when current_window.id != window_id =>
+                                    app.terminate :: :: method
+                                    return 203
+                                else => ()
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 204
+                    let wgl_context = window.wgl_context :: :: method
+                    select:
+                        when wgl_context.is_null :: :: method =>
+                            app.terminate :: :: method
+                            return 205
+                        else => ()
+                    let red_icon = rgba_color :: 255U8, 0U8, 0U8, 255U8 :: call
+                    select solid_rgba_image :: 1, 1, red_icon :: call:
+                        when Result.Ok(icon_image) =>
+                            window.set_icon_image :: icon_image :: method
+                            let icon_variants = List[RgbaImage] :: :: call
+                            icon_variants.push :: icon_image :: method
+                            select window.set_icon_images :: icon_variants :: method:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) =>
+                                    app.terminate :: :: method
+                                    return 973
+                            let empty_icons = List[RgbaImage] :: :: call
+                            select window.set_icon_images :: empty_icons :: method:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) =>
+                                    app.terminate :: :: method
+                                    return 974
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 206
+                    let green_cursor = rgba_color :: 0U8, 255U8, 0U8, 255U8 :: call
+                    select solid_rgba_image :: 1, 1, green_cursor :: call:
+                        when Result.Ok(cursor_image) =>
+                            select window.set_cursor_image :: cursor_image, 0, 0 :: method:
+                                when Option.Some(cursor) =>
+                                    window.use_default_cursor :: :: method
+                                    cursor.destroy :: :: method
+                                when Option.None =>
+                                    app.terminate :: :: method
+                                    return 207
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 208
+                    select window.gl_proc_address :: "glGetString" :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 209
+                    select gl_proc_address :: "glGetString" :: call:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 210
+                    select window.gl_extension_supported :: "WGL_ARB_extensions_string" :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 211
+                    window.swap_interval :: 0 :: method
+                    window.swap_buffers :: :: method
+                    let shared_base = opengl_window_spec :: "shared helper", 32, 32, 1, 0 :: call
+                    let shared_spec = window_spec_with_shared_context :: shared_base, window :: call
+                    select:
+                        when shared_spec.share.is_null :: :: method =>
+                            app.terminate :: :: method
+                            return 32
+                        else => ()
+                    let unshared_spec = window_spec_without_shared_context :: shared_spec :: call
+                    select:
+                        when !unshared_spec.share.is_null :: :: method =>
+                            app.terminate :: :: method
+                            return 1146
+                        else => ()
+                    select:
+                        when vulkan_supported :: :: call =>
+                            select vulkan_required_instance_extensions :: :: call:
+                                when Result.Ok(extensions) =>
+                                    select:
+                                        when extensions.is_empty :: :: method =>
+                                            app.terminate :: :: method
+                                            return 209
+                                        else => ()
+                                when Result.Err(_) =>
+                                    app.terminate :: :: method
+                                    return 210
+                            let null_instance: GlfwVkInstance = null
+                            select vulkan_instance_proc_address :: null_instance, "vkGetInstanceProcAddr" :: call:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) =>
+                                    app.terminate :: :: method
+                                    return 1149
+                        else => ()
+                    let window_ids = app.window_ids :: :: method
+                    select:
+                        when window_ids.count :: :: method != 1 => 
+                            app.terminate :: :: method
+                            return 211
+                        else => ()
+                    let only_window_id = window_ids.remove :: 0 :: method
+                    select:
+                        when only_window_id != window_id =>
+                            app.terminate :: :: method
+                            return 212
+                        else => ()
+                    let windows = app.windows_snapshot :: :: method
+                    select:
+                        when windows.count :: :: method != 1 =>
+                            app.terminate :: :: method
+                            return 213
+                        else => ()
+                    let only_window = windows.remove :: 0 :: method
+                    select:
+                        when only_window.id != window_id =>
+                            app.terminate :: :: method
+                            return 214
+                        else => ()
+                    let window_snapshots = app.window_snapshots :: :: method
+                    select:
+                        when window_snapshots.count :: :: method != 1 =>
+                            app.terminate :: :: method
+                            return 215
+                        else => ()
+                    let only_window_snapshot = window_snapshots.remove :: 0 :: method
+                    select:
+                        when only_window_snapshot.window.id != window_id =>
+                            app.terminate :: :: method
+                            return 216
+                        when only_window_snapshot.hwnd.is_null :: :: method =>
+                            app.terminate :: :: method
+                            return 1165
+                        when !only_window_snapshot.visible =>
+                            app.terminate :: :: method
+                            return 217
+                        when !only_window_snapshot.resizable =>
+                            app.terminate :: :: method
+                            return 218
+                        when only_window_snapshot.fullscreen =>
+                            app.terminate :: :: method
+                            return 219
+                        else => ()
+                    select only_window_snapshot.client_api:
+                        when ClientApi.OpenGl => ()
+                        when _ =>
+                            app.terminate :: :: method
+                            return 1176
+                    select only_window_snapshot.opengl_profile:
+                        when OpenGlProfile.Any => ()
+                        when OpenGlProfile.Core => ()
+                        when OpenGlProfile.Compat => ()
+                        when _ =>
+                            app.terminate :: :: method
+                            return 1177
+                    select only_window_snapshot.context_creation_api:
+                        when ContextCreationApi.Native => ()
+                        when ContextCreationApi.Egl => ()
+                        when ContextCreationApi.OsMesa => ()
+                        when _ =>
+                            app.terminate :: :: method
+                            return 1178
+                    select:
+                        when only_window_snapshot.context_version_major < 1 =>
+                            app.terminate :: :: method
+                            return 1179
+                        when only_window_snapshot.context_version_minor < 0 =>
+                            app.terminate :: :: method
+                            return 1180
+                        when !only_window_snapshot.current_context =>
+                            app.terminate :: :: method
+                            return 1181
+                        when !only_window_snapshot.doublebuffered =>
+                            app.terminate :: :: method
+                            return 1182
+                        when only_window_snapshot.opacity <= 0.0F32 =>
+                            app.terminate :: :: method
+                            return 1183
+                        when only_window_snapshot.sticky_keys_enabled =>
+                            app.terminate :: :: method
+                            return 1185
+                        when only_window_snapshot.sticky_mouse_buttons_enabled =>
+                            app.terminate :: :: method
+                            return 1186
+                        when only_window_snapshot.lock_key_mods_enabled =>
+                            app.terminate :: :: method
+                            return 1187
+                        when only_window_snapshot.raw_mouse_motion_enabled =>
+                            app.terminate :: :: method
+                            return 1188
+                        else => ()
+                    select only_window_snapshot.cursor_mode:
+                        when CursorMode.Normal => ()
+                        when _ =>
+                            app.terminate :: :: method
+                            return 1184
+                    let only_window_snapshot_input_cursor_mode = cursor_mode_raw :: only_window_snapshot.input.mouse.cursor_mode :: call
+                    let only_window_snapshot_cursor_mode = cursor_mode_raw :: only_window_snapshot.cursor_mode :: call
+                    select:
+                        when only_window_snapshot.input.keyboard.sticky_keys_enabled != only_window_snapshot.sticky_keys_enabled =>
+                            app.terminate :: :: method
+                            return 2211
+                        when only_window_snapshot.input.keyboard.lock_key_mods_enabled != only_window_snapshot.lock_key_mods_enabled =>
+                            app.terminate :: :: method
+                            return 2212
+                        when only_window_snapshot.input.mouse.sticky_mouse_buttons_enabled != only_window_snapshot.sticky_mouse_buttons_enabled =>
+                            app.terminate :: :: method
+                            return 2213
+                        when only_window_snapshot.input.mouse.raw_mouse_motion_enabled != only_window_snapshot.raw_mouse_motion_enabled =>
+                            app.terminate :: :: method
+                            return 2214
+                        when only_window_snapshot.input.mouse.cursor_pos.x != only_window_snapshot.cursor_pos.x =>
+                            app.terminate :: :: method
+                            return 2215
+                        when only_window_snapshot.input.mouse.cursor_pos.y != only_window_snapshot.cursor_pos.y =>
+                            app.terminate :: :: method
+                            return 2216
+                        when only_window_snapshot_input_cursor_mode != only_window_snapshot_cursor_mode =>
+                            app.terminate :: :: method
+                            return 2217
+                        when only_window_snapshot.key_down :: KeyCode.A :: method != window.key_down :: KeyCode.A :: method =>
+                            app.terminate :: :: method
+                            return 2218
+                        when only_window_snapshot.key_repeating :: KeyCode.A :: method != window.key_repeating :: KeyCode.A :: method =>
+                            app.terminate :: :: method
+                            return 2219
+                        when only_window_snapshot.mouse_button_down :: MouseButton.Left :: method != window.mouse_button_down :: MouseButton.Left :: method =>
+                            app.terminate :: :: method
+                            return 2220
+                        else => ()
+                    let _ = only_window_snapshot.opengl_forward_compat
+                    let _ = only_window_snapshot.opengl_debug_context
+                    let _ = only_window_snapshot.context_no_error
+                    let _ = only_window_snapshot.srgb_capable
+                    select only_window_snapshot.title:
+                        when Result.Ok(text) =>
+                            select text.find :: "runa_app smoke active" :: method:
+                                when Option.Some(0) => ()
+                                when _ =>
+                                    app.terminate :: :: method
+                                    return 1166
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 1167
+                    select app.window_snapshot :: window_id :: method:
+                        when Result.Ok(snapshot) =>
+                            select:
+                                when snapshot.window.id != window_id =>
+                                    app.terminate :: :: method
+                                    return 1
+                                when snapshot.hwnd.is_null :: :: method =>
+                                    app.terminate :: :: method
+                                    return 1168
+                                when !snapshot.current_context =>
+                                    app.terminate :: :: method
+                                    return 1189
+                                when snapshot.key_down :: KeyCode.A :: method != window.key_down :: KeyCode.A :: method =>
+                                    app.terminate :: :: method
+                                    return 2221
+                                when snapshot.key_repeating :: KeyCode.A :: method != window.key_repeating :: KeyCode.A :: method =>
+                                    app.terminate :: :: method
+                                    return 2222
+                                when snapshot.mouse_button_down :: MouseButton.Left :: method != window.mouse_button_down :: MouseButton.Left :: method =>
+                                    app.terminate :: :: method
+                                    return 2223
+                                else => ()
+                            let snapshot_input_cursor_mode = cursor_mode_raw :: snapshot.input.mouse.cursor_mode :: call
+                            let snapshot_cursor_mode = cursor_mode_raw :: snapshot.cursor_mode :: call
+                            select snapshot.cursor_mode:
+                                when CursorMode.Normal => ()
+                                when _ =>
+                                    app.terminate :: :: method
+                                    return 1190
+                            select:
+                                when snapshot.input.keyboard.sticky_keys_enabled != snapshot.sticky_keys_enabled =>
+                                    app.terminate :: :: method
+                                    return 2224
+                                when snapshot.input.keyboard.lock_key_mods_enabled != snapshot.lock_key_mods_enabled =>
+                                    app.terminate :: :: method
+                                    return 2225
+                                when snapshot.input.mouse.sticky_mouse_buttons_enabled != snapshot.sticky_mouse_buttons_enabled =>
+                                    app.terminate :: :: method
+                                    return 2226
+                                when snapshot.input.mouse.raw_mouse_motion_enabled != snapshot.raw_mouse_motion_enabled =>
+                                    app.terminate :: :: method
+                                    return 2227
+                                when snapshot.input.mouse.cursor_pos.x != snapshot.cursor_pos.x =>
+                                    app.terminate :: :: method
+                                    return 2228
+                                when snapshot.input.mouse.cursor_pos.y != snapshot.cursor_pos.y =>
+                                    app.terminate :: :: method
+                                    return 2229
+                                when snapshot_input_cursor_mode != snapshot_cursor_mode =>
+                                    app.terminate :: :: method
+                                    return 2230
+                                else => ()
+                            select snapshot.title:
+                                when Result.Ok(text) =>
+                                    select text.find :: "runa_app smoke active" :: method:
+                                        when Option.Some(0) => ()
+                                        when _ =>
+                                            app.terminate :: :: method
+                                            return 1169
+                                when Result.Err(_) =>
+                                    app.terminate :: :: method
+                                    return 1170
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 220
+                    let monitor_ids = app.monitor_ids :: :: method
+                    select:
+                        when monitor_ids.is_empty :: :: method =>
+                            app.terminate :: :: method
+                            return 221
+                        else => ()
+                    select app.primary_monitor_id :: :: method:
+                        when Result.Ok(primary_monitor_id) =>
+                            select app.primary_monitor :: :: method:
+                                when Result.Ok(primary_monitor) =>
+                                    select:
+                                        when !primary_monitor.available :: :: method =>
+                                            app.terminate :: :: method
+                                            return 222
+                                        when !primary_monitor.primary :: :: method =>
+                                            app.terminate :: :: method
+                                            return 223
+                                        else => ()
+                                    select primary_monitor.name_text :: :: method:
+                                        when Result.Ok(name) =>
+                                            select:
+                                                when name.is_empty :: :: method =>
+                                                    app.terminate :: :: method
+                                                    return 1154
+                                                else => ()
+                                        when Result.Err(_) =>
+                                            app.terminate :: :: method
+                                            return 1155
+                                    select primary_monitor.win32_names :: :: method:
+                                        when Result.Ok(names) =>
+                                            select:
+                                                when names.adapter_name.is_empty :: :: method =>
+                                                    app.terminate :: :: method
+                                                    return 1156
+                                                when names.monitor_name.is_empty :: :: method =>
+                                                    app.terminate :: :: method
+                                                    return 1157
+                                                else => ()
+                                            select primary_monitor.win32_adapter_name_text :: :: method:
+                                                when Result.Ok(adapter_name) =>
+                                                    select adapter_name.find :: names.adapter_name :: method:
+                                                        when Option.Some(0) => ()
+                                                        when _ =>
+                                                            app.terminate :: :: method
+                                                            return 1158
+                                                    select names.adapter_name.find :: adapter_name :: method:
+                                                        when Option.Some(0) => ()
+                                                        when _ =>
+                                                            app.terminate :: :: method
+                                                            return 1163
+                                                when Result.Err(_) =>
+                                                    app.terminate :: :: method
+                                                    return 1159
+                                            select primary_monitor.win32_monitor_name_text :: :: method:
+                                                when Result.Ok(monitor_name) =>
+                                                    select monitor_name.find :: names.monitor_name :: method:
+                                                        when Option.Some(0) => ()
+                                                        when _ =>
+                                                            app.terminate :: :: method
+                                                            return 1160
+                                                    select names.monitor_name.find :: monitor_name :: method:
+                                                        when Option.Some(0) => ()
+                                                        when _ =>
+                                                            app.terminate :: :: method
+                                                            return 1164
+                                                when Result.Err(_) =>
+                                                    app.terminate :: :: method
+                                                    return 1161
+                                        when Result.Err(_) =>
+                                            app.terminate :: :: method
+                                            return 1162
+                                    let _ = primary_monitor.screen_pos :: :: method
+                                    let work_rect = primary_monitor.work_rect :: :: method
+                                    select:
+                                        when work_rect.width <= 0 =>
+                                            app.terminate :: :: method
+                                            return 224
+                                        when work_rect.height <= 0 =>
+                                            app.terminate :: :: method
+                                            return 225
+                                        else => ()
+                                    let _ = primary_monitor.physical_size_mm :: :: method
+                                    let _ = primary_monitor.desktop_scale :: :: method
+                                    let modes = primary_monitor.video_modes_snapshot :: :: method
+                                    select:
+                                        when modes.is_empty :: :: method =>
+                                            app.terminate :: :: method
+                                            return 226
+                                        else => ()
+                                    let fullscreen_mode = modes.remove :: 0 :: method
+                                    select fullscreen_window_spec_with_video_mode :: "mode spec", primary_monitor, fullscreen_mode :: call:
+                                        when Result.Ok(mode_spec) =>
+                                            let Result.Ok(mode_width) = fullscreen_mode.width as Maybe[Index] else =>
+                                                app.terminate :: :: method
+                                                return 243
+                                            let Result.Ok(mode_height) = fullscreen_mode.height as Maybe[Index] else =>
+                                                app.terminate :: :: method
+                                                return 244
+                                            select:
+                                                when mode_spec.width != mode_width =>
+                                                    app.terminate :: :: method
+                                                    return 245
+                                                when mode_spec.height != mode_height =>
+                                                    app.terminate :: :: method
+                                                    return 246
+                                                when mode_spec.refresh_rate != fullscreen_mode.refresh_rate =>
+                                                    app.terminate :: :: method
+                                                    return 247
+                                                else => ()
+                                            let windowed_mode_spec = window_spec_windowed :: mode_spec :: call
+                                            select:
+                                                when !windowed_mode_spec.monitor.is_null :: :: method =>
+                                                    app.terminate :: :: method
+                                                    return 1147
+                                                else => ()
+                                        when Result.Err(_) =>
+                                            app.terminate :: :: method
+                                            return 248
+                                    let fluent_fullscreen_base = window_spec :: "fluent fullscreen", 1, 1 :: call
+                                    select fluent_fullscreen_base.with_fullscreen_video_mode :: primary_monitor, fullscreen_mode :: method:
+                                        when Result.Ok(fluent_mode_spec) =>
+                                            let Result.Ok(mode_width) = fullscreen_mode.width as Maybe[Index] else =>
+                                                app.terminate :: :: method
+                                                return 258
+                                            let Result.Ok(mode_height) = fullscreen_mode.height as Maybe[Index] else =>
+                                                app.terminate :: :: method
+                                                return 259
+                                            select:
+                                                when fluent_mode_spec.width != mode_width =>
+                                                    app.terminate :: :: method
+                                                    return 260
+                                                when fluent_mode_spec.height != mode_height =>
+                                                    app.terminate :: :: method
+                                                    return 261
+                                                when fluent_mode_spec.refresh_rate != fullscreen_mode.refresh_rate =>
+                                                    app.terminate :: :: method
+                                                    return 262
+                                                when fluent_mode_spec.monitor.is_null :: :: method =>
+                                                    app.terminate :: :: method
+                                                    return 263
+                                                else => ()
+                                            let windowed_fluent_mode_spec = fluent_mode_spec.with_windowed :: :: method
+                                            select:
+                                                when !windowed_fluent_mode_spec.monitor.is_null :: :: method =>
+                                                    app.terminate :: :: method
+                                                    return 1148
+                                                else => ()
+                                        when Result.Err(_) =>
+                                            app.terminate :: :: method
+                                            return 264
+                                    select primary_monitor.fullscreen_spec_with_video_mode :: fullscreen_mode :: method:
+                                        when Result.Ok(mode_monitor_spec) =>
+                                            select:
+                                                when mode_monitor_spec.size.width != fullscreen_mode.width =>
+                                                    app.terminate :: :: method
+                                                    return 249
+                                                when mode_monitor_spec.size.height != fullscreen_mode.height =>
+                                                    app.terminate :: :: method
+                                                    return 250
+                                                when mode_monitor_spec.refresh_rate != fullscreen_mode.refresh_rate =>
+                                                    app.terminate :: :: method
+                                                    return 251
+                                                else => ()
+                                        when Result.Err(_) =>
+                                            app.terminate :: :: method
+                                            return 252
+                                    select window.enter_fullscreen_with_video_mode :: primary_monitor, fullscreen_mode :: method:
+                                        when Result.Ok(_) =>
+                                            select:
+                                                when !window.fullscreen :: :: method =>
+                                                    app.terminate :: :: method
+                                                    return 253
+                                                else => ()
+                                            window.restore_windowed_placement :: placement :: method
+                                        when Result.Err(_) =>
+                                            app.terminate :: :: method
+                                            return 254
+                                    select primary_monitor.gamma_ramp_snapshot :: :: method:
+                                        when Option.Some(ramp) =>
+                                            select:
+                                                when ramp.empty :: :: method =>
+                                                    app.terminate :: :: method
+                                                    return 227
+                                                else => ()
+                                            select primary_monitor.apply_gamma_ramp :: ramp :: method:
+                                                when Result.Ok(_) => ()
+                                                when Result.Err(_) =>
+                                                    app.terminate :: :: method
+                                                    return 917
+                                        when Option.None => ()
+                                    let monitor_snapshots = app.monitor_snapshots :: :: method
+                                    select:
+                                        when monitor_snapshots.is_empty :: :: method =>
+                                            app.terminate :: :: method
+                                            return 228
+                                        else => ()
+                                    repeat while !monitor_snapshots.is_empty :: :: method:
+                                        let snapshot = monitor_snapshots.remove :: 0 :: method
+                                        let Result.Ok(snapshot_mode_count) = snapshot.video_modes.count :: :: method as Maybe[CInt] else =>
+                                            app.terminate :: :: method
+                                            return 1231
+                                        select:
+                                            when snapshot_mode_count != snapshot.video_mode_count =>
+                                                app.terminate :: :: method
+                                                return 1232
+                                            else => ()
+                                        select snapshot.current_video_mode:
+                                            when Option.Some(current_mode) =>
+                                                select snapshot.gamma_ramp:
+                                                    when Option.Some(ramp) =>
+                                                        select:
+                                                            when ramp.empty :: :: method =>
+                                                                app.terminate :: :: method
+                                                                return 1234
+                                                            else => ()
+                                                    when Option.None => ()
+                                                let found_mode = false
+                                                let modes = snapshot.video_modes
+                                                repeat while !modes.is_empty :: :: method:
+                                                    let mode = modes.remove :: 0 :: method
+                                                    select:
+                                                        when mode.width == current_mode.width && mode.height == current_mode.height && mode.refresh_rate == current_mode.refresh_rate =>
+                                                            found_mode = true
+                                                            break
+                                                        else => ()
+                                                select:
+                                                    when !found_mode =>
+                                                        app.terminate :: :: method
+                                                        return 1233
+                                                    else => ()
+                                            when Option.None =>
+                                                select snapshot.gamma_ramp:
+                                                    when Option.Some(ramp) =>
+                                                        select:
+                                                            when ramp.empty :: :: method =>
+                                                                app.terminate :: :: method
+                                                                return 1234
+                                                            else => ()
+                                                    when Option.None => ()
+                                when Result.Err(_) =>
+                                    app.terminate :: :: method
+                                    return 229
+                            select app.primary_monitor_snapshot :: :: method:
+                                when Result.Ok(snapshot) =>
+                                    select:
+                                        when snapshot.id != primary_monitor_id =>
+                                            app.terminate :: :: method
+                                            return 230
+                                        when !snapshot.primary =>
+                                            app.terminate :: :: method
+                                            return 231
+                                        else => ()
+                                    let Result.Ok(primary_snapshot_mode_count) = snapshot.video_modes.count :: :: method as Maybe[CInt] else =>
+                                        app.terminate :: :: method
+                                        return 1235
+                                    select:
+                                        when primary_snapshot_mode_count != snapshot.video_mode_count =>
+                                            app.terminate :: :: method
+                                            return 1236
+                                        else => ()
+                                    select snapshot.name_text:
+                                        when Result.Ok(name) =>
+                                            select:
+                                                when name.is_empty :: :: method =>
+                                                    app.terminate :: :: method
+                                                    return 1171
+                                                else => ()
+                                        when Result.Err(_) =>
+                                            app.terminate :: :: method
+                                            return 1172
+                                    select snapshot.win32_names:
+                                        when Result.Ok(names) =>
+                                            select:
+                                                when names.adapter_name.is_empty :: :: method =>
+                                                    app.terminate :: :: method
+                                                    return 1173
+                                                when names.monitor_name.is_empty :: :: method =>
+                                                    app.terminate :: :: method
+                                                    return 1174
+                                                else => ()
+                                        when Result.Err(_) =>
+                                            app.terminate :: :: method
+                                            return 1175
+                                    select snapshot.current_video_mode:
+                                        when Option.Some(current_mode) =>
+                                            select snapshot.gamma_ramp:
+                                                when Option.Some(ramp) =>
+                                                    select:
+                                                        when ramp.empty :: :: method =>
+                                                            app.terminate :: :: method
+                                                            return 1238
+                                                        else => ()
+                                                when Option.None => ()
+                                            let found_mode = false
+                                            let modes = snapshot.video_modes
+                                            repeat while !modes.is_empty :: :: method:
+                                                let mode = modes.remove :: 0 :: method
+                                                select:
+                                                    when mode.width == current_mode.width && mode.height == current_mode.height && mode.refresh_rate == current_mode.refresh_rate =>
+                                                        found_mode = true
+                                                        break
+                                                    else => ()
+                                            select:
+                                                when !found_mode =>
+                                                    app.terminate :: :: method
+                                                    return 1237
+                                                else => ()
+                                        when Option.None =>
+                                            select snapshot.gamma_ramp:
+                                                when Option.Some(ramp) =>
+                                                    select:
+                                                        when ramp.empty :: :: method =>
+                                                            app.terminate :: :: method
+                                                            return 1238
+                                                        else => ()
+                                                when Option.None => ()
+                                when Result.Err(_) =>
+                                    app.terminate :: :: method
+                                    return 232
+                            let app_snapshot = app.snapshot :: :: method
+                            let live_timer_value = app.timer_value :: :: method
+                            let live_timer_frequency = app.timer_frequency :: :: method
+                            let live_version_info = app.version_info :: :: method
+                            let live_version_string = app.version_string :: :: method
+                            let live_platform = app.current_platform :: :: method
+                            let app_snapshot_platform_raw = runtime_platform_raw :: app_snapshot.platform :: call
+                            let live_platform_raw = runtime_platform_raw :: live_platform :: call
+                            select:
+                                when !app_snapshot.live =>
+                                    app.terminate :: :: method
+                                    return 1239
+                                when app_snapshot.time < 0.0 =>
+                                    app.terminate :: :: method
+                                    return 1266
+                                when app_snapshot.timer_value > live_timer_value =>
+                                    app.terminate :: :: method
+                                    return 1267
+                                when app_snapshot.timer_frequency != live_timer_frequency =>
+                                    app.terminate :: :: method
+                                    return 1268
+                                when app_snapshot.window_count != 1 =>
+                                    app.terminate :: :: method
+                                    return 1240
+                                when app_snapshot.windows.count :: :: method != app_snapshot.window_count =>
+                                    app.terminate :: :: method
+                                    return 1241
+                                when app_snapshot.monitors.count :: :: method != app_snapshot.monitor_count =>
+                                    app.terminate :: :: method
+                                    return 1242
+                                when app_snapshot.joysticks.count :: :: method != app_snapshot.connected_joystick_count =>
+                                    app.terminate :: :: method
+                                    return 1243
+                                when app_snapshot.has_pending_events && app_snapshot.pending_event_count == 0 =>
+                                    app.terminate :: :: method
+                                    return 1244
+                                when !app_snapshot.has_pending_events && app_snapshot.pending_event_count != 0 =>
+                                    app.terminate :: :: method
+                                    return 1245
+                                when app_snapshot_platform_raw != live_platform_raw =>
+                                    app.terminate :: :: method
+                                    return 1269
+                                when app_snapshot.version_info.major != live_version_info.major =>
+                                    app.terminate :: :: method
+                                    return 1270
+                                when app_snapshot.version_info.minor != live_version_info.minor =>
+                                    app.terminate :: :: method
+                                    return 1271
+                                when app_snapshot.version_info.revision != live_version_info.revision =>
+                                    app.terminate :: :: method
+                                    return 1272
+                                else => ()
+                            select app_snapshot.current_context_window_id:
+                                when Option.Some(id) =>
+                                    select:
+                                        when id != window_id =>
+                                            app.terminate :: :: method
+                                            return 1246
+                                        else => ()
+                                when Option.None =>
+                                    app.terminate :: :: method
+                                    return 1247
+                            select app_snapshot.primary_monitor_id:
+                                when Option.Some(id) =>
+                                    select:
+                                        when id != primary_monitor_id =>
+                                            app.terminate :: :: method
+                                            return 1248
+                                        else => ()
+                                when Option.None =>
+                                    app.terminate :: :: method
+                                    return 1249
+                            select:
+                                when !app_snapshot.has_window :: window_id :: method =>
+                                    app.terminate :: :: method
+                                    return 1283
+                                else => ()
+                            select app_snapshot.window_index :: window_id :: method:
+                                when Option.Some(index) =>
+                                    select:
+                                        when index != 0 =>
+                                            app.terminate :: :: method
+                                            return 1284
+                                        else => ()
+                                when Option.None =>
+                                    app.terminate :: :: method
+                                    return 1285
+                            select app_snapshot.current_context_window_index :: :: method:
+                                when Option.Some(index) =>
+                                    select:
+                                        when index != 0 =>
+                                            app.terminate :: :: method
+                                            return 1286
+                                        else => ()
+                                when Option.None =>
+                                    app.terminate :: :: method
+                                    return 1287
+                            select:
+                                when !app_snapshot.has_monitor :: primary_monitor_id :: method =>
+                                    app.terminate :: :: method
+                                    return 1288
+                                else => ()
+                            select app_snapshot.primary_monitor_index :: :: method:
+                                when Option.Some(_) => ()
+                                when Option.None =>
+                                    app.terminate :: :: method
+                                    return 1289
+                            select:
+                                when app_snapshot.windows.is_empty :: :: method =>
+                                    app.terminate :: :: method
+                                    return 1250
+                                else => ()
+                            select:
+                                when app_snapshot.monitors.is_empty :: :: method =>
+                                    app.terminate :: :: method
+                                    return 1252
+                                else => ()
+                            let slot_zero_snapshot = app.joystick_snapshot :: 0 :: method
+                            select app_snapshot.joystick_index :: 0 :: method:
+                                when Option.Some(_) =>
+                                    select:
+                                        when !slot_zero_snapshot.present =>
+                                            app.terminate :: :: method
+                                            return 1290
+                                        when !app_snapshot.has_joystick :: 0 :: method =>
+                                            app.terminate :: :: method
+                                            return 1291
+                                        else => ()
+                                when Option.None =>
+                                    select:
+                                        when slot_zero_snapshot.present =>
+                                            app.terminate :: :: method
+                                            return 1292
+                                        when app_snapshot.has_joystick :: 0 :: method =>
+                                            app.terminate :: :: method
+                                            return 1293
+                                        else => ()
+                            select app_snapshot.version_string:
+                                when Result.Ok(snapshot_text) =>
+                                    select live_version_string:
+                                        when Result.Ok(live_text) =>
+                                            select:
+                                                when snapshot_text.byte_count :: :: method != live_text.byte_count :: :: method =>
+                                                    app.terminate :: :: method
+                                                    return 1273
+                                                when !snapshot_text.starts_with :: live_text :: method =>
+                                                    app.terminate :: :: method
+                                                    return 1274
+                                                else => ()
+                                        when Result.Err(_) =>
+                                            app.terminate :: :: method
+                                            return 1275
+                                when Result.Err(_) =>
+                                    app.terminate :: :: method
+                                    return 1276
+                            select app_snapshot.last_error:
+                                when Result.Ok(Option.None) => ()
+                                when Result.Ok(Option.Some(_)) =>
+                                    app.terminate :: :: method
+                                    return 1277
+                                when Result.Err(_) =>
+                                    app.terminate :: :: method
+                                    return 1278
+                            let saw_primary = false
+                            repeat while !monitor_ids.is_empty :: :: method:
+                                let id = monitor_ids.remove :: 0 :: method
+                                select:
+                                    when id == primary_monitor_id =>
+                                        saw_primary = true
+                                        break
+                                    else => ()
+                            select:
+                                when !saw_primary =>
+                                    app.terminate :: :: method
+                                    return 233
+                                else => ()
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 234
+                    let first_joystick_snapshot = app.joystick_snapshot :: 0 :: method
+                    select:
+                        when first_joystick_snapshot.present =>
+                            select first_joystick_snapshot.name_text:
+                                when Result.Ok(Option.Some(name)) =>
+                                    select:
+                                        when name.is_empty :: :: method =>
+                                            app.terminate :: :: method
+                                            return 1195
+                                        else => ()
+                                when _ =>
+                                    app.terminate :: :: method
+                                    return 1196
+                            select first_joystick_snapshot.guid_text:
+                                when Result.Ok(Option.Some(guid)) =>
+                                    select:
+                                        when guid.is_empty :: :: method =>
+                                            app.terminate :: :: method
+                                            return 1197
+                                        else => ()
+                                when _ =>
+                                    app.terminate :: :: method
+                                    return 1198
+                            let Result.Ok(first_axis_len) = first_joystick_snapshot.axes.count :: :: method as Maybe[CInt] else =>
+                                app.terminate :: :: method
+                                return 1199
+                            let Result.Ok(first_button_len) = first_joystick_snapshot.buttons.count :: :: method as Maybe[CInt] else =>
+                                app.terminate :: :: method
+                                return 1200
+                            let Result.Ok(first_hat_len) = first_joystick_snapshot.hats.count :: :: method as Maybe[CInt] else =>
+                                app.terminate :: :: method
+                                return 1201
+                            select:
+                                when first_axis_len != first_joystick_snapshot.axis_count =>
+                                    app.terminate :: :: method
+                                    return 1202
+                                when first_button_len != first_joystick_snapshot.button_count =>
+                                    app.terminate :: :: method
+                                    return 1203
+                                when first_hat_len != first_joystick_snapshot.hat_count =>
+                                    app.terminate :: :: method
+                                    return 1204
+                                else => ()
+                            select:
+                                when first_joystick_snapshot.gamepad =>
+                                    select first_joystick_snapshot.gamepad_name_text:
+                                        when Result.Ok(Option.Some(name)) =>
+                                            select:
+                                                when name.is_empty :: :: method =>
+                                                    app.terminate :: :: method
+                                                    return 1205
+                                                else => ()
+                                        when _ =>
+                                            app.terminate :: :: method
+                                            return 1206
+                                    select first_joystick_snapshot.gamepad_state:
+                                        when Option.Some(state) =>
+                                            let _ = state.left_stick_x :: :: method
+                                            let _ = state.right_trigger :: :: method
+                                            let _ = state.button_down :: GamepadButton.A :: method
+                                        when Option.None => ()
+                                else =>
+                                    select first_joystick_snapshot.gamepad_name_text:
+                                        when Result.Ok(Option.None) => ()
+                                        when _ =>
+                                            app.terminate :: :: method
+                                            return 1207
+                        else =>
+                            select first_joystick_snapshot.name_text:
+                                when Result.Ok(Option.None) => ()
+                                when _ =>
+                                    app.terminate :: :: method
+                                    return 1208
+                            select first_joystick_snapshot.guid_text:
+                                when Result.Ok(Option.None) => ()
+                                when _ =>
+                                    app.terminate :: :: method
+                                    return 1209
+                            select first_joystick_snapshot.gamepad_name_text:
+                                when Result.Ok(Option.None) => ()
+                                when _ =>
+                                    app.terminate :: :: method
+                                    return 1210
+                            select first_joystick_snapshot.gamepad_state:
+                                when Option.None => ()
+                                when Option.Some(_) =>
+                                    app.terminate :: :: method
+                                    return 1211
+                            select:
+                                when first_joystick_snapshot.gamepad =>
+                                    app.terminate :: :: method
+                                    return 1212
+                                when !first_joystick_snapshot.axes.is_empty :: :: method =>
+                                    app.terminate :: :: method
+                                    return 1213
+                                when !first_joystick_snapshot.buttons.is_empty :: :: method =>
+                                    app.terminate :: :: method
+                                    return 1214
+                                when !first_joystick_snapshot.hats.is_empty :: :: method =>
+                                    app.terminate :: :: method
+                                    return 1215
+                                else => ()
+                    let joystick_snapshots = app.joystick_snapshots :: :: method
+                    repeat while !joystick_snapshots.is_empty :: :: method:
+                        let snapshot = joystick_snapshots.remove :: 0 :: method
+                        select:
+                            when !snapshot.present =>
+                                app.terminate :: :: method
+                                return 235
+                            else => ()
+                        select snapshot.name_text:
+                            when Result.Ok(Option.Some(name)) =>
+                                select:
+                                    when name.is_empty :: :: method =>
+                                        app.terminate :: :: method
+                                        return 1216
+                                    else => ()
+                            when _ =>
+                                app.terminate :: :: method
+                                return 1217
+                        select snapshot.guid_text:
+                            when Result.Ok(Option.Some(guid)) =>
+                                select:
+                                    when guid.is_empty :: :: method =>
+                                        app.terminate :: :: method
+                                        return 1218
+                                    else => ()
+                            when _ =>
+                                app.terminate :: :: method
+                                return 1219
+                        let Result.Ok(axis_len) = snapshot.axes.count :: :: method as Maybe[CInt] else =>
+                            app.terminate :: :: method
+                            return 1220
+                        let Result.Ok(button_len) = snapshot.buttons.count :: :: method as Maybe[CInt] else =>
+                            app.terminate :: :: method
+                            return 1221
+                        let Result.Ok(hat_len) = snapshot.hats.count :: :: method as Maybe[CInt] else =>
+                            app.terminate :: :: method
+                            return 1222
+                        select:
+                            when axis_len != snapshot.axis_count =>
+                                app.terminate :: :: method
+                                return 1223
+                            when button_len != snapshot.button_count =>
+                                app.terminate :: :: method
+                                return 1224
+                            when hat_len != snapshot.hat_count =>
+                                app.terminate :: :: method
+                                return 1225
+                            else => ()
+                        select:
+                            when snapshot.gamepad =>
+                                select snapshot.gamepad_name_text:
+                                    when Result.Ok(Option.Some(name)) =>
+                                        select:
+                                            when name.is_empty :: :: method =>
+                                                app.terminate :: :: method
+                                                return 1226
+                                            else => ()
+                                    when _ =>
+                                        app.terminate :: :: method
+                                        return 1227
+                                select snapshot.gamepad_state:
+                                    when Option.Some(state) =>
+                                        let _ = state.left_stick_x :: :: method
+                                        let _ = state.right_trigger :: :: method
+                                        let _ = state.button_down :: GamepadButton.A :: method
+                                    when Option.None => ()
+                            else =>
+                                select snapshot.gamepad_name_text:
+                                    when Result.Ok(Option.None) => ()
+                                    when _ =>
+                                        app.terminate :: :: method
+                                        return 1228
+                    let gamepad_snapshots = app.gamepad_snapshots :: :: method
+                    repeat while !gamepad_snapshots.is_empty :: :: method:
+                        let snapshot = gamepad_snapshots.remove :: 0 :: method
+                        select:
+                            when !snapshot.present =>
+                                app.terminate :: :: method
+                                return 1229
+                            when !snapshot.gamepad =>
+                                app.terminate :: :: method
+                                return 1230
+                            else => ()
+                    let joysticks = app.connected_joysticks :: :: method
+                    repeat while !joysticks.is_empty :: :: method:
+                        let joystick = joysticks.remove :: 0 :: method
+                        select joystick.name_text :: :: method:
+                            when Result.Ok(_) => ()
+                            when Result.Err(_) => ()
+                        select joystick.guid_text :: :: method:
+                            when Result.Ok(_) => ()
+                            when Result.Err(_) => ()
+                        let _ = joystick.axes :: :: method
+                        let _ = joystick.buttons :: :: method
+                        let _ = joystick.hats :: :: method
+                        select:
+                            when joystick.gamepad :: :: method =>
+                                select joystick.gamepad_name_text :: :: method:
+                                    when Result.Ok(_) => ()
+                                    when Result.Err(_) => ()
+                                select joystick.gamepad_state :: :: method:
+                                    when Option.Some(state) =>
+                                        let _ = state.left_stick_x :: :: method
+                                        let _ = state.left_stick_y :: :: method
+                                        let _ = state.right_stick_x :: :: method
+                                        let _ = state.right_stick_y :: :: method
+                                        let _ = state.left_trigger :: :: method
+                                        let _ = state.right_trigger :: :: method
+                                        let _ = state.button_down :: GamepadButton.A :: method
+                                    when Option.None => ()
+                            else => ()
+                    select:
+                        when !window.visible :: :: method =>
+                            app.terminate :: :: method
+                            return 1
+                        when !window.resizable :: :: method =>
+                            app.terminate :: :: method
+                            return 1
+                        when window.fullscreen :: :: method =>
+                            app.terminate :: :: method
+                            return 1
+                        else => ()
+                    window.use_default_cursor :: :: method
+                    select:
+                        when !app.has_windows :: :: method =>
+                            app.terminate :: :: method
+                            return 1
+                        when !app.window_exists :: window_id :: method =>
+                            app.terminate :: :: method
+                            return 1
+                        when app.has_close_requested_windows :: :: method =>
+                            app.terminate :: :: method
+                            return 1
+                        when app.close_requested_window_count :: :: method != 0 =>
+                            app.terminate :: :: method
+                            return 1
+                        else => ()
+                    app.post_user_event :: 7 :: method
+                    let created_ids = app.poll_created_window_ids :: :: method
+                    select:
+                        when created_ids.count :: :: method != 1 =>
+                            app.terminate :: :: method
+                            return 1294
+                        when created_ids.remove :: 0 :: method != window_id =>
+                            app.terminate :: :: method
+                            return 1295
+                        else => ()
+                    select app.next_user_event :: :: method:
+                        when Option.Some(user_event) =>
+                            let id = user_event.user_id :: :: method
+                            select:
+                                when id != 7 =>
+                                    app.terminate :: :: method
+                                    return 1
+                                else => ()
+                        when Option.None =>
+                            app.terminate :: :: method
+                            return 1
+                    app.post_user_event :: 8 :: method
+                    let user_ids = app.wait_timeout_user_ids :: 0.0 :: method
+                    select:
+                        when user_ids.count :: :: method != 1 =>
+                            app.terminate :: :: method
+                            return 1296
+                        when user_ids.remove :: 0 :: method != 8 =>
+                            app.terminate :: :: method
+                            return 1297
+                        else => ()
+                    app.post_user_event :: 9 :: method
+                    select app.wait_timeout_user_event :: 0.0 :: method:
+                        when Result.Ok(Option.Some(user_event)) =>
+                            select:
+                                when user_event.user_id :: :: method != 9 =>
+                                    app.terminate :: :: method
+                                    return 1
+                                else => ()
+                        when _ =>
+                            app.terminate :: :: method
+                            return 1
+                    window.close :: :: method
+                    let closing_event_ids = app.wait_timeout_close_requested_window_ids :: 0.0 :: method
+                    select:
+                        when closing_event_ids.count :: :: method != 1 =>
+                            app.terminate :: :: method
+                            return 1298
+                        when closing_event_ids.remove :: 0 :: method != window_id =>
+                            app.terminate :: :: method
+                            return 1299
+                        else => ()
+                    select:
+                        when !app.has_close_requested_windows :: :: method =>
+                            app.terminate :: :: method
+                            return 1
+                        when app.close_requested_window_count :: :: method != 1 =>
+                            app.terminate :: :: method
+                            return 1
+                        else => ()
+                    let close_requested_ids = app.close_requested_window_ids :: :: method
+                    select:
+                        when close_requested_ids.count :: :: method != 1 =>
+                            app.terminate :: :: method
+                            return 1
+                        when close_requested_ids.remove :: 0 :: method != window_id =>
+                            app.terminate :: :: method
+                            return 1
+                        else => ()
+                    let closing_windows = app.close_requested_windows :: :: method
+                    select:
+                        when closing_windows.count :: :: method != 1 =>
+                            app.terminate :: :: method
+                            return 1
+                        when closing_windows.remove :: 0 :: method.id != window_id =>
+                            app.terminate :: :: method
+                            return 1
+                        else => ()
+                    let closing_snapshots = app.close_requested_window_snapshots :: :: method
+                    select:
+                        when closing_snapshots.count :: :: method != 1 =>
+                            app.terminate :: :: method
+                            return 1
+                        else => ()
+                    let closing_snapshot = closing_snapshots.remove :: 0 :: method
+                    select:
+                        when closing_snapshot.window.id != window_id =>
+                            app.terminate :: :: method
+                            return 1
+                        when !closing_snapshot.should_close =>
+                            app.terminate :: :: method
+                            return 1
+                        else => ()
+                    select closing_snapshot.title:
+                        when Result.Ok(text) =>
+                            select text.find :: "runa_app smoke active" :: method:
+                                when Option.Some(0) => ()
+                                when _ =>
+                                    app.terminate :: :: method
+                                    return 1191
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 1192
+                    select:
+                        when closing_snapshot.hwnd.is_null :: :: method =>
+                            app.terminate :: :: method
+                            return 1193
+                        when !closing_snapshot.current_context =>
+                            app.terminate :: :: method
+                            return 1194
+                        else => ()
+                    select app.destroy_window_by_id :: window_id :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) =>
+                            app.terminate :: :: method
+                            return 1300
+                    let destroyed_ids = app.poll_destroyed_window_ids :: :: method
+                    select:
+                        when destroyed_ids.count :: :: method != 1 =>
+                            app.terminate :: :: method
+                            return 1301
+                        when destroyed_ids.remove :: 0 :: method != window_id =>
+                            app.terminate :: :: method
+                            return 1302
+                        when app.has_windows :: :: method =>
+                            app.terminate :: :: method
+                            return 1303
+                        when app.window_exists :: window_id :: method =>
+                            app.terminate :: :: method
+                            return 1304
+                        when app.has_close_requested_windows :: :: method =>
+                            app.terminate :: :: method
+                            return 1305
+                        when app.close_requested_window_count :: :: method != 0 =>
+                            app.terminate :: :: method
+                            return 1306
+                        else => ()
+                    app.terminate :: :: method
+                    return 0
+                when Result.Err(_) =>
+                    app.terminate :: :: method
+                    return 1
+        when Result.Err(_) => return 1

@@ -1,0 +1,221 @@
+use std.{Option, Result, Str}
+use runa_app_run.app_create_window
+use runa_app_run.{App, AppError, AppHandler, ControlFlow, GamepadButton}
+use runa_app_run.{CursorMode, KeyCode, MouseButton}
+use runa_app_run.{JoystickEvent, MonitorEvent, WindowEvent, WindowId}
+use runa_app_run.UserEvent
+use runa_app_run.{GlfwVkAllocationCallbacksRaw, GlfwVkInstance, GlfwVkPhysicalDevice}
+use runa_app_run.hidden_window_spec
+use runa_app_run.vulkan_window_support_report
+
+const WINDOW_TITLE: Str = "runa_app run smoke"
+
+pub struct SmokeHandler:
+    pub window_id: Option[WindowId]
+    pub saw_created: Bool
+    pub saw_user: Bool
+
+impl SmokeHandler:
+    fn expected_window_id(read self) -> Result[WindowId, AppError]:
+        select self.window_id:
+            when Option.Some(id) => return Result.Ok :: id :: call
+            when Option.None => return Result.Err :: AppError.WindowNotFound :: call
+
+impl AppHandler for SmokeHandler:
+    fn started(edit self, edit app: App) -> Result[ControlFlow, AppError]:
+        let spec = hidden_window_spec :: WINDOW_TITLE, 640, 480 :: call
+        select app_create_window :: app, spec :: call:
+            when Result.Ok(window) =>
+                self.window_id = Option.Some :: window.id :: call
+                let _ = app.window_ids :: :: method
+                let _ = app.windows_snapshot :: :: method
+                let _ = app.window_snapshots :: :: method
+                let _ = app.monitor_ids :: :: method
+                let _ = app.monitor_snapshots :: :: method
+                let _ = app.connected_joystick_count :: :: method
+                let _ = app.joystick_snapshots :: :: method
+                app.post_user_event :: 11 :: method
+                return Result.Ok :: ControlFlow.Wait :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn window_event(edit self, edit app: App, event: WindowEvent) -> Result[ControlFlow, AppError]:
+        select event:
+            when WindowEvent.Created(id = id) =>
+                let Result.Ok(expected) = self.expected_window_id :: :: method else => return Result.Err :: AppError.WindowNotFound :: call
+                select:
+                    when id == expected =>
+                        self.saw_created = true
+                        select app.window :: id :: method:
+                            when Result.Ok(window) =>
+                                let _ = window.resizable :: :: method
+                                let _ = window.fullscreen :: :: method
+                                let keyboard_snapshot = window.keyboard_snapshot :: :: method
+                                let mouse_snapshot = window.mouse_snapshot :: :: method
+                                let input_snapshot = window.input_snapshot :: :: method
+                                select:
+                                    when window.key_down :: KeyCode.A :: method != keyboard_snapshot.key_down :: KeyCode.A :: method =>
+                                        return Result.Err :: AppError.WindowNotFound :: call
+                                    when window.key_repeating :: KeyCode.A :: method != keyboard_snapshot.key_repeating :: KeyCode.A :: method =>
+                                        return Result.Err :: AppError.WindowNotFound :: call
+                                    when window.mouse_button_down :: MouseButton.Left :: method != mouse_snapshot.button_down :: MouseButton.Left :: method =>
+                                        return Result.Err :: AppError.WindowNotFound :: call
+                                    when input_snapshot.key_down :: KeyCode.A :: method != window.key_down :: KeyCode.A :: method =>
+                                        return Result.Err :: AppError.WindowNotFound :: call
+                                    when input_snapshot.mouse_button_down :: MouseButton.Left :: method != window.mouse_button_down :: MouseButton.Left :: method =>
+                                        return Result.Err :: AppError.WindowNotFound :: call
+                                    else => ()
+                                select mouse_snapshot.cursor_mode:
+                                    when CursorMode.Normal => ()
+                                    when _ => return Result.Err :: AppError.WindowNotFound :: call
+                                select vulkan_window_support_report :: :: call:
+                                    when Result.Ok(global_vulkan_support) =>
+                                        select:
+                                            when global_vulkan_support.ready_for_surface_creation :: :: method && global_vulkan_support.required_extension_count :: :: method == 0 =>
+                                                return Result.Err :: AppError.WindowNotFound :: call
+                                            else => ()
+                                        select window.vulkan_window_support_report :: :: method:
+                                            when Result.Ok(window_vulkan_support) =>
+                                                select:
+                                                    when global_vulkan_support.vulkan_supported && !window_vulkan_support.vulkan_supported =>
+                                                        return Result.Err :: AppError.WindowNotFound :: call
+                                                    when !global_vulkan_support.vulkan_supported && window_vulkan_support.vulkan_supported =>
+                                                        return Result.Err :: AppError.WindowNotFound :: call
+                                                    when global_vulkan_support.required_extension_count :: :: method != window_vulkan_support.required_extension_count :: :: method =>
+                                                        return Result.Err :: AppError.WindowNotFound :: call
+                                                    when global_vulkan_support.ready_for_surface_creation :: :: method && !window_vulkan_support.ready_for_surface_creation :: :: method =>
+                                                        return Result.Err :: AppError.WindowNotFound :: call
+                                                    when !global_vulkan_support.ready_for_surface_creation :: :: method && window_vulkan_support.ready_for_surface_creation :: :: method =>
+                                                        return Result.Err :: AppError.WindowNotFound :: call
+                                                    else => ()
+                                                let null_instance: GlfwVkInstance = null
+                                                let null_device: GlfwVkPhysicalDevice = null
+                                                let null_allocator: *read GlfwVkAllocationCallbacksRaw = null
+                                                let null_queuefamily: CUInt = 0
+                                                select window.vulkan_present_report :: null_instance, null_device, null_queuefamily, null_allocator :: method:
+                                                    when Result.Ok(vulkan_present_report) =>
+                                                        select:
+                                                            when vulkan_present_report.window_support.vulkan_supported != window_vulkan_support.vulkan_supported =>
+                                                                return Result.Err :: AppError.WindowNotFound :: call
+                                                            when vulkan_present_report.window_support.required_extension_count :: :: method != window_vulkan_support.required_extension_count :: :: method =>
+                                                                return Result.Err :: AppError.WindowNotFound :: call
+                                                            when vulkan_present_report.instance_provided =>
+                                                                return Result.Err :: AppError.WindowNotFound :: call
+                                                            when vulkan_present_report.physical_device_provided =>
+                                                                return Result.Err :: AppError.WindowNotFound :: call
+                                                            when vulkan_present_report.present_support_known :: :: method =>
+                                                                return Result.Err :: AppError.WindowNotFound :: call
+                                                            when vulkan_present_report.surface_creation_attempted :: :: method =>
+                                                                return Result.Err :: AppError.WindowNotFound :: call
+                                                            when vulkan_present_report.surface_created :: :: method =>
+                                                                return Result.Err :: AppError.WindowNotFound :: call
+                                                            when vulkan_present_report.ready_for_presenting :: :: method =>
+                                                                return Result.Err :: AppError.WindowNotFound :: call
+                                                            else => ()
+                                                    when Result.Err(err) =>
+                                                        let value = AppError.TextDecode :: err :: call
+                                                        return Result.Err :: value :: call
+                                                select window.vulkan_ready_for_presenting :: null_instance, null_device, null_queuefamily, null_allocator :: method:
+                                                    when Result.Ok(ready) =>
+                                                        select:
+                                                            when ready =>
+                                                                return Result.Err :: AppError.WindowNotFound :: call
+                                                            else => ()
+                                                    when Result.Err(err) =>
+                                                        let value = AppError.TextDecode :: err :: call
+                                                        return Result.Err :: value :: call
+                                            when Result.Err(err) =>
+                                                let value = AppError.TextDecode :: err :: call
+                                                return Result.Err :: value :: call
+                                    when Result.Err(err) =>
+                                        let value = AppError.TextDecode :: err :: call
+                                        return Result.Err :: value :: call
+                                window.use_default_cursor :: :: method
+                            when Result.Err(err) => return Result.Err :: err :: call
+                        select app.window_snapshot :: id :: method:
+                            when Result.Ok(snapshot) =>
+                                select:
+                                    when snapshot.input.keyboard.sticky_keys_enabled != snapshot.sticky_keys_enabled =>
+                                        return Result.Err :: AppError.WindowNotFound :: call
+                                    when snapshot.input.keyboard.lock_key_mods_enabled != snapshot.lock_key_mods_enabled =>
+                                        return Result.Err :: AppError.WindowNotFound :: call
+                                    when snapshot.input.mouse.sticky_mouse_buttons_enabled != snapshot.sticky_mouse_buttons_enabled =>
+                                        return Result.Err :: AppError.WindowNotFound :: call
+                                    when snapshot.input.mouse.raw_mouse_motion_enabled != snapshot.raw_mouse_motion_enabled =>
+                                        return Result.Err :: AppError.WindowNotFound :: call
+                                    else => ()
+                                select snapshot.input.mouse.cursor_mode:
+                                    when CursorMode.Normal => ()
+                                    when _ => return Result.Err :: AppError.WindowNotFound :: call
+                                let _ = snapshot.fullscreen
+                            when Result.Err(err) => return Result.Err :: err :: call
+                        select app.primary_monitor :: :: method:
+                            when Result.Ok(primary_monitor) =>
+                                let _ = primary_monitor.name_text :: :: method
+                                let _ = primary_monitor.video_modes_snapshot :: :: method
+                                let _ = primary_monitor.gamma_ramp_snapshot :: :: method
+                            when Result.Err(err) => return Result.Err :: err :: call
+                        select app.primary_monitor_snapshot :: :: method:
+                            when Result.Ok(snapshot) =>
+                                let _ = snapshot.primary
+                                let _ = snapshot.video_mode_count
+                            when Result.Err(err) => return Result.Err :: err :: call
+                        let joystick_snapshots = app.joystick_snapshots :: :: method
+                        repeat while !joystick_snapshots.is_empty :: :: method:
+                            let snapshot = joystick_snapshots.remove :: 0 :: method
+                            let _ = snapshot.present
+                            let _ = snapshot.gamepad
+                        let joysticks = app.connected_joysticks :: :: method
+                        repeat while !joysticks.is_empty :: :: method:
+                            let joystick = joysticks.remove :: 0 :: method
+                            let _ = joystick.axes :: :: method
+                            let _ = joystick.buttons :: :: method
+                            let _ = joystick.hats :: :: method
+                            select joystick.gamepad_state :: :: method:
+                                when Option.Some(state) =>
+                                    let _ = state.left_stick_x :: :: method
+                                    let _ = state.right_trigger :: :: method
+                                    let _ = state.button_down :: GamepadButton.A :: method
+                                when Option.None => ()
+                        return Result.Ok :: ControlFlow.Wait :: call
+                    else => return Result.Ok :: ControlFlow.Wait :: call
+            when WindowEvent.CloseRequested(id = id) =>
+                let _ = id
+                return Result.Ok :: ControlFlow.Wait :: call
+            when WindowEvent.Destroyed(id = id) =>
+                let _ = id
+                return Result.Ok :: ControlFlow.Wait :: call
+            when _ => return Result.Ok :: ControlFlow.Wait :: call
+        return Result.Ok :: ControlFlow.Wait :: call
+
+    fn monitor_event(edit self, edit app: App, event: MonitorEvent) -> Result[ControlFlow, AppError]:
+        let _ = app
+        let _ = event
+        return Result.Ok :: ControlFlow.Wait :: call
+
+    fn joystick_event(edit self, edit app: App, event: JoystickEvent) -> Result[ControlFlow, AppError]:
+        let _ = app
+        let _ = event
+        return Result.Ok :: ControlFlow.Wait :: call
+
+    fn user_event(edit self, edit app: App, event: UserEvent) -> Result[ControlFlow, AppError]:
+        select event:
+            when UserEvent.Signaled(id = id) =>
+                let Result.Ok(expected) = self.expected_window_id :: :: method else => return Result.Err :: AppError.WindowNotFound :: call
+                select:
+                    when id == 11 && self.saw_created =>
+                        self.saw_user = true
+                        return Result.Ok :: ControlFlow.Exit :: call
+                    when id == 11 =>
+                        self.saw_user = true
+                        return Result.Ok :: ControlFlow.Wait :: call
+                    else => return Result.Ok :: ControlFlow.Wait :: call
+
+    fn idle(edit self, edit app: App) -> Result[ControlFlow, AppError]:
+        let _ = self
+        let _ = app
+        return Result.Ok :: ControlFlow.Wait :: call
+
+    fn exiting(edit self, edit app: App) -> Unit:
+        let _ = self
+        let _ = app
+        return

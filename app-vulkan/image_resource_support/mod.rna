@@ -1,0 +1,446 @@
+use std.{Option, Result}
+
+use present.{VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_SAMPLE_COUNT_1_BIT, VK_SHARING_MODE_EXCLUSIVE, VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, VK_SUCCESS, VkDeviceMemory, VkExtent2D, VkExtent3D, VkFormat, VkImage, VkImageCreateInfo, VkMemoryAllocateInfo, VkMemoryRequirements, VulkanImage, VulkanImagePlan, VulkanMemoryAllocationPlan, VulkanPresentApp, VulkanPresentContext, VulkanPresentError}
+use pixel_support.VulkanPixelFormat
+
+const FORMAT_R8G8B8A8_UNORM: CInt = 37
+const FORMAT_R8G8B8A8_SRGB: CInt = 43
+const FORMAT_B8G8R8A8_UNORM: CInt = 44
+const FORMAT_B8G8R8A8_SRGB: CInt = 50
+
+struct GenericImageRequest:
+    extent: VkExtent2D
+    format: VkFormat
+    usage: CUInt
+
+fn make_image_request(width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> GenericImageRequest:
+    let extent2d = VkExtent2D :: :: call
+        width = width
+        height = height
+    let copied_format: VkFormat = format
+    let copied_usage: CUInt = usage
+    let request = GenericImageRequest :: :: call
+        extent = extent2d
+        format = copied_format
+        usage = copied_usage
+    return request
+
+fn generic_image_pixel_format(read format: VkFormat) -> Result[VulkanPixelFormat, VulkanPresentError]:
+    select:
+        when format == FORMAT_R8G8B8A8_UNORM => return Result.Ok :: VulkanPixelFormat.Rgba8 :: call
+        when format == FORMAT_R8G8B8A8_SRGB => return Result.Ok :: VulkanPixelFormat.Rgba8 :: call
+        when format == FORMAT_B8G8R8A8_UNORM => return Result.Ok :: VulkanPixelFormat.Bgra8 :: call
+        when format == FORMAT_B8G8R8A8_SRGB => return Result.Ok :: VulkanPixelFormat.Bgra8 :: call
+        else =>
+            let error = VulkanPresentError.SurfaceFormatUnsupported :: format :: call
+            return Result.Err :: error :: call
+
+fn make_image_plan(read requirements: VkMemoryRequirements, read allocation_plan: VulkanMemoryAllocationPlan, read request: GenericImageRequest) -> VulkanImagePlan:
+    let copied_format: VkFormat = request.format
+    let copied_usage: CUInt = request.usage
+    let plan = VulkanImagePlan :: :: call
+        extent = request.extent
+        format = copied_format
+        usage = copied_usage
+        requirements = requirements
+        allocation_plan = allocation_plan
+    return plan
+
+fn generic_image_requirements(read context: VulkanPresentContext, read request: GenericImageRequest) -> Result[VkMemoryRequirements, VulkanPresentError]:
+    select:
+        when request.extent.width == 0 =>
+            let error = VulkanPresentError.VulkanImageExtentOutOfRange :: request.extent.width, request.extent.height :: call
+            return Result.Err :: error :: call
+        when request.extent.height == 0 =>
+            let error = VulkanPresentError.VulkanImageExtentOutOfRange :: request.extent.width, request.extent.height :: call
+            return Result.Err :: error :: call
+        else => ()
+    let image: VkImage = 0U64
+    let extent = VkExtent3D :: :: call
+        width = request.extent.width
+        height = request.extent.height
+        depth = 1
+    let image_info = VkImageCreateInfo :: :: call
+        stype = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO
+        pnext = null
+        flags = 0
+        image_type = VK_IMAGE_TYPE_2D
+        format = request.format
+        extent = extent
+        mip_levels = 1
+        array_layers = 1
+        samples = VK_SAMPLE_COUNT_1_BIT
+        tiling = VK_IMAGE_TILING_OPTIMAL
+        usage = request.usage
+        sharing_mode = VK_SHARING_MODE_EXCLUSIVE
+        queuefamily_index_count = 0
+        queuefamily_indices = null
+        initial_layout = VK_IMAGE_LAYOUT_UNDEFINED
+    let image_ptr: *edit VkImage = #unsafe &raw edit image
+    let image_info_ptr: *read VkImageCreateInfo = #unsafe &raw read image_info
+    let image_result = #unsafe context.create_image :: context.device, image_info_ptr, null, image_ptr :: call
+    select:
+        when image_result != VK_SUCCESS =>
+            let error = VulkanPresentError.VulkanImageCreateFailed :: image_result :: call
+            return Result.Err :: error :: call
+        when image == 0U64 =>
+            let error = VulkanPresentError.VulkanImageCreateFailed :: image_result :: call
+            return Result.Err :: error :: call
+        else => ()
+    let requirements = VkMemoryRequirements :: :: call
+        size = 0U64
+        alignment = 0U64
+        memory_type_bits = 0
+    let requirements_ptr: *edit VkMemoryRequirements = #unsafe &raw edit requirements
+    #unsafe context.get_image_memory_requirements :: context.device, image, requirements_ptr :: call
+    #unsafe context.destroy_image :: context.device, image, null :: call
+    return Result.Ok :: requirements :: call
+
+pub(package) fn vulkan_image_from_plan_internal(read context: VulkanPresentContext, read plan: VulkanImagePlan) -> Result[VulkanImage, VulkanPresentError]:
+    let image: VkImage = 0U64
+    let memory: VkDeviceMemory = 0U64
+    let extent = VkExtent3D :: :: call
+        width = plan.extent.width
+        height = plan.extent.height
+        depth = 1
+    let image_info = VkImageCreateInfo :: :: call
+        stype = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO
+        pnext = null
+        flags = 0
+        image_type = VK_IMAGE_TYPE_2D
+        format = plan.format
+        extent = extent
+        mip_levels = 1
+        array_layers = 1
+        samples = VK_SAMPLE_COUNT_1_BIT
+        tiling = VK_IMAGE_TILING_OPTIMAL
+        usage = plan.usage
+        sharing_mode = VK_SHARING_MODE_EXCLUSIVE
+        queuefamily_index_count = 0
+        queuefamily_indices = null
+        initial_layout = VK_IMAGE_LAYOUT_UNDEFINED
+    let image_ptr: *edit VkImage = #unsafe &raw edit image
+    let image_info_ptr: *read VkImageCreateInfo = #unsafe &raw read image_info
+    let image_result = #unsafe context.create_image :: context.device, image_info_ptr, null, image_ptr :: call
+    select:
+        when image_result != VK_SUCCESS =>
+            let error = VulkanPresentError.VulkanImageCreateFailed :: image_result :: call
+            return Result.Err :: error :: call
+        when image == 0U64 =>
+            let error = VulkanPresentError.VulkanImageCreateFailed :: image_result :: call
+            return Result.Err :: error :: call
+        else => ()
+    let allocation_info = VkMemoryAllocateInfo :: :: call
+        stype = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO
+        pnext = null
+        allocation_size = plan.allocation_plan.size :: :: method
+        memory_type_index = plan.allocation_plan.memory_type_index
+    let allocation_info_ptr: *read VkMemoryAllocateInfo = #unsafe &raw read allocation_info
+    let memory_ptr: *edit VkDeviceMemory = #unsafe &raw edit memory
+    let allocate_result = #unsafe context.allocate_memory :: context.device, allocation_info_ptr, null, memory_ptr :: call
+    select:
+        when allocate_result != VK_SUCCESS =>
+            select:
+                when image != 0U64 => #unsafe context.destroy_image :: context.device, image, null :: call
+                else => ()
+            let error = VulkanPresentError.VulkanImageMemoryAllocateFailed :: allocate_result :: call
+            return Result.Err :: error :: call
+        when memory == 0U64 =>
+            select:
+                when image != 0U64 => #unsafe context.destroy_image :: context.device, image, null :: call
+                else => ()
+            let error = VulkanPresentError.VulkanImageMemoryAllocateFailed :: allocate_result :: call
+            return Result.Err :: error :: call
+        else => ()
+    let bind_result = #unsafe context.bind_image_memory :: context.device, image, memory, 0U64 :: call
+    select:
+        when bind_result != VK_SUCCESS =>
+            select:
+                when image != 0U64 => #unsafe context.destroy_image :: context.device, image, null :: call
+                else => ()
+            select:
+                when memory != 0U64 => #unsafe context.free_memory :: context.device, memory, null :: call
+                else => ()
+            let error = VulkanPresentError.VulkanImageBindFailed :: bind_result :: call
+            return Result.Err :: error :: call
+        else => ()
+    let resource = VulkanImage :: :: call
+        image = image
+        memory = memory
+        plan = plan
+        layout = VK_IMAGE_LAYOUT_UNDEFINED
+    return Result.Ok :: resource :: call
+
+fn generic_image_plan(read context: VulkanPresentContext, read request: GenericImageRequest, memory_type_index: CUInt) -> Result[VulkanImagePlan, VulkanPresentError]:
+    select generic_image_requirements :: context, request :: call:
+        when Result.Ok(requirements) =>
+            let memory_properties = context.memory_properties :: :: method
+            select memory_properties.allocation_plan :: requirements, memory_type_index :: method:
+                when Option.Some(allocation_plan) =>
+                    let plan = make_image_plan :: requirements, allocation_plan, request :: call
+                    return Result.Ok :: plan :: call
+                when Option.None =>
+                    let error = VulkanPresentError.VulkanImageMemoryTypeUnavailable :: requirements.memory_type_bits :: call
+                    return Result.Err :: error :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+fn generic_host_visible_image_plan(read context: VulkanPresentContext, read request: GenericImageRequest) -> Result[VulkanImagePlan, VulkanPresentError]:
+    select generic_image_requirements :: context, request :: call:
+        when Result.Ok(requirements) =>
+            let memory_properties = context.memory_properties :: :: method
+            select memory_properties.host_visible_allocation_plan :: requirements :: method:
+                when Option.Some(allocation_plan) =>
+                    let plan = make_image_plan :: requirements, allocation_plan, request :: call
+                    return Result.Ok :: plan :: call
+                when Option.None =>
+                    let error = VulkanPresentError.VulkanImageMemoryTypeUnavailable :: requirements.memory_type_bits :: call
+                    return Result.Err :: error :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+fn generic_host_coherent_image_plan(read context: VulkanPresentContext, read request: GenericImageRequest) -> Result[VulkanImagePlan, VulkanPresentError]:
+    select generic_image_requirements :: context, request :: call:
+        when Result.Ok(requirements) =>
+            let memory_properties = context.memory_properties :: :: method
+            select memory_properties.host_coherent_allocation_plan :: requirements :: method:
+                when Option.Some(allocation_plan) =>
+                    let plan = make_image_plan :: requirements, allocation_plan, request :: call
+                    return Result.Ok :: plan :: call
+                when Option.None =>
+                    let error = VulkanPresentError.VulkanImageMemoryTypeUnavailable :: requirements.memory_type_bits :: call
+                    return Result.Err :: error :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+fn generic_device_local_image_plan(read context: VulkanPresentContext, read request: GenericImageRequest) -> Result[VulkanImagePlan, VulkanPresentError]:
+    select generic_image_requirements :: context, request :: call:
+        when Result.Ok(requirements) =>
+            let memory_properties = context.memory_properties :: :: method
+            select memory_properties.device_local_allocation_plan :: requirements :: method:
+                when Option.Some(allocation_plan) =>
+                    let plan = make_image_plan :: requirements, allocation_plan, request :: call
+                    return Result.Ok :: plan :: call
+                when Option.None =>
+                    let error = VulkanPresentError.VulkanImageMemoryTypeUnavailable :: requirements.memory_type_bits :: call
+                    return Result.Err :: error :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+impl VulkanImagePlan:
+    fn width(read self) -> CUInt:
+        return self.extent.width
+
+    fn height(read self) -> CUInt:
+        return self.extent.height
+
+    fn format(read self) -> VkFormat:
+        return self.format
+
+    fn usage(read self) -> CUInt:
+        return self.usage
+
+    fn pixel_format(read self) -> Result[VulkanPixelFormat, VulkanPresentError]:
+        return generic_image_pixel_format :: self.format :: call
+
+    fn requirements(read self) -> VkMemoryRequirements:
+        return self.requirements
+
+    fn allocation_plan(read self) -> VulkanMemoryAllocationPlan:
+        return self.allocation_plan
+
+    fn size(read self) -> U64:
+        return self.requirements.size
+
+    fn alignment(read self) -> U64:
+        return self.requirements.alignment
+
+    fn memory_type_bits(read self) -> CUInt:
+        return self.requirements.memory_type_bits
+
+    fn memory_type_index(read self) -> CUInt:
+        return self.allocation_plan.memory_type_index
+
+    fn heap_index(read self) -> CUInt:
+        return self.allocation_plan.heap_index :: :: method
+
+    fn device_local(read self) -> Bool:
+        return self.allocation_plan.device_local :: :: method
+
+    fn host_visible(read self) -> Bool:
+        return self.allocation_plan.host_visible :: :: method
+
+    fn host_coherent(read self) -> Bool:
+        return self.allocation_plan.host_coherent :: :: method
+
+    fn staging_compatible(read self) -> Bool:
+        return self.allocation_plan.staging_compatible :: :: method
+
+impl VulkanImage:
+    fn image_handle(read self) -> VkImage:
+        return self.image
+
+    fn memory_handle(read self) -> VkDeviceMemory:
+        return self.memory
+
+    fn valid(read self) -> Bool:
+        return self.image != 0U64 && self.memory != 0U64
+
+    fn plan(read self) -> VulkanImagePlan:
+        return self.plan
+
+    fn width(read self) -> CUInt:
+        return self.plan.width :: :: method
+
+    fn height(read self) -> CUInt:
+        return self.plan.height :: :: method
+
+    fn format(read self) -> VkFormat:
+        return self.plan.format :: :: method
+
+    fn usage(read self) -> CUInt:
+        return self.plan.usage :: :: method
+
+    fn pixel_format(read self) -> Result[VulkanPixelFormat, VulkanPresentError]:
+        return self.plan.pixel_format :: :: method
+
+    fn requirements(read self) -> VkMemoryRequirements:
+        return self.plan.requirements :: :: method
+
+    fn allocation_plan(read self) -> VulkanMemoryAllocationPlan:
+        return self.plan.allocation_plan :: :: method
+
+    fn size(read self) -> U64:
+        return self.plan.size :: :: method
+
+    fn alignment(read self) -> U64:
+        return self.plan.alignment :: :: method
+
+    fn memory_type_bits(read self) -> CUInt:
+        return self.plan.memory_type_bits :: :: method
+
+    fn memory_type_index(read self) -> CUInt:
+        return self.plan.memory_type_index :: :: method
+
+    fn heap_index(read self) -> CUInt:
+        return self.plan.heap_index :: :: method
+
+    fn device_local(read self) -> Bool:
+        return self.plan.device_local :: :: method
+
+    fn host_visible(read self) -> Bool:
+        return self.plan.host_visible :: :: method
+
+    fn host_coherent(read self) -> Bool:
+        return self.plan.host_coherent :: :: method
+
+    fn staging_compatible(read self) -> Bool:
+        return self.plan.staging_compatible :: :: method
+
+    fn layout_code(read self) -> CInt:
+        return self.layout
+
+    fn transfer_destination_ready(read self) -> Bool:
+        return self.layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+
+    fn transfer_source_ready(read self) -> Bool:
+        return self.layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+
+impl VulkanPresentContext:
+    fn image_requirements(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> Result[VkMemoryRequirements, VulkanPresentError]:
+        let request = make_image_request :: width, height, format, usage :: call
+        return generic_image_requirements :: self, request :: call
+
+    fn image_plan(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, memory_type_index: CUInt) -> Result[VulkanImagePlan, VulkanPresentError]:
+        let request = make_image_request :: width, height, format, usage :: call
+        return generic_image_plan :: self, request, memory_type_index :: call
+
+    fn host_visible_image_plan(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> Result[VulkanImagePlan, VulkanPresentError]:
+        let request = make_image_request :: width, height, format, usage :: call
+        return generic_host_visible_image_plan :: self, request :: call
+
+    fn host_coherent_image_plan(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> Result[VulkanImagePlan, VulkanPresentError]:
+        let request = make_image_request :: width, height, format, usage :: call
+        return generic_host_coherent_image_plan :: self, request :: call
+
+    fn device_local_image_plan(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> Result[VulkanImagePlan, VulkanPresentError]:
+        let request = make_image_request :: width, height, format, usage :: call
+        return generic_device_local_image_plan :: self, request :: call
+
+    fn image_from_plan(read self, read plan: VulkanImagePlan) -> Result[VulkanImage, VulkanPresentError]:
+        return vulkan_image_from_plan_internal :: self, plan :: call
+
+    fn image_empty(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, memory_type_index: CUInt) -> Result[VulkanImage, VulkanPresentError]:
+        let request = make_image_request :: width, height, format, usage :: call
+        select generic_image_plan :: self, request, memory_type_index :: call:
+            when Result.Ok(plan) => return vulkan_image_from_plan_internal :: self, plan :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn host_visible_image(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> Result[VulkanImage, VulkanPresentError]:
+        let request = make_image_request :: width, height, format, usage :: call
+        select generic_host_visible_image_plan :: self, request :: call:
+            when Result.Ok(plan) => return vulkan_image_from_plan_internal :: self, plan :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn host_coherent_image(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> Result[VulkanImage, VulkanPresentError]:
+        let request = make_image_request :: width, height, format, usage :: call
+        select generic_host_coherent_image_plan :: self, request :: call:
+            when Result.Ok(plan) => return vulkan_image_from_plan_internal :: self, plan :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn device_local_image(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> Result[VulkanImage, VulkanPresentError]:
+        let request = make_image_request :: width, height, format, usage :: call
+        select generic_device_local_image_plan :: self, request :: call:
+            when Result.Ok(plan) => return vulkan_image_from_plan_internal :: self, plan :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn transfer_source_image_usage(read self) -> CUInt:
+        return VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+
+    fn transfer_destination_image_usage(read self) -> CUInt:
+        return VK_IMAGE_USAGE_TRANSFER_DST_BIT
+
+    fn destroy_image_resource(read self, take image: VulkanImage) -> Unit:
+        select:
+            when image.image != 0U64 => #unsafe self.destroy_image :: self.device, image.image, null :: call
+            else => ()
+        select:
+            when image.memory != 0U64 => #unsafe self.free_memory :: self.device, image.memory, null :: call
+            else => ()
+        return
+
+impl VulkanPresentApp:
+    fn image_requirements(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> Result[VkMemoryRequirements, VulkanPresentError]:
+        return self.context.image_requirements :: width, height, format, usage :: method
+
+    fn image_plan(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, memory_type_index: CUInt) -> Result[VulkanImagePlan, VulkanPresentError]:
+        return self.context.image_plan :: width, height, format, usage, memory_type_index :: method
+
+    fn host_visible_image_plan(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> Result[VulkanImagePlan, VulkanPresentError]:
+        return self.context.host_visible_image_plan :: width, height, format, usage :: method
+
+    fn host_coherent_image_plan(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> Result[VulkanImagePlan, VulkanPresentError]:
+        return self.context.host_coherent_image_plan :: width, height, format, usage :: method
+
+    fn device_local_image_plan(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> Result[VulkanImagePlan, VulkanPresentError]:
+        return self.context.device_local_image_plan :: width, height, format, usage :: method
+
+    fn image_from_plan(read self, read plan: VulkanImagePlan) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.image_from_plan :: plan :: method
+
+    fn image_empty(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, memory_type_index: CUInt) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.image_empty :: width, height, format, usage, memory_type_index :: method
+
+    fn host_visible_image(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.host_visible_image :: width, height, format, usage :: method
+
+    fn host_coherent_image(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.host_coherent_image :: width, height, format, usage :: method
+
+    fn device_local_image(read self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.device_local_image :: width, height, format, usage :: method
+
+    fn transfer_source_image_usage(read self) -> CUInt:
+        return self.context.transfer_source_image_usage :: :: method
+
+    fn transfer_destination_image_usage(read self) -> CUInt:
+        return self.context.transfer_destination_image_usage :: :: method
+
+    fn destroy_image(read self, take image: VulkanImage) -> Unit:
+        return self.context.destroy_image_resource :: image :: method

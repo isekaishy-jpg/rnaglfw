@@ -1,8 +1,9 @@
-use std.{List, Option}
+use std.{List, Option, Result}
 use bridge.{cint_to_index, index_to_cint}
 use event.JoystickId
 use glfw.{GlfwCursorPos, GlfwPoint, GlfwScale, GlfwSize, GlfwWindow}
 use glfw.glfw_window_raw_handle
+use joystick.{GamepadState, HatState, hat_state_from_raw, hat_state_raw}
 use runtime.{AppSnapshot, JoystickSnapshot, MonitorSnapshot, WindowSnapshot}
 use runtime.joystick_snapshot_from_id
 use window.{CursorPos, FrameSize, Point, Scale, Size, Window}
@@ -108,8 +109,75 @@ pub(package) fn copy_monitor_snapshot(read snapshot: MonitorSnapshot) -> Monitor
         video_modes = video_modes
         gamma_ramp = gamma_ramp
 
+fn copy_hat(read state: HatState) -> HatState:
+    let raw = hat_state_raw :: state :: call
+    let Result.Ok(value) = raw as Maybe[CUnsignedChar] else => return hat_state_from_raw :: 0 :: call
+    return hat_state_from_raw :: value :: call
+
+fn copy_f32_list(read values: List[F32]) -> List[F32]:
+    let copied = List[F32] :: :: call
+    let count = values.count :: :: method
+    let Result.Ok(limit) = index_to_cint :: count :: call else => return copied
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = cint_to_index :: scan :: call else => return copied
+        let value = values[index]
+        copied.push :: value :: method
+        scan = scan + 1
+    return copied
+
+fn copy_bool_list(read values: List[Bool]) -> List[Bool]:
+    let copied = List[Bool] :: :: call
+    let count = values.count :: :: method
+    let Result.Ok(limit) = index_to_cint :: count :: call else => return copied
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = cint_to_index :: scan :: call else => return copied
+        let value = values[index]
+        copied.push :: value :: method
+        scan = scan + 1
+    return copied
+
+fn copy_hat_list(read values: List[HatState]) -> List[HatState]:
+    let copied = List[HatState] :: :: call
+    let count = values.count :: :: method
+    let Result.Ok(limit) = index_to_cint :: count :: call else => return copied
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = cint_to_index :: scan :: call else => return copied
+        let value = values[index]
+        let hat = copy_hat :: value :: call
+        copied.push :: hat :: method
+        scan = scan + 1
+    return copied
+
+fn copy_optional_gamepad_state(read state: Option[GamepadState]) -> Option[GamepadState]:
+    select state:
+        when Option.Some(value) =>
+            let copied = GamepadState :: value.raw :: call
+            return Option.Some :: copied :: call
+        when Option.None => return Option.None
+
 pub(package) fn copy_joystick_snapshot(read snapshot: JoystickSnapshot) -> JoystickSnapshot:
-    return joystick_snapshot_from_id :: snapshot.joystick.id :: call
+    let live_snapshot = joystick_snapshot_from_id :: snapshot.joystick.id :: call
+    let axes = copy_f32_list :: snapshot.axes :: call
+    let buttons = copy_bool_list :: snapshot.buttons :: call
+    let hats = copy_hat_list :: snapshot.hats :: call
+    let gamepad_state = copy_optional_gamepad_state :: snapshot.gamepad_state :: call
+    return JoystickSnapshot :: :: call
+        joystick = snapshot.joystick
+        name_text = live_snapshot.name_text
+        guid_text = live_snapshot.guid_text
+        gamepad_name_text = live_snapshot.gamepad_name_text
+        present = snapshot.present
+        gamepad = snapshot.gamepad
+        axis_count = snapshot.axis_count
+        button_count = snapshot.button_count
+        hat_count = snapshot.hat_count
+        axes = axes
+        buttons = buttons
+        hats = hats
+        gamepad_state = gamepad_state
 
 impl AppSnapshot:
     fn has_monitors(read self) -> Bool:

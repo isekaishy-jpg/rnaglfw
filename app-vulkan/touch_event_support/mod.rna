@@ -1,0 +1,100 @@
+use std.{List, Option, Result}
+use runa_app.{AppError, WindowEvent, WindowId, WindowTouchData}
+use present.VulkanPresentApp
+
+impl VulkanPresentApp:
+    fn next_touch_data(edit self) -> Option[WindowTouchData]:
+        return self.app.next_touch_data_for :: self.window.id :: method
+
+    fn next_touch_data_for(edit self, id: WindowId) -> Option[WindowTouchData]:
+        return self.app.next_touch_data_for :: id :: method
+
+    fn next_touch_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_touch_event_for :: self.window.id :: method
+
+    fn next_touch_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_touch_event_for :: id :: method
+
+    fn poll_next_touch_data(edit self) -> Result[Option[WindowTouchData], AppError]:
+        return self.app.poll_next_touch_data_for :: self.window.id :: method
+
+    fn poll_next_touch_data_for(edit self, id: WindowId) -> Result[Option[WindowTouchData], AppError]:
+        return self.app.poll_next_touch_data_for :: id :: method
+
+    fn poll_next_touch_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_touch_event_for :: self.window.id :: method
+
+    fn poll_next_touch_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_touch_event_for :: id :: method
+
+    fn wait_next_touch_data(edit self) -> Result[Option[WindowTouchData], AppError]:
+        return self.app.wait_next_touch_data_for :: self.window.id :: method
+
+    fn wait_next_touch_data_for(edit self, id: WindowId) -> Result[Option[WindowTouchData], AppError]:
+        return self.app.wait_next_touch_data_for :: id :: method
+
+    fn wait_next_touch_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_touch_event_for :: self.window.id :: method
+
+    fn wait_next_touch_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_touch_event_for :: id :: method
+
+    fn wait_timeout_next_touch_data(edit self, timeout: F64) -> Result[Option[WindowTouchData], AppError]:
+        return self.app.wait_timeout_next_touch_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_touch_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowTouchData], AppError]:
+        return self.app.wait_timeout_next_touch_data_for :: id, timeout :: method
+
+    fn wait_timeout_next_touch_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_touch_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_touch_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_touch_event_for :: id, timeout :: method
+
+    fn pending_touch_data(edit self) -> List[WindowTouchData]:
+        return self.app.pending_touch_data_for :: self.window.id :: method
+
+    fn pending_touch_data_for(edit self, id: WindowId) -> List[WindowTouchData]:
+        return self.app.pending_touch_data_for :: id :: method
+
+    fn pending_touch_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_touch_events_for :: self.window.id :: method
+
+    fn pending_touch_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_touch_events_for :: id :: method
+
+    fn poll_touch_data(edit self) -> List[WindowTouchData]:
+        return self.app.poll_touch_data_for :: self.window.id :: method
+
+    fn poll_touch_data_for(edit self, id: WindowId) -> List[WindowTouchData]:
+        return self.app.poll_touch_data_for :: id :: method
+
+    fn poll_touch_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_touch_events_for :: self.window.id :: method
+
+    fn poll_touch_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_touch_events_for :: id :: method
+
+    fn wait_touch_data(edit self) -> List[WindowTouchData]:
+        return self.app.wait_touch_data_for :: self.window.id :: method
+
+    fn wait_touch_data_for(edit self, id: WindowId) -> List[WindowTouchData]:
+        return self.app.wait_touch_data_for :: id :: method
+
+    fn wait_touch_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_touch_events_for :: self.window.id :: method
+
+    fn wait_touch_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_touch_events_for :: id :: method
+
+    fn wait_timeout_touch_data(edit self, timeout: F64) -> List[WindowTouchData]:
+        return self.app.wait_timeout_touch_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_touch_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowTouchData]:
+        return self.app.wait_timeout_touch_data_for :: id, timeout :: method
+
+    fn wait_timeout_touch_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_touch_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_touch_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_touch_events_for :: id, timeout :: method

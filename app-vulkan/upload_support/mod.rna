@@ -2,7 +2,7 @@ use std.{ByteBuffer, Option, Result}
 
 use present.{VkBuffer, VkBufferCreateInfo, VkDeviceMemory, VkMemoryAllocateInfo, VkMemoryRequirements, VulkanMemoryAllocationPlan}
 use present.{VulkanPresentApp, VulkanPresentContext, VulkanPresentError, VulkanTransferSourceBuffer, VulkanTransferSourceBufferPlan}
-use present.{VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_SHARING_MODE_EXCLUSIVE, VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO}
+use present.{VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_SHARING_MODE_EXCLUSIVE, VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO}
 use present.{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, VK_SUCCESS}
 use pixel_support.{VulkanPixelFormat, VulkanPixelFrame}
 use runa_app.{RgbaImage, rgba_image}
@@ -231,6 +231,37 @@ impl VulkanTransferSourceBuffer:
         return self.plan.staging_compatible :: :: method
 
 impl VulkanPresentContext:
+    fn transfer_source_buffer_requirements(read self, byte_count: Index) -> Result[VkMemoryRequirements, VulkanPresentError]:
+        let Result.Ok(byte_count_u64) = byte_count as Maybe[U64] else =>
+            let error = VulkanPresentError.StagingSizeOutOfRange :: byte_count :: call
+            return Result.Err :: error :: call
+        let buffer: VkBuffer = 0U64
+        let buffer_info = VkBufferCreateInfo :: :: call
+            stype = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO
+            pnext = null
+            flags = 0
+            size = byte_count_u64
+            usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT
+            sharing_mode = VK_SHARING_MODE_EXCLUSIVE
+            queuefamily_index_count = 0
+            queuefamily_indices = null
+        let buffer_ptr: *edit VkBuffer = #unsafe &raw edit buffer
+        let buffer_info_ptr: *read VkBufferCreateInfo = #unsafe &raw read buffer_info
+        let buffer_result = #unsafe self.create_buffer :: self.device, buffer_info_ptr, null, buffer_ptr :: call
+        select:
+            when buffer_result != VK_SUCCESS || buffer == 0U64 =>
+                let error = VulkanPresentError.StagingBufferCreateFailed :: buffer_result :: call
+                return Result.Err :: error :: call
+            else => ()
+        let requirements = VkMemoryRequirements :: :: call
+            size = 0U64
+            alignment = 0U64
+            memory_type_bits = 0
+        let requirements_ptr: *edit VkMemoryRequirements = #unsafe &raw edit requirements
+        #unsafe self.get_buffer_memory_requirements :: self.device, buffer, requirements_ptr :: call
+        #unsafe self.destroy_buffer :: self.device, buffer, null :: call
+        return Result.Ok :: requirements :: call
+
     fn transfer_source_buffer_from_plan(read self, read plan: VulkanTransferSourceBufferPlan) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
         return transfer_source_buffer_from_plan_internal :: self, plan :: call
 
@@ -269,6 +300,140 @@ impl VulkanPresentContext:
         select self.surface_transfer_source_buffer_plan :: :: method:
             when Result.Ok(plan) => return self.transfer_source_buffer_from_plan :: plan :: method
             when Result.Err(err) => return Result.Err :: err :: call
+
+    fn transfer_source_buffer(read self, take pixels: ByteBuffer) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+        let byte_count = pixels.byte_count :: :: method
+        let Result.Ok(byte_count_u64) = byte_count as Maybe[U64] else =>
+            let error = VulkanPresentError.StagingSizeOutOfRange :: byte_count :: call
+            return Result.Err :: error :: call
+
+        let buffer: VkBuffer = 0U64
+        let memory: VkDeviceMemory = 0U64
+
+        let buffer_info = VkBufferCreateInfo :: :: call
+            stype = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO
+            pnext = null
+            flags = 0
+            size = byte_count_u64
+            usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT
+            sharing_mode = VK_SHARING_MODE_EXCLUSIVE
+            queuefamily_index_count = 0
+            queuefamily_indices = null
+        let buffer_ptr: *edit VkBuffer = #unsafe &raw edit buffer
+        let buffer_info_ptr: *read VkBufferCreateInfo = #unsafe &raw read buffer_info
+        let buffer_result = #unsafe self.create_buffer :: self.device, buffer_info_ptr, null, buffer_ptr :: call
+        select:
+            when buffer_result != VK_SUCCESS || buffer == 0U64 =>
+                let error = VulkanPresentError.StagingBufferCreateFailed :: buffer_result :: call
+                return Result.Err :: error :: call
+            else => ()
+
+        let requirements = VkMemoryRequirements :: :: call
+            size = 0U64
+            alignment = 0U64
+            memory_type_bits = 0
+        let requirements_ptr: *edit VkMemoryRequirements = #unsafe &raw edit requirements
+        #unsafe self.get_buffer_memory_requirements :: self.device, buffer, requirements_ptr :: call
+
+        select self.memory_properties.staging_allocation_plan :: requirements :: method:
+            when Option.Some(allocation_plan) =>
+                let allocation_info = VkMemoryAllocateInfo :: :: call
+                    stype = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO
+                    pnext = null
+                    allocation_size = requirements.size
+                    memory_type_index = allocation_plan.memory_type_index
+                let allocation_info_ptr: *read VkMemoryAllocateInfo = #unsafe &raw read allocation_info
+                let memory_ptr: *edit VkDeviceMemory = #unsafe &raw edit memory
+                let allocate_result = #unsafe self.allocate_memory :: self.device, allocation_info_ptr, null, memory_ptr :: call
+                select:
+                    when allocate_result != VK_SUCCESS || memory == 0U64 =>
+                        select:
+                            when buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, buffer, null :: call
+                            else => ()
+                        let error = VulkanPresentError.StagingMemoryAllocateFailed :: allocate_result :: call
+                        return Result.Err :: error :: call
+                    else => ()
+            when Option.None =>
+                select:
+                    when buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, buffer, null :: call
+                    else => ()
+                let error = VulkanPresentError.StagingMemoryTypeUnavailable :: requirements.memory_type_bits :: call
+                return Result.Err :: error :: call
+
+        let bind_result = #unsafe self.bind_buffer_memory :: self.device, buffer, memory, 0U64 :: call
+        select:
+            when bind_result != VK_SUCCESS =>
+                select:
+                    when buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, buffer, null :: call
+                    else => ()
+                select:
+                    when memory != 0U64 => #unsafe self.free_memory :: self.device, memory, null :: call
+                    else => ()
+                let error = VulkanPresentError.StagingBufferBindFailed :: bind_result :: call
+                return Result.Err :: error :: call
+            else => ()
+
+        let mapped_memory: *edit CVoid = null
+        let mapped_memory_ptr: *edit *edit CVoid = #unsafe &raw edit mapped_memory
+        let map_result = #unsafe self.map_memory :: self.device, memory, 0U64, byte_count_u64, 0, mapped_memory_ptr :: call
+        select:
+            when map_result != VK_SUCCESS || mapped_memory.is_null :: :: method =>
+                select:
+                    when buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, buffer, null :: call
+                    else => ()
+                select:
+                    when memory != 0U64 => #unsafe self.free_memory :: self.device, memory, null :: call
+                    else => ()
+                let error = VulkanPresentError.StagingMemoryMapFailed :: map_result :: call
+                return Result.Err :: error :: call
+            else => ()
+        let mapped_address = #unsafe raw_pointer_address_edit :: mapped_memory :: call
+        let mapped_bytes = #unsafe raw_pointer_from_address_edit[U8] :: mapped_address :: call
+        let source_ptr: *read U8 = #unsafe &raw read pixels[0]
+        let Result.Ok(scan_limit) = byte_count as Maybe[USize] else =>
+            #unsafe self.unmap_memory :: self.device, memory :: call
+            select:
+                when buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, buffer, null :: call
+                else => ()
+            select:
+                when memory != 0U64 => #unsafe self.free_memory :: self.device, memory, null :: call
+                else => ()
+            let error = VulkanPresentError.StagingSizeOutOfRange :: byte_count :: call
+            return Result.Err :: error :: call
+        let scan: USize = 0
+        repeat while scan < scan_limit:
+            let Result.Ok(offset) = scan as Maybe[ISize] else =>
+                #unsafe self.unmap_memory :: self.device, memory :: call
+                select:
+                    when buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, buffer, null :: call
+                    else => ()
+                select:
+                    when memory != 0U64 => #unsafe self.free_memory :: self.device, memory, null :: call
+                    else => ()
+                let error = VulkanPresentError.StagingSizeOutOfRange :: byte_count :: call
+                return Result.Err :: error :: call
+            let source_slot = #unsafe source_ptr.offset :: offset :: method
+            let raw: U8 = #unsafe source_slot.load :: :: method
+            let slot = #unsafe mapped_bytes.offset :: offset :: method
+            #unsafe slot.store :: raw :: method
+            scan = scan + 1
+        #unsafe self.unmap_memory :: self.device, memory :: call
+        select self.transfer_source_buffer_plan :: byte_count :: method:
+            when Result.Ok(plan) =>
+                let upload = VulkanTransferSourceBuffer :: :: call
+                    buffer = buffer
+                    memory = memory
+                    byte_count = byte_count
+                    plan = plan
+                return Result.Ok :: upload :: call
+            when Result.Err(err) =>
+                select:
+                    when buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, buffer, null :: call
+                    else => ()
+                select:
+                    when memory != 0U64 => #unsafe self.free_memory :: self.device, memory, null :: call
+                    else => ()
+                return Result.Err :: err :: call
 
     fn surface_transfer_source_buffer(read self, take pixels: ByteBuffer) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
         let actual_byte_count = pixels.byte_count :: :: method
@@ -442,4 +607,14 @@ impl VulkanPresentApp:
 
     fn destroy_transfer_source_buffer(read self, take upload: VulkanTransferSourceBuffer) -> Unit:
         self.context.destroy_transfer_source_buffer :: upload :: method
+        return
+
+impl VulkanPresentContext:
+    fn destroy_transfer_source_buffer(read self, take upload: VulkanTransferSourceBuffer) -> Unit:
+        select:
+            when upload.buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, upload.buffer, null :: call
+            else => ()
+        select:
+            when upload.memory != 0U64 => #unsafe self.free_memory :: self.device, upload.memory, null :: call
+            else => ()
         return

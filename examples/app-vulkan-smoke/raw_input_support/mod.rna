@@ -1,0 +1,240 @@
+use std.{Option, Result}
+use runa_app.WindowId
+use runa_app_vulkan.VulkanPresentApp
+
+pub fn prove_window_raw_mouse_runtime(edit present_app: VulkanPresentApp, window_id: WindowId) -> I32:
+    let pending_events = present_app.pending_raw_mouse_motion_events_for :: window_id :: method
+    let pending_data = present_app.pending_raw_mouse_motion_data_for :: window_id :: method
+    select:
+        when pending_events.count :: :: method != 0 => return 3241
+        when pending_data.count :: :: method != 0 => return 3242
+        else => ()
+
+    let pending_raw_key_events = present_app.pending_raw_key_changed_events_for :: window_id :: method
+    let pending_raw_key_data = present_app.pending_raw_key_data_for :: window_id :: method
+    let pending_raw_button_events = present_app.pending_raw_mouse_button_changed_events_for :: window_id :: method
+    let pending_raw_button_data = present_app.pending_raw_mouse_button_data_for :: window_id :: method
+    let pending_raw_wheel_events = present_app.pending_raw_mouse_wheel_events_for :: window_id :: method
+    let pending_raw_wheel_data = present_app.pending_raw_mouse_wheel_data_for :: window_id :: method
+    select:
+        when pending_raw_key_events.count :: :: method != 0 => return 3243
+        when pending_raw_key_data.count :: :: method != 0 => return 3244
+        when pending_raw_button_events.count :: :: method != 0 => return 3291
+        when pending_raw_button_data.count :: :: method != 0 => return 3292
+        when pending_raw_wheel_events.count :: :: method != 0 => return 3293
+        when pending_raw_wheel_data.count :: :: method != 0 => return 3294
+        else => ()
+
+    present_app.post_user_event :: 301 :: method
+    let polled_events = present_app.poll_raw_mouse_motion_events_for :: window_id :: method
+    let polled_data = present_app.poll_raw_mouse_motion_data_for :: window_id :: method
+    select:
+        when polled_events.count :: :: method != 0 => return 3245
+        when polled_data.count :: :: method != 0 => return 3246
+        else => ()
+    let polled_raw_key_events = present_app.poll_raw_key_changed_events_for :: window_id :: method
+    let polled_raw_key_data = present_app.poll_raw_key_data_for :: window_id :: method
+    let polled_raw_button_events = present_app.poll_raw_mouse_button_changed_events_for :: window_id :: method
+    let polled_raw_button_data = present_app.poll_raw_mouse_button_data_for :: window_id :: method
+    let polled_raw_wheel_events = present_app.poll_raw_mouse_wheel_events_for :: window_id :: method
+    let polled_raw_wheel_data = present_app.poll_raw_mouse_wheel_data_for :: window_id :: method
+    select:
+        when polled_raw_key_events.count :: :: method != 0 => return 3247
+        when polled_raw_key_data.count :: :: method != 0 => return 3248
+        when polled_raw_button_events.count :: :: method != 0 => return 3295
+        when polled_raw_button_data.count :: :: method != 0 => return 3296
+        when polled_raw_wheel_events.count :: :: method != 0 => return 3297
+        when polled_raw_wheel_data.count :: :: method != 0 => return 3298
+        else => ()
+    select present_app.next_user_event_for :: 301 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 301 => return 3249
+                else => ()
+        when Option.None => return 3250
+
+    present_app.post_user_event :: 302 :: method
+    select present_app.next_raw_mouse_motion_data_for :: window_id :: method:
+        when Option.Some(_) => return 3247
+        when Option.None => ()
+    select present_app.next_raw_mouse_button_data_for :: window_id :: method:
+        when Option.Some(_) => return 3299
+        when Option.None => ()
+    select present_app.next_raw_mouse_wheel_data_for :: window_id :: method:
+        when Option.Some(_) => return 3300
+        when Option.None => ()
+    select present_app.next_raw_key_data_for :: window_id :: method:
+        when Option.Some(_) => return 3248
+        when Option.None => ()
+    select present_app.next_user_event_for :: 302 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 302 => return 3249
+                else => ()
+        when Option.None => return 3250
+
+    present_app.post_user_event :: 303 :: method
+    select present_app.next_raw_mouse_motion_event_for :: window_id :: method:
+        when Option.Some(_) => return 3251
+        when Option.None => ()
+    select present_app.next_raw_mouse_button_changed_event_for :: window_id :: method:
+        when Option.Some(_) => return 3301
+        when Option.None => ()
+    select present_app.next_raw_mouse_wheel_event_for :: window_id :: method:
+        when Option.Some(_) => return 3302
+        when Option.None => ()
+    select present_app.next_raw_key_changed_event_for :: window_id :: method:
+        when Option.Some(_) => return 3252
+        when Option.None => ()
+    select present_app.next_user_event_for :: 303 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 303 => return 3253
+                else => ()
+        when Option.None => return 3254
+
+    present_app.post_user_event :: 304 :: method
+    select present_app.poll_next_raw_mouse_motion_data_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3255
+        when Result.Err(_) => return 3256
+    select present_app.poll_next_raw_mouse_button_data_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3303
+        when Result.Err(_) => return 3304
+    select present_app.poll_next_raw_mouse_wheel_data_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3305
+        when Result.Err(_) => return 3306
+    select present_app.poll_next_raw_key_data_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3257
+        when Result.Err(_) => return 3258
+    select present_app.next_user_event_for :: 304 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 304 => return 3259
+                else => ()
+        when Option.None => return 3260
+
+    present_app.post_user_event :: 305 :: method
+    select present_app.poll_next_raw_mouse_motion_event_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3261
+        when Result.Err(_) => return 3262
+    select present_app.poll_next_raw_mouse_button_changed_event_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3307
+        when Result.Err(_) => return 3308
+    select present_app.poll_next_raw_mouse_wheel_event_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3309
+        when Result.Err(_) => return 3310
+    select present_app.poll_next_raw_key_changed_event_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3263
+        when Result.Err(_) => return 3264
+    select present_app.next_user_event_for :: 305 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 305 => return 3265
+                else => ()
+        when Option.None => return 3266
+
+    present_app.post_user_event :: 306 :: method
+    select present_app.wait_next_raw_mouse_motion_data_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3267
+        when Result.Err(_) => return 3268
+    select present_app.wait_next_raw_mouse_button_data_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3311
+        when Result.Err(_) => return 3312
+    select present_app.wait_next_raw_mouse_wheel_data_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3313
+        when Result.Err(_) => return 3314
+    select present_app.wait_next_raw_key_data_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3269
+        when Result.Err(_) => return 3270
+    select present_app.next_user_event_for :: 306 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 306 => return 3271
+                else => ()
+        when Option.None => return 3272
+
+    present_app.post_user_event :: 307 :: method
+    select present_app.wait_next_raw_mouse_motion_event_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3273
+        when Result.Err(_) => return 3274
+    select present_app.wait_next_raw_mouse_button_changed_event_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3315
+        when Result.Err(_) => return 3316
+    select present_app.wait_next_raw_mouse_wheel_event_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3317
+        when Result.Err(_) => return 3318
+    select present_app.wait_next_raw_key_changed_event_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3275
+        when Result.Err(_) => return 3276
+    select present_app.next_user_event_for :: 307 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 307 => return 3277
+                else => ()
+        when Option.None => return 3278
+
+    present_app.post_user_event :: 308 :: method
+    select present_app.wait_timeout_next_raw_mouse_motion_data_for :: window_id, 0.0 :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3279
+        when Result.Err(_) => return 3280
+    select present_app.wait_timeout_next_raw_mouse_button_data_for :: window_id, 0.0 :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3319
+        when Result.Err(_) => return 3320
+    select present_app.wait_timeout_next_raw_mouse_wheel_data_for :: window_id, 0.0 :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3321
+        when Result.Err(_) => return 3322
+    select present_app.wait_timeout_next_raw_key_data_for :: window_id, 0.0 :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3281
+        when Result.Err(_) => return 3282
+    select present_app.next_user_event_for :: 308 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 308 => return 3283
+                else => ()
+        when Option.None => return 3284
+
+    present_app.post_user_event :: 309 :: method
+    select present_app.wait_timeout_next_raw_mouse_motion_event_for :: window_id, 0.0 :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3285
+        when Result.Err(_) => return 3286
+    select present_app.wait_timeout_next_raw_mouse_button_changed_event_for :: window_id, 0.0 :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3323
+        when Result.Err(_) => return 3324
+    select present_app.wait_timeout_next_raw_mouse_wheel_event_for :: window_id, 0.0 :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3325
+        when Result.Err(_) => return 3326
+    select present_app.wait_timeout_next_raw_key_changed_event_for :: window_id, 0.0 :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3287
+        when Result.Err(_) => return 3288
+    select present_app.next_user_event_for :: 309 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 309 => return 3289
+                else => ()
+        when Option.None => return 3290
+
+    return 0

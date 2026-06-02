@@ -1,0 +1,618 @@
+use std.{Clone, Option, Result, Str}
+use bridge.{TextDecodeError, maybe_c_string}
+use glfw.{GlfwWindow, GlfwWindowRaw, glfw_window_raw_handle}
+use mailbox.{WindowMailbox, push_window_dropped_paths_owned, push_window_hovered_file_cancelled}
+use mailbox.{push_window_hovered_file_copy, push_window_hovered_file_owned}
+use window.Win32HWnd
+
+const S_OK: CInt = 0
+const S_FALSE: CInt = 1
+const E_NOINTERFACE: CInt = -2147467262
+const CF_HDROP: CUShort = 15
+const TYMED_HGLOBAL: CUInt = 1
+const DVASPECT_CONTENT: CUInt = 1
+const DROPEFFECT_NONE: CUInt = 0
+const DROPEFFECT_COPY: CUInt = 1
+const HEAP_ZERO_MEMORY: CUInt = 0x00000008
+const DRAG_DROP_SUBCLASS_ID: USize = 0x44524F50USize
+const POINTER_OFFSET_STEP: ISize = 1
+
+type DropPathPointer = *edit CChar
+
+#repr[c]
+struct Win32Guid:
+    pub data1: CUInt
+    pub data2: CUShort
+    pub data3: CUShort
+    pub data4: [U8; 8]
+
+#repr[c]
+struct Win32PointL:
+    pub x: CInt
+    pub y: CInt
+
+#repr[c]
+struct FormatEtc:
+    pub cf_format: CUShort
+    pub ptd: *edit CVoid
+    pub aspect: CUInt
+    pub lindex: CInt
+    pub tymed: CUInt
+
+#repr[c]
+struct StgMedium:
+    pub tymed: CUInt
+    pub handle: *edit CVoid
+    pub p_unk_for_release: *edit CVoid
+
+#repr[c]
+struct DataObjectVTable:
+    pub query_interface: extern["system"] fn(*edit CVoid, *read Win32Guid, *edit *edit CVoid) -> CInt
+    pub add_ref: extern["system"] fn(*edit CVoid) -> CUInt
+    pub release: extern["system"] fn(*edit CVoid) -> CUInt
+    pub get_data: extern["system"] fn(*edit CVoid, *read FormatEtc, *edit StgMedium) -> CInt
+
+#repr[c]
+struct DataObject:
+    pub vtable: *read DataObjectVTable
+
+#repr[c]
+struct DropTargetVTable:
+    pub query_interface: extern["system"] fn(*edit CVoid, *read Win32Guid, *edit *edit CVoid) -> CInt
+    pub add_ref: extern["system"] fn(*edit CVoid) -> CUInt
+    pub release: extern["system"] fn(*edit CVoid) -> CUInt
+    pub drag_enter: extern["system"] fn(*edit CVoid, *edit CVoid, CUInt, Win32PointL, *edit CUInt) -> CInt
+    pub drag_over: extern["system"] fn(*edit CVoid, CUInt, Win32PointL, *edit CUInt) -> CInt
+    pub drag_leave: extern["system"] fn(*edit CVoid) -> CInt
+    pub drop: extern["system"] fn(*edit CVoid, *edit CVoid, CUInt, Win32PointL, *edit CUInt) -> CInt
+
+#repr[c]
+struct WindowDropTarget:
+    pub vtable: *read DropTargetVTable
+    pub owned_vtable: *edit DropTargetVTable
+    pub mailbox: *edit WindowMailbox
+    pub ref_count: CUInt
+    pub hovering_files: CInt
+
+struct OwnedDropPayload:
+    pub count: CInt
+    pub payload: *edit CVoid
+
+#link[name = "kernel32"]
+#unsafe
+extern["system"] fn GetProcessHeap() -> *edit CVoid
+
+#link[name = "kernel32"]
+#unsafe
+extern["system"] fn HeapAlloc(heap: *edit CVoid, flags: CUInt, bytes: CSize) -> *edit CVoid
+
+#link[name = "kernel32"]
+#unsafe
+extern["system"] fn HeapFree(heap: *edit CVoid, flags: CUInt, memory: *edit CVoid) -> CInt
+
+#link[name = "kernel32"]
+#unsafe
+extern["system"] fn WideCharToMultiByte(code_page: CUInt, flags: CUInt, source: *read U16, source_count: CInt, target: *edit CChar, target_count: CInt, default_char: *read CChar, used_default: *edit CInt) -> CInt
+
+#link[name = "ole32"]
+#unsafe
+extern["system"] fn OleInitialize(reserved: *edit CVoid) -> CInt
+
+#link[name = "ole32"]
+#unsafe
+extern["system"] fn OleUninitialize() -> CVoid
+
+#link[name = "ole32"]
+#unsafe
+extern["system"] fn RegisterDragDrop(window: Win32HWnd, drop_target: *edit CVoid) -> CInt
+
+#link[name = "ole32"]
+#unsafe
+extern["system"] fn RevokeDragDrop(window: Win32HWnd) -> CInt
+
+#link[name = "ole32"]
+#unsafe
+extern["system"] fn ReleaseStgMedium(medium: *edit StgMedium) -> CVoid
+
+#link[name = "shell32"]
+#unsafe
+extern["system"] fn DragQueryFileW(drop: *edit CVoid, index: CUInt, buffer: *edit U16, buffer_count: CUInt) -> CUInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetWindowUserPointer(window: *edit GlfwWindowRaw) -> *edit CVoid
+
+fn guid_iunknown() -> Win32Guid:
+    return Win32Guid :: :: call
+        data1 = 0x00000000
+        data2 = 0x0000
+        data3 = 0x0000
+        data4 = [0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46]
+
+fn guid_idrop_target() -> Win32Guid:
+    return Win32Guid :: :: call
+        data1 = 0x00000122
+        data2 = 0x0000
+        data3 = 0x0000
+        data4 = [0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46]
+
+fn guid_equals(read left: Win32Guid, read right: Win32Guid) -> Bool:
+    select:
+        when left.data1 != right.data1 => return false
+        when left.data2 != right.data2 => return false
+        when left.data3 != right.data3 => return false
+        else => ()
+    let scan: CInt = 0
+    repeat while scan < 8:
+        let Result.Ok(index) = scan as Maybe[Index] else => return false
+        select:
+            when left.data4[index] != right.data4[index] => return false
+            else => scan = scan + 1
+    return true
+
+fn process_heap() -> *edit CVoid:
+    return #unsafe GetProcessHeap :: :: call
+
+fn void_as_window_drop_target(pointer: *edit CVoid) -> *edit WindowDropTarget:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[WindowDropTarget] :: address :: call
+
+fn void_as_drop_target_vtable(pointer: *edit CVoid) -> *edit DropTargetVTable:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[DropTargetVTable] :: address :: call
+
+fn void_as_drop_path_pointer(pointer: *edit CVoid) -> *edit DropPathPointer:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[DropPathPointer] :: address :: call
+
+fn window_drop_target_as_void(pointer: *edit WindowDropTarget) -> *edit CVoid:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[CVoid] :: address :: call
+
+fn drop_target_vtable_as_void(pointer: *edit DropTargetVTable) -> *edit CVoid:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[CVoid] :: address :: call
+
+fn data_object_as_void(pointer: *edit DataObject) -> *edit CVoid:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[CVoid] :: address :: call
+
+fn mailbox_from_window(read window: GlfwWindow) -> *edit WindowMailbox:
+    let raw = glfw_window_raw_handle :: window :: call
+    let user = #unsafe glfwGetWindowUserPointer :: raw :: call
+    select:
+        when user.is_null :: :: method =>
+            let none: *edit WindowMailbox = null
+            return none
+        else =>
+            let address = #unsafe raw_pointer_address_edit :: user :: call
+            return #unsafe raw_pointer_from_address_edit[WindowMailbox] :: address :: call
+
+fn copied_path_slot_at(base: *edit DropPathPointer, index: CInt) -> *edit DropPathPointer:
+    let slot: *edit DropPathPointer = base
+    let scan: CInt = 0
+    repeat while scan < index:
+        slot = #unsafe slot.offset :: POINTER_OFFSET_STEP :: method
+        scan = scan + 1
+    return slot
+
+fn free_heap_c_string(heap: *edit CVoid, path: *edit CChar) -> Unit:
+    select:
+        when path.is_null :: :: method => return
+        else =>
+            let address = #unsafe raw_pointer_address_edit :: path :: call
+            let memory = #unsafe raw_pointer_from_address_edit[CVoid] :: address :: call
+            let _ = #unsafe HeapFree :: heap, 0, memory :: call
+            return
+
+fn free_owned_drop_payload_heap(heap: *edit CVoid, count: CInt, payload: *edit CVoid) -> Unit:
+    select:
+        when payload.is_null :: :: method => return
+        else => ()
+    let copied_paths = void_as_drop_path_pointer :: payload :: call
+    let scan: CInt = 0
+    repeat while scan < count:
+        let slot = copied_path_slot_at :: copied_paths, scan :: call
+        let copied = #unsafe slot.load :: :: method
+        free_heap_c_string :: heap, copied :: call
+        scan = scan + 1
+    let _ = #unsafe HeapFree :: heap, 0, payload :: call
+    return
+
+fn set_drop_effect(effect: *edit CUInt, value: CUInt) -> Unit:
+    select:
+        when effect.is_null :: :: method => return
+        else =>
+            #unsafe effect.store :: value :: method
+            return
+
+fn make_file_format_etc() -> FormatEtc:
+    return FormatEtc :: :: call
+        cf_format = CF_HDROP
+        ptd = null
+        aspect = DVASPECT_CONTENT
+        lindex = -1
+        tymed = TYMED_HGLOBAL
+
+fn load_hdrop_medium(data_object: *edit DataObject) -> Option[StgMedium]:
+    select:
+        when data_object.is_null :: :: method => return Option.None
+        else => ()
+    let data_object_value: DataObject = #unsafe data_object.load :: :: method
+    let vtable_ptr = data_object_value.vtable
+    select:
+        when vtable_ptr.is_null :: :: method => return Option.None
+        else => ()
+    let vtable: DataObjectVTable = #unsafe vtable_ptr.load :: :: method
+    let format = make_file_format_etc :: :: call
+    let format_ptr: *read FormatEtc = #unsafe &raw read format
+    let medium = StgMedium :: :: call
+        tymed = 0
+        handle = null
+        p_unk_for_release = null
+    let medium_ptr: *edit StgMedium = #unsafe &raw edit medium
+    let status = #unsafe vtable.get_data :: data_object_as_void :: data_object :: call, format_ptr, medium_ptr :: call
+    select:
+        when status != S_OK => return Option.None
+        when medium.handle.is_null :: :: method =>
+            #unsafe ReleaseStgMedium :: medium_ptr :: call
+            return Option.None
+        else => return Option.Some :: medium :: call
+
+fn utf8_c_string_from_utf16(units: *read U16, count: CInt) -> Option[*edit CChar]:
+    select:
+        when units.is_null :: :: method => return Option.None
+        when count < 0 => return Option.None
+        else => ()
+    let byte_count = #unsafe WideCharToMultiByte :: 65001, 0, units, count, null, 0, null, null :: call
+    select:
+        when byte_count < 0 => return Option.None
+        else => ()
+    let heap = process_heap :: :: call
+    select:
+        when heap.is_null :: :: method => return Option.None
+        else => ()
+    let Result.Ok(byte_count_size) = byte_count as Maybe[CSize] else => return Option.None
+    let payload_bytes: CSize = byte_count_size + 1
+    let payload = #unsafe HeapAlloc :: heap, HEAP_ZERO_MEMORY, payload_bytes :: call
+    select:
+        when payload.is_null :: :: method => return Option.None
+        else => ()
+    let utf8_chars = #unsafe raw_pointer_from_address_edit[CChar] :: #unsafe raw_pointer_address_edit :: payload :: call :: call
+    let written = #unsafe WideCharToMultiByte :: 65001, 0, units, count, utf8_chars, byte_count, null, null :: call
+    select:
+        when written != byte_count =>
+            let _ = #unsafe HeapFree :: heap, 0, payload :: call
+            return Option.None
+        else => ()
+    let Result.Ok(offset) = byte_count as Maybe[ISize] else =>
+        let _ = #unsafe HeapFree :: heap, 0, payload :: call
+        return Option.None
+    let nul_slot = #unsafe utf8_chars.offset :: offset :: method
+    #unsafe nul_slot.store :: 0 :: method
+    return Option.Some :: utf8_chars :: call
+
+fn utf8_c_string_from_hdrop(drop: *edit CVoid, index: CUInt) -> Option[*edit CChar]:
+    let unit_count = #unsafe DragQueryFileW :: drop, index, null, 0 :: call
+    select:
+        when unit_count == 0 => return Option.None
+        else => ()
+    let heap = process_heap :: :: call
+    select:
+        when heap.is_null :: :: method => return Option.None
+        else => ()
+    let Result.Ok(unit_count_size) = unit_count as Maybe[CSize] else => return Option.None
+    let payload_units: CSize = (unit_count_size + 1) * 2
+    let utf16_payload = #unsafe HeapAlloc :: heap, HEAP_ZERO_MEMORY, payload_units :: call
+    select:
+        when utf16_payload.is_null :: :: method => return Option.None
+        else => ()
+    let utf16_payload_address = #unsafe raw_pointer_address_edit :: utf16_payload :: call
+    let utf16_units = #unsafe raw_pointer_from_address_edit[U16] :: utf16_payload_address :: call
+    let copied = #unsafe DragQueryFileW :: drop, index, utf16_units, unit_count + 1 :: call
+    select:
+        when copied != unit_count =>
+            let _ = #unsafe HeapFree :: heap, 0, utf16_payload :: call
+            return Option.None
+        else => ()
+    let Result.Ok(unit_count_cint) = unit_count as Maybe[CInt] else =>
+        let _ = #unsafe HeapFree :: heap, 0, utf16_payload :: call
+        return Option.None
+    let utf16_units_read = #unsafe raw_pointer_from_address_read[U16] :: utf16_payload_address :: call
+    select utf8_c_string_from_utf16 :: utf16_units_read, unit_count_cint :: call:
+        when Option.Some(path) =>
+            let _ = #unsafe HeapFree :: heap, 0, utf16_payload :: call
+            return Option.Some :: path :: call
+        when Option.None =>
+            let _ = #unsafe HeapFree :: heap, 0, utf16_payload :: call
+            return Option.None
+
+fn push_hovered_files_from_hdrop(mailbox: *edit WindowMailbox, drop: *edit CVoid) -> Bool:
+    let count = #unsafe DragQueryFileW :: drop, 0xFFFFFFFF, null, 0 :: call
+    let Result.Ok(limit) = count as Maybe[CInt] else => return false
+    let scan: CInt = 0
+    let pushed_any = false
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[CUInt] else => return pushed_any
+        select utf8_c_string_from_hdrop :: drop, index :: call:
+            when Option.Some(path) =>
+                let payload = #unsafe raw_pointer_from_address_edit[CVoid] :: #unsafe raw_pointer_address_edit :: path :: call :: call
+                push_window_hovered_file_owned :: mailbox, payload :: call
+                pushed_any = true
+            when Option.None => ()
+        scan = scan + 1
+    return pushed_any
+
+fn build_owned_drop_payload(drop: *edit CVoid) -> Option[OwnedDropPayload]:
+    let count = #unsafe DragQueryFileW :: drop, 0xFFFFFFFF, null, 0 :: call
+    let Result.Ok(limit) = count as Maybe[CInt] else => return Option.None
+    select:
+        when limit <= 0 => return Option.None
+        else => ()
+    let heap = process_heap :: :: call
+    select:
+        when heap.is_null :: :: method => return Option.None
+        else => ()
+    let Result.Ok(pointer_count) = limit as Maybe[CSize] else => return Option.None
+    let payload_bytes: CSize = pointer_count * 8
+    let payload = #unsafe HeapAlloc :: heap, HEAP_ZERO_MEMORY, payload_bytes :: call
+    select:
+        when payload.is_null :: :: method => return Option.None
+        else => ()
+    let copied_paths = void_as_drop_path_pointer :: payload :: call
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[CUInt] else =>
+            free_owned_drop_payload_heap :: heap, scan, payload :: call
+            return Option.None
+        select utf8_c_string_from_hdrop :: drop, index :: call:
+            when Option.Some(path) =>
+                let slot = copied_path_slot_at :: copied_paths, scan :: call
+                #unsafe slot.store :: path :: method
+            when Option.None =>
+                free_owned_drop_payload_heap :: heap, scan, payload :: call
+                return Option.None
+        scan = scan + 1
+    let owned = OwnedDropPayload :: :: call
+        count = limit
+        payload = payload
+    return Option.Some :: owned :: call
+
+fn push_hovered_files_from_data_object(mailbox: *edit WindowMailbox, data_object: *edit DataObject) -> Bool:
+    select load_hdrop_medium :: data_object :: call:
+        when Option.Some(medium) =>
+            let medium_ptr: *edit StgMedium = #unsafe &raw edit medium
+            let pushed = push_hovered_files_from_hdrop :: mailbox, medium.handle :: call
+            #unsafe ReleaseStgMedium :: medium_ptr :: call
+            return pushed
+        when Option.None => return false
+
+fn push_dropped_paths_from_data_object(mailbox: *edit WindowMailbox, data_object: *edit DataObject) -> Bool:
+    select load_hdrop_medium :: data_object :: call:
+        when Option.Some(medium) =>
+            let medium_ptr: *edit StgMedium = #unsafe &raw edit medium
+            select build_owned_drop_payload :: medium.handle :: call:
+                when Option.Some(owned) =>
+                    push_window_dropped_paths_owned :: mailbox, owned.count, owned.payload :: call
+                    #unsafe ReleaseStgMedium :: medium_ptr :: call
+                    return true
+                when Option.None =>
+                    #unsafe ReleaseStgMedium :: medium_ptr :: call
+                    return false
+        when Option.None => return false
+
+fn set_hovering(edit drop_target: WindowDropTarget, value: Bool) -> Unit:
+    select:
+        when value => drop_target.hovering_files = 1
+        else => drop_target.hovering_files = 0
+    return
+
+fn is_hovering(read drop_target: WindowDropTarget) -> Bool:
+    return drop_target.hovering_files != 0
+
+#export[name = "runa_app_drop_target_query_interface"]
+extern["system"] fn drop_target_query_interface(self_ptr: *edit CVoid, iid: *read Win32Guid, out_object: *edit *edit CVoid) -> CInt:
+    select:
+        when out_object.is_null :: :: method => return E_NOINTERFACE
+        else => ()
+    let none: *edit CVoid = null
+    #unsafe out_object.store :: none :: method
+    select:
+        when iid.is_null :: :: method => return E_NOINTERFACE
+        else => ()
+    let requested = #unsafe iid.load :: :: method
+    let supports = guid_equals :: requested, guid_iunknown :: :: call :: call || guid_equals :: requested, guid_idrop_target :: :: call :: call
+    select:
+        when !supports => return E_NOINTERFACE
+        else => ()
+    let target = void_as_window_drop_target :: self_ptr :: call
+    let _ = drop_target_add_ref :: self_ptr :: call
+    #unsafe out_object.store :: window_drop_target_as_void :: target :: call :: method
+    return S_OK
+
+#export[name = "runa_app_drop_target_add_ref"]
+extern["system"] fn drop_target_add_ref(self_ptr: *edit CVoid) -> CUInt:
+    let target = void_as_window_drop_target :: self_ptr :: call
+    let current: WindowDropTarget = #unsafe target.load :: :: method
+    current.ref_count = current.ref_count + 1
+    #unsafe target.store :: current :: method
+    return current.ref_count
+
+#export[name = "runa_app_drop_target_release"]
+extern["system"] fn drop_target_release(self_ptr: *edit CVoid) -> CUInt:
+    let target = void_as_window_drop_target :: self_ptr :: call
+    let current: WindowDropTarget = #unsafe target.load :: :: method
+    select:
+        when current.ref_count <= 1 =>
+            let heap = process_heap :: :: call
+            select:
+                when !heap.is_null :: :: method =>
+                    let owned_vtable = current.owned_vtable
+                    let target_memory = window_drop_target_as_void :: target :: call
+                    let vtable_memory = drop_target_vtable_as_void :: owned_vtable :: call
+                    let _ = #unsafe HeapFree :: heap, 0, vtable_memory :: call
+                    let _ = #unsafe HeapFree :: heap, 0, target_memory :: call
+                else => ()
+            return 0
+        else =>
+            current.ref_count = current.ref_count - 1
+            #unsafe target.store :: current :: method
+            return current.ref_count
+
+#export[name = "runa_app_drop_target_drag_enter"]
+extern["system"] fn drop_target_drag_enter(self_ptr: *edit CVoid, data_object_ptr: *edit CVoid, key_state: CUInt, point: Win32PointL, effect: *edit CUInt) -> CInt:
+    let _ = key_state
+    let _ = point
+    let target_ptr = void_as_window_drop_target :: self_ptr :: call
+    let target: WindowDropTarget = #unsafe target_ptr.load :: :: method
+    select:
+        when target.mailbox.is_null :: :: method =>
+            set_drop_effect :: effect, DROPEFFECT_NONE :: call
+            return S_OK
+        else => ()
+    let data_object = #unsafe raw_pointer_from_address_edit[DataObject] :: #unsafe raw_pointer_address_edit :: data_object_ptr :: call :: call
+    let pushed = push_hovered_files_from_data_object :: target.mailbox, data_object :: call
+    set_hovering :: target, pushed :: call
+    #unsafe target_ptr.store :: target :: method
+    select:
+        when pushed => set_drop_effect :: effect, DROPEFFECT_COPY :: call
+        else => set_drop_effect :: effect, DROPEFFECT_NONE :: call
+    return S_OK
+
+#export[name = "runa_app_drop_target_drag_over"]
+extern["system"] fn drop_target_drag_over(self_ptr: *edit CVoid, key_state: CUInt, point: Win32PointL, effect: *edit CUInt) -> CInt:
+    let _ = key_state
+    let _ = point
+    let target = #unsafe (void_as_window_drop_target :: self_ptr :: call).load :: :: method
+    select:
+        when is_hovering :: target :: call => set_drop_effect :: effect, DROPEFFECT_COPY :: call
+        else => set_drop_effect :: effect, DROPEFFECT_NONE :: call
+    return S_OK
+
+#export[name = "runa_app_drop_target_drag_leave"]
+extern["system"] fn drop_target_drag_leave(self_ptr: *edit CVoid) -> CInt:
+    let target_ptr = void_as_window_drop_target :: self_ptr :: call
+    let target: WindowDropTarget = #unsafe target_ptr.load :: :: method
+    select:
+        when is_hovering :: target :: call =>
+            push_window_hovered_file_cancelled :: target.mailbox :: call
+            set_hovering :: target, false :: call
+            #unsafe target_ptr.store :: target :: method
+        else => ()
+    return S_OK
+
+#export[name = "runa_app_drop_target_drop"]
+extern["system"] fn drop_target_drop(self_ptr: *edit CVoid, data_object_ptr: *edit CVoid, key_state: CUInt, point: Win32PointL, effect: *edit CUInt) -> CInt:
+    let _ = key_state
+    let _ = point
+    let target_ptr = void_as_window_drop_target :: self_ptr :: call
+    let target: WindowDropTarget = #unsafe target_ptr.load :: :: method
+    let data_object = #unsafe raw_pointer_from_address_edit[DataObject] :: #unsafe raw_pointer_address_edit :: data_object_ptr :: call :: call
+    let dropped = push_dropped_paths_from_data_object :: target.mailbox, data_object :: call
+    set_hovering :: target, false :: call
+    #unsafe target_ptr.store :: target :: method
+    select:
+        when dropped => set_drop_effect :: effect, DROPEFFECT_COPY :: call
+        else => set_drop_effect :: effect, DROPEFFECT_NONE :: call
+    return S_OK
+
+fn allocate_drop_target_vtable() -> Option[*edit DropTargetVTable]:
+    let heap = process_heap :: :: call
+    select:
+        when heap.is_null :: :: method => return Option.None
+        else => ()
+    let Result.Ok(bytes) = 56 as Maybe[CSize] else => return Option.None
+    let payload = #unsafe HeapAlloc :: heap, HEAP_ZERO_MEMORY, bytes :: call
+    select:
+        when payload.is_null :: :: method => return Option.None
+        else => ()
+    let vtable_ptr = void_as_drop_target_vtable :: payload :: call
+    let vtable = DropTargetVTable :: :: call
+        query_interface = drop_target_query_interface
+        add_ref = drop_target_add_ref
+        release = drop_target_release
+        drag_enter = drop_target_drag_enter
+        drag_over = drop_target_drag_over
+        drag_leave = drop_target_drag_leave
+        drop = drop_target_drop
+    #unsafe vtable_ptr.store :: vtable :: method
+    return Option.Some :: vtable_ptr :: call
+
+fn allocate_window_drop_target(mailbox: *edit WindowMailbox) -> Option[*edit WindowDropTarget]:
+    select allocate_drop_target_vtable :: :: call:
+        when Option.Some(vtable_ptr) =>
+            let heap = process_heap :: :: call
+            select:
+                when heap.is_null :: :: method =>
+                    let _ = #unsafe HeapFree :: heap, 0, drop_target_vtable_as_void :: vtable_ptr :: call :: call
+                    return Option.None
+                else => ()
+            let Result.Ok(bytes) = 40 as Maybe[CSize] else =>
+                let _ = #unsafe HeapFree :: heap, 0, drop_target_vtable_as_void :: vtable_ptr :: call :: call
+                return Option.None
+            let payload = #unsafe HeapAlloc :: heap, HEAP_ZERO_MEMORY, bytes :: call
+            select:
+                when payload.is_null :: :: method =>
+                    let _ = #unsafe HeapFree :: heap, 0, drop_target_vtable_as_void :: vtable_ptr :: call :: call
+                    return Option.None
+                else => ()
+            let target_ptr = void_as_window_drop_target :: payload :: call
+            let vtable_read: *read DropTargetVTable = #unsafe raw_pointer_from_address_read[DropTargetVTable] :: #unsafe raw_pointer_address_edit :: vtable_ptr :: call :: call
+            let target = WindowDropTarget :: :: call
+                vtable = vtable_read
+                owned_vtable = vtable_ptr
+                mailbox = mailbox
+                ref_count = 1
+                hovering_files = 0
+            #unsafe target_ptr.store :: target :: method
+            return Option.Some :: target_ptr :: call
+        when Option.None => return Option.None
+
+pub(package) fn initialize_drag_drop_runtime() -> Bool:
+    let status = #unsafe OleInitialize :: null :: call
+    return status == S_OK || status == S_FALSE
+
+pub(package) fn uninitialize_drag_drop_runtime() -> Unit:
+    #unsafe OleUninitialize :: :: call
+    return
+
+pub(package) fn attach_drag_drop_target(read window: GlfwWindow, mailbox: *edit WindowMailbox) -> Bool:
+    let hwnd = window.win32_window :: :: method
+    select:
+        when hwnd.is_null :: :: method => return false
+        when mailbox.is_null :: :: method => return false
+        else => ()
+    select allocate_window_drop_target :: mailbox :: call:
+        when Option.Some(target_ptr) =>
+            let status = #unsafe RegisterDragDrop :: hwnd, window_drop_target_as_void :: target_ptr :: call :: call
+            let _ = drop_target_release :: window_drop_target_as_void :: target_ptr :: call :: call
+            return status == S_OK
+        when Option.None => return false
+
+pub(package) fn detach_drag_drop_target(read window: GlfwWindow) -> Unit:
+    let hwnd = window.win32_window :: :: method
+    select:
+        when hwnd.is_null :: :: method => return
+        else => ()
+    let _ = #unsafe RevokeDragDrop :: hwnd :: call
+    return
+
+pub(package) fn simulate_hovered_file(read window: GlfwWindow, read path: Str) -> Result[Bool, TextDecodeError]:
+    let mailbox = mailbox_from_window :: window :: call
+    select:
+        when mailbox.is_null :: :: method => return Result.Ok :: false :: call
+        else => ()
+    let copied = path.clone :: :: method
+    select maybe_c_string :: copied :: call:
+        when Result.Ok(raw_path) =>
+            let pushed = push_window_hovered_file_copy :: mailbox, raw_path.as_ptr :: :: method :: call
+            return Result.Ok :: pushed :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+pub(package) fn simulate_hovered_file_cancelled(read window: GlfwWindow) -> Bool:
+    let mailbox = mailbox_from_window :: window :: call
+    select:
+        when mailbox.is_null :: :: method => return false
+        else =>
+            push_window_hovered_file_cancelled :: mailbox :: call
+            return true

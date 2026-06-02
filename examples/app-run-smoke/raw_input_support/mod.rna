@@ -1,0 +1,379 @@
+use std.{List, Option}
+use runa_app_run.InputAction
+use runa_app_run.{AppEvent, WindowEvent, WindowEventKind}
+use runa_app_run.app_event_batch_from_events
+
+pub fn check_raw_mouse_batch_helpers() -> I32:
+    let raw_event = WindowEvent.RawMouseMotion :: :: call
+        id = 31
+        delta_x = 7
+        delta_y = -3
+    select raw_event.raw_mouse_motion_data :: :: method:
+        when Option.Some(data) =>
+            select:
+                when data.delta_x != 7 => return 3501
+                when data.delta_y != -3 => return 3502
+                else => ()
+        when Option.None => return 3503
+    select raw_event.kind :: :: method:
+        when WindowEventKind.RawMouseMotion => ()
+        when _ => return 3504
+    let raw_event_for_app = WindowEvent.RawMouseMotion :: :: call
+        id = 31
+        delta_x = 7
+        delta_y = -3
+    let wrapped_raw_event = AppEvent.Window :: raw_event_for_app :: call
+    select wrapped_raw_event.raw_mouse_motion_data :: :: method:
+        when Option.Some(data) =>
+            select:
+                when data.delta_x != 7 => return 3505
+                when data.delta_y != -3 => return 3506
+                else => ()
+        when Option.None => return 3507
+    let cursor_event = WindowEvent.CursorMoved :: :: call
+        id = 32
+        x = 1.0
+        y = 2.0
+    let wrapped_cursor_event = AppEvent.Window :: cursor_event :: call
+    let raw_event_for_batch = WindowEvent.RawMouseMotion :: :: call
+        id = 31
+        delta_x = 7
+        delta_y = -3
+    let wrapped_batch_raw_event = AppEvent.Window :: raw_event_for_batch :: call
+    let events = List[AppEvent] :: :: call
+    events.push :: wrapped_cursor_event :: method
+    events.push :: wrapped_batch_raw_event :: method
+    let batch = app_event_batch_from_events :: events :: call
+    let raw_events = batch.raw_mouse_motion_events :: :: method
+    let raw_data = batch.raw_mouse_motion_data :: :: method
+    select:
+        when raw_events.count :: :: method != 1 => return 3508
+        when raw_data.count :: :: method != 1 => return 3509
+        else => ()
+    let raw_event_copy = raw_events.remove :: 0 :: method
+    select raw_event_copy.raw_mouse_motion_data :: :: method:
+        when Option.Some(data) =>
+            select:
+                when data.delta_x != 7 => return 3510
+                when data.delta_y != -3 => return 3511
+                else => ()
+        when Option.None => return 3512
+    let raw_value = raw_data.remove :: 0 :: method
+    select:
+        when raw_value.delta_x != 7 => return 3513
+        when raw_value.delta_y != -3 => return 3514
+        else => ()
+    let filtered_events = List[AppEvent] :: :: call
+    let filtered_raw_event_a = WindowEvent.RawMouseMotion :: :: call
+        id = 41
+        delta_x = 9
+        delta_y = 4
+    let filtered_raw_event_b = WindowEvent.RawMouseMotion :: :: call
+        id = 42
+        delta_x = -5
+        delta_y = 6
+    filtered_events.push :: AppEvent.Window :: filtered_raw_event_a :: call :: method
+    filtered_events.push :: AppEvent.Window :: filtered_raw_event_b :: call :: method
+    let filtered_batch = app_event_batch_from_events :: filtered_events :: call
+    let only_id_42_events = filtered_batch.take_raw_mouse_motion_events_for :: 42 :: method
+    let only_id_41_data = filtered_batch.take_raw_mouse_motion_data_for :: 41 :: method
+    select:
+        when only_id_42_events.count :: :: method != 1 => return 3515
+        when only_id_41_data.count :: :: method != 1 => return 3516
+        else => ()
+    let only_id_42_event = only_id_42_events.remove :: 0 :: method
+    select only_id_42_event.raw_mouse_motion_data :: :: method:
+        when Option.Some(data) =>
+            select:
+                when data.delta_x != -5 => return 3517
+                when data.delta_y != 6 => return 3518
+                else => ()
+        when Option.None => return 3519
+    let only_id_41_value = only_id_41_data.remove :: 0 :: method
+    select:
+        when only_id_41_value.delta_x != 9 => return 3520
+        when only_id_41_value.delta_y != 4 => return 3521
+        else => ()
+    let pop_events = List[AppEvent] :: :: call
+    let pop_raw_event = WindowEvent.RawMouseMotion :: :: call
+        id = 51
+        delta_x = 12
+        delta_y = -8
+    pop_events.push :: AppEvent.Window :: pop_raw_event :: call :: method
+    let pop_batch = app_event_batch_from_events :: pop_events :: call
+    select pop_batch.pop_raw_mouse_motion_data :: :: method:
+        when Option.Some(data) =>
+            select:
+                when data.delta_x != 12 => return 3522
+                when data.delta_y != -8 => return 3523
+                else => ()
+        when Option.None => return 3524
+    let pop_event_items = List[AppEvent] :: :: call
+    let pop_filtered_event = WindowEvent.RawMouseMotion :: :: call
+        id = 61
+        delta_x = 3
+        delta_y = 2
+    pop_event_items.push :: AppEvent.Window :: pop_filtered_event :: call :: method
+    let pop_event_batch = app_event_batch_from_events :: pop_event_items :: call
+    select pop_event_batch.pop_raw_mouse_motion_event_for :: 61 :: method:
+        when Option.Some(event) =>
+            select event.raw_mouse_motion_data :: :: method:
+                when Option.Some(data) =>
+                    select:
+                        when data.delta_x != 3 => return 3525
+                        when data.delta_y != 2 => return 3526
+                        else => ()
+                when Option.None => return 3527
+        when Option.None => return 3528
+
+    let raw_key_event = WindowEvent.RawKeyChanged :: :: call
+        id = 71
+        raw_key = 0x41
+        scancode = 30
+        action = InputAction.Press
+        extended = false
+    select raw_key_event.raw_key_data :: :: method:
+        when Option.Some(data) =>
+            select:
+                when data.raw_key != 0x41 => return 3529
+                when data.scancode != 30 => return 3530
+                when data.extended => return 3531
+                else => ()
+        when Option.None => return 3532
+    let raw_key_event_for_kind = WindowEvent.RawKeyChanged :: :: call
+        id = 71
+        raw_key = 0x41
+        scancode = 30
+        action = InputAction.Press
+        extended = false
+    select raw_key_event_for_kind.kind :: :: method:
+        when WindowEventKind.RawKeyChanged => ()
+        when _ => return 3533
+    let raw_key_event_for_app = WindowEvent.RawKeyChanged :: :: call
+        id = 71
+        raw_key = 0x41
+        scancode = 30
+        action = InputAction.Press
+        extended = false
+    let wrapped_raw_key_event = AppEvent.Window :: raw_key_event_for_app :: call
+    select wrapped_raw_key_event.raw_key_data :: :: method:
+        when Option.Some(data) =>
+            select:
+                when data.raw_key != 0x41 => return 3534
+                else => ()
+        when Option.None => return 3535
+    let raw_key_events = List[AppEvent] :: :: call
+    let raw_key_cursor_event = WindowEvent.CursorMoved :: :: call
+        id = 72
+        x = 2.0
+        y = 3.0
+    let raw_key_event_for_batch = WindowEvent.RawKeyChanged :: :: call
+        id = 71
+        raw_key = 0x41
+        scancode = 30
+        action = InputAction.Press
+        extended = false
+    let wrapped_batch_raw_key_event = AppEvent.Window :: raw_key_event_for_batch :: call
+    raw_key_events.push :: AppEvent.Window :: raw_key_cursor_event :: call :: method
+    raw_key_events.push :: wrapped_batch_raw_key_event :: method
+    let raw_key_batch = app_event_batch_from_events :: raw_key_events :: call
+    let raw_key_changed_events = raw_key_batch.raw_key_changed_events :: :: method
+    let raw_key_data = raw_key_batch.raw_key_data :: :: method
+    select:
+        when raw_key_changed_events.count :: :: method != 1 => return 3536
+        when raw_key_data.count :: :: method != 1 => return 3537
+        else => ()
+    let raw_key_changed_event = raw_key_changed_events.remove :: 0 :: method
+    select raw_key_changed_event.raw_key_data :: :: method:
+        when Option.Some(data) =>
+            select:
+                when data.scancode != 30 => return 3538
+                else => ()
+        when Option.None => return 3539
+    let raw_key_value = raw_key_data.remove :: 0 :: method
+    select:
+        when raw_key_value.raw_key != 0x41 => return 3540
+        when raw_key_value.scancode != 30 => return 3541
+        else => ()
+    let filtered_raw_key_events = List[AppEvent] :: :: call
+    let filtered_raw_key_a = WindowEvent.RawKeyChanged :: :: call
+        id = 81
+        raw_key = 0x42
+        scancode = 48
+        action = InputAction.Release
+        extended = true
+    let filtered_raw_key_b = WindowEvent.RawKeyChanged :: :: call
+        id = 82
+        raw_key = 0x43
+        scancode = 46
+        action = InputAction.Press
+        extended = false
+    filtered_raw_key_events.push :: AppEvent.Window :: filtered_raw_key_a :: call :: method
+    filtered_raw_key_events.push :: AppEvent.Window :: filtered_raw_key_b :: call :: method
+    let filtered_raw_key_batch = app_event_batch_from_events :: filtered_raw_key_events :: call
+    let only_id_82_events = filtered_raw_key_batch.take_raw_key_changed_events_for :: 82 :: method
+    let only_id_81_data = filtered_raw_key_batch.take_raw_key_data_for :: 81 :: method
+    select:
+        when only_id_82_events.count :: :: method != 1 => return 3542
+        when only_id_81_data.count :: :: method != 1 => return 3543
+        else => ()
+    let only_id_82_event = only_id_82_events.remove :: 0 :: method
+    select only_id_82_event.raw_key_data :: :: method:
+        when Option.Some(data) =>
+            select:
+                when data.raw_key != 0x43 => return 3544
+                else => ()
+        when Option.None => return 3545
+    let only_id_81_value = only_id_81_data.remove :: 0 :: method
+    select:
+        when only_id_81_value.raw_key != 0x42 => return 3546
+        when !only_id_81_value.extended => return 3547
+        else => ()
+    let pop_raw_key_events = List[AppEvent] :: :: call
+    let pop_raw_key_event = WindowEvent.RawKeyChanged :: :: call
+        id = 91
+        raw_key = 0x44
+        scancode = 32
+        action = InputAction.Release
+        extended = false
+    pop_raw_key_events.push :: AppEvent.Window :: pop_raw_key_event :: call :: method
+    let pop_raw_key_batch = app_event_batch_from_events :: pop_raw_key_events :: call
+    select pop_raw_key_batch.pop_raw_key_data :: :: method:
+        when Option.Some(data) =>
+            select:
+                when data.raw_key != 0x44 => return 3548
+                when data.scancode != 32 => return 3549
+                else => ()
+        when Option.None => return 3550
+    let pop_raw_key_event_items = List[AppEvent] :: :: call
+    let pop_filtered_raw_key_event = WindowEvent.RawKeyChanged :: :: call
+        id = 92
+        raw_key = 0x45
+        scancode = 18
+        action = InputAction.Press
+        extended = true
+    pop_raw_key_event_items.push :: AppEvent.Window :: pop_filtered_raw_key_event :: call :: method
+    let pop_raw_key_event_batch = app_event_batch_from_events :: pop_raw_key_event_items :: call
+    select pop_raw_key_event_batch.pop_raw_key_changed_event_for :: 92 :: method:
+        when Option.Some(event) =>
+            select event.raw_key_data :: :: method:
+                when Option.Some(data) =>
+                    select:
+                        when data.raw_key != 0x45 => return 3551
+                        when !data.extended => return 3552
+                        else => ()
+                when Option.None => return 3553
+        when Option.None => return 3554
+
+    let raw_button_event = WindowEvent.RawMouseButtonChanged :: :: call
+        id = 101
+        button = runa_app_run.MouseButton.Button4
+        action = InputAction.Press
+    let raw_button_kind_event = WindowEvent.RawMouseButtonChanged :: :: call
+        id = 101
+        button = runa_app_run.MouseButton.Button4
+        action = InputAction.Press
+    let raw_button_batch_event = WindowEvent.RawMouseButtonChanged :: :: call
+        id = 101
+        button = runa_app_run.MouseButton.Button4
+        action = InputAction.Press
+    select raw_button_event.raw_mouse_button_data :: :: method:
+        when Option.Some(data) =>
+            select data.button:
+                when runa_app_run.MouseButton.Button4 => ()
+                when _ => return 3555
+            select data.action:
+                when InputAction.Press => ()
+                when _ => return 3556
+        when Option.None => return 3557
+    select raw_button_kind_event.kind :: :: method:
+        when WindowEventKind.RawMouseButtonChanged => ()
+        when _ => return 3558
+    let raw_wheel_event = WindowEvent.RawMouseWheel :: :: call
+        id = 102
+        delta_x = -120
+        delta_y = 240
+    let raw_wheel_kind_event = WindowEvent.RawMouseWheel :: :: call
+        id = 102
+        delta_x = -120
+        delta_y = 240
+    let raw_wheel_batch_event = WindowEvent.RawMouseWheel :: :: call
+        id = 102
+        delta_x = -120
+        delta_y = 240
+    select raw_wheel_event.raw_mouse_wheel_data :: :: method:
+        when Option.Some(data) =>
+            select:
+                when data.delta_x != -120 => return 3559
+                when data.delta_y != 240 => return 3560
+                else => ()
+        when Option.None => return 3561
+    select raw_wheel_kind_event.kind :: :: method:
+        when WindowEventKind.RawMouseWheel => ()
+        when _ => return 3562
+    let raw_pointer_events = List[AppEvent] :: :: call
+    raw_pointer_events.push :: AppEvent.Window :: raw_button_batch_event :: call :: method
+    raw_pointer_events.push :: AppEvent.Window :: raw_wheel_batch_event :: call :: method
+    let raw_pointer_batch = app_event_batch_from_events :: raw_pointer_events :: call
+    let raw_button_events = raw_pointer_batch.raw_mouse_button_changed_events :: :: method
+    let raw_button_data = raw_pointer_batch.raw_mouse_button_data :: :: method
+    let raw_wheel_events = raw_pointer_batch.raw_mouse_wheel_events :: :: method
+    let raw_wheel_data = raw_pointer_batch.raw_mouse_wheel_data :: :: method
+    select:
+        when raw_button_events.count :: :: method != 1 => return 3563
+        when raw_button_data.count :: :: method != 1 => return 3564
+        when raw_wheel_events.count :: :: method != 1 => return 3565
+        when raw_wheel_data.count :: :: method != 1 => return 3566
+        else => ()
+    let filtered_raw_pointer_events = List[AppEvent] :: :: call
+    let filtered_raw_button_a = WindowEvent.RawMouseButtonChanged :: :: call
+        id = 111
+        button = runa_app_run.MouseButton.Left
+        action = InputAction.Release
+    let filtered_raw_wheel_b = WindowEvent.RawMouseWheel :: :: call
+        id = 112
+        delta_x = 0
+        delta_y = -120
+    filtered_raw_pointer_events.push :: AppEvent.Window :: filtered_raw_button_a :: call :: method
+    filtered_raw_pointer_events.push :: AppEvent.Window :: filtered_raw_wheel_b :: call :: method
+    let filtered_raw_pointer_batch = app_event_batch_from_events :: filtered_raw_pointer_events :: call
+    let only_id_111_button_data = filtered_raw_pointer_batch.take_raw_mouse_button_data_for :: 111 :: method
+    let only_id_112_wheel_events = filtered_raw_pointer_batch.take_raw_mouse_wheel_events_for :: 112 :: method
+    select:
+        when only_id_111_button_data.count :: :: method != 1 => return 3567
+        when only_id_112_wheel_events.count :: :: method != 1 => return 3568
+        else => ()
+    let popped_raw_button_events = List[AppEvent] :: :: call
+    let pop_raw_button_event = WindowEvent.RawMouseButtonChanged :: :: call
+        id = 121
+        button = runa_app_run.MouseButton.Right
+        action = InputAction.Release
+    popped_raw_button_events.push :: AppEvent.Window :: pop_raw_button_event :: call :: method
+    let popped_raw_button_batch = app_event_batch_from_events :: popped_raw_button_events :: call
+    select popped_raw_button_batch.pop_raw_mouse_button_changed_event_for :: 121 :: method:
+        when Option.Some(event) =>
+            select event.raw_mouse_button_data :: :: method:
+                when Option.Some(data) =>
+                    select data.button:
+                        when runa_app_run.MouseButton.Right => ()
+                        when _ => return 3569
+                    select data.action:
+                        when InputAction.Release => ()
+                        when _ => return 3570
+                when Option.None => return 3571
+        when Option.None => return 3572
+    let popped_raw_wheel_events = List[AppEvent] :: :: call
+    let pop_raw_wheel_event = WindowEvent.RawMouseWheel :: :: call
+        id = 122
+        delta_x = 120
+        delta_y = 0
+    popped_raw_wheel_events.push :: AppEvent.Window :: pop_raw_wheel_event :: call :: method
+    let popped_raw_wheel_batch = app_event_batch_from_events :: popped_raw_wheel_events :: call
+    select popped_raw_wheel_batch.pop_raw_mouse_wheel_data :: :: method:
+        when Option.Some(data) =>
+            select:
+                when data.delta_x != 120 => return 3573
+                when data.delta_y != 0 => return 3574
+                else => ()
+        when Option.None => return 3575
+    return 0

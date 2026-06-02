@@ -1,0 +1,102 @@
+use std.{List, Option}
+use runa_app_run.{AppEvent, WindowEvent, WindowEventKind, app_event_batch_from_events}
+use runa_app_run.modifiers_from_raw
+
+pub fn check_modifier_batch_helpers() -> I32:
+    let direct_event = WindowEvent.ModifiersChanged :: :: call
+        id = 1
+        mods = modifiers_from_raw :: 0x0005 :: call
+    select direct_event.kind :: :: method:
+        when WindowEventKind.ModifiersChanged => ()
+        else => return 6260
+    select direct_event.modifiers_state :: :: method:
+        when Option.Some(mods) =>
+            select:
+                when !mods.shift :: :: method => return 6261
+                when mods.control :: :: method => return 6262
+                when !mods.alt :: :: method => return 6263
+                else => ()
+        when Option.None => return 6264
+
+    let wrapped_window_event = WindowEvent.ModifiersChanged :: :: call
+        id = 2
+        mods = modifiers_from_raw :: 0x000A :: call
+    let wrapped_event = AppEvent.Window :: wrapped_window_event :: call
+    select wrapped_event.modifiers_state :: :: method:
+        when Option.Some(mods) =>
+            select:
+                when mods.shift :: :: method => return 6265
+                when !mods.control :: :: method => return 6266
+                when mods.alt :: :: method => return 6267
+                when !mods.super_key :: :: method => return 6268
+                else => ()
+        when Option.None => return 6269
+
+    let events = List[AppEvent] :: :: call
+    let state_event_a = WindowEvent.ModifiersChanged :: :: call
+        id = 3
+        mods = modifiers_from_raw :: 0x0001 :: call
+    let state_event_b = WindowEvent.ModifiersChanged :: :: call
+        id = 4
+        mods = modifiers_from_raw :: 0x0006 :: call
+    events.push :: (AppEvent.Window :: state_event_a :: call) :: method
+    events.push :: (AppEvent.Window :: state_event_b :: call) :: method
+    let batch = app_event_batch_from_events :: events :: call
+    let states = batch.modifier_states :: :: method
+    select:
+        when states.count :: :: method != 2 => return 6270
+        when !states[0].shift :: :: method => return 6271
+        when !states[1].control :: :: method => return 6272
+        when !states[1].alt :: :: method => return 6273
+        else => ()
+    let remaining = batch.take_windows :: :: method
+    select:
+        when remaining.count :: :: method != 2 => return 6274
+        else => ()
+
+    let filtered_events = List[AppEvent] :: :: call
+    let filtered_event_a = WindowEvent.ModifiersChanged :: :: call
+        id = 7
+        mods = modifiers_from_raw :: 0x0001 :: call
+    let filtered_event_b = WindowEvent.ModifiersChanged :: :: call
+        id = 8
+        mods = modifiers_from_raw :: 0x0008 :: call
+    filtered_events.push :: (AppEvent.Window :: filtered_event_a :: call) :: method
+    filtered_events.push :: (AppEvent.Window :: filtered_event_b :: call) :: method
+    let filtered_batch = app_event_batch_from_events :: filtered_events :: call
+    let filtered_states = filtered_batch.modifier_states_for :: 8 :: method
+    select:
+        when filtered_states.count :: :: method != 1 => return 6275
+        when !filtered_states[0].super_key :: :: method => return 6276
+        else => ()
+
+    let pop_state_events = List[AppEvent] :: :: call
+    let pop_state_event = WindowEvent.ModifiersChanged :: :: call
+        id = 9
+        mods = modifiers_from_raw :: 0x0010 :: call
+    pop_state_events.push :: (AppEvent.Window :: pop_state_event :: call) :: method
+    let pop_state_batch = app_event_batch_from_events :: pop_state_events :: call
+    select pop_state_batch.pop_modifiers_state :: :: method:
+        when Option.Some(mods) =>
+            select:
+                when !mods.caps_lock :: :: method => return 6277
+                else => ()
+        when Option.None => return 6278
+
+    let pop_event_events = List[AppEvent] :: :: call
+    let pop_event_event = WindowEvent.ModifiersChanged :: :: call
+        id = 10
+        mods = modifiers_from_raw :: 0x0020 :: call
+    pop_event_events.push :: (AppEvent.Window :: pop_event_event :: call) :: method
+    let pop_event_batch = app_event_batch_from_events :: pop_event_events :: call
+    select pop_event_batch.pop_modifiers_changed_event :: :: method:
+        when Option.Some(event) =>
+            select event.modifiers_state :: :: method:
+                when Option.Some(mods) =>
+                    select:
+                        when !mods.num_lock :: :: method => return 6279
+                        else => ()
+                when Option.None => return 6280
+        when Option.None => return 6281
+
+    return 0

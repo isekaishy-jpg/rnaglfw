@@ -1,0 +1,144 @@
+use std.{List, Option}
+use runa_app_run.{AppEvent, WindowEvent, WindowEventKind}
+use runa_app_run.app_event_batch_from_events
+
+pub fn check_hovered_file_batch_helpers() -> I32:
+    let hovered_event = WindowEvent.HoveredFile :: :: call
+        id = 401
+        path = "hover.txt"
+    select hovered_event.take_hovered_file_path :: :: method:
+        when Option.Some(_) => ()
+        when Option.None => return 3602
+    let hovered_kind_event = WindowEvent.HoveredFile :: :: call
+        id = 401
+        path = "hover.txt"
+    select hovered_kind_event.kind :: :: method:
+        when WindowEventKind.HoveredFile => ()
+        when _ => return 3603
+    let hovered_event_for_app = WindowEvent.HoveredFile :: :: call
+        id = 401
+        path = "hover.txt"
+    let wrapped_hovered_event = AppEvent.Window :: hovered_event_for_app :: call
+    select wrapped_hovered_event.take_hovered_file_path :: :: method:
+        when Option.Some(_) => ()
+        when Option.None => return 3605
+
+    let cancelled_event = WindowEvent.HoveredFileCancelled :: :: call
+        id = 402
+    select cancelled_event.kind :: :: method:
+        when WindowEventKind.HoveredFileCancelled => ()
+        when _ => return 3606
+
+    let view_events = List[AppEvent] :: :: call
+    let view_hovered_a = WindowEvent.HoveredFile :: :: call
+        id = 411
+        path = "hover.txt"
+    let view_hovered_b = WindowEvent.HoveredFile :: :: call
+        id = 412
+        path = "beta.bin"
+    let view_cancelled = WindowEvent.HoveredFileCancelled :: :: call
+        id = 411
+    view_events.push :: AppEvent.Window :: view_hovered_a :: call :: method
+    view_events.push :: AppEvent.Window :: view_hovered_b :: call :: method
+    view_events.push :: AppEvent.Window :: view_cancelled :: call :: method
+    let view_batch = app_event_batch_from_events :: view_events :: call
+    let hovered_paths = view_batch.hovered_file_paths :: :: method
+    let filtered_hovered_paths = view_batch.hovered_file_paths_for :: 412 :: method
+    let hovered_event_list = view_batch.hovered_file_events_for :: 411 :: method
+    let cancelled_event_list = view_batch.hovered_file_cancelled_events_for :: 411 :: method
+    select:
+        when hovered_paths.count :: :: method != 2 => return 3607
+        when filtered_hovered_paths.count :: :: method != 1 => return 3608
+        when filtered_hovered_paths.remove :: 0 :: method.is_empty :: :: method => return 3609
+        when hovered_event_list.count :: :: method != 1 => return 3610
+        when cancelled_event_list.count :: :: method != 1 => return 3611
+        when view_batch.event_count :: :: method != 3 => return 3612
+        else => ()
+    let filtered_hovered_event = hovered_event_list.remove :: 0 :: method
+    select filtered_hovered_event:
+        when WindowEvent.HoveredFile(id = id, path = path) =>
+            select:
+                when id != 411 => return 3613
+                when path.is_empty :: :: method => return 3614
+                else => ()
+        when _ => return 3615
+    select cancelled_event_list.remove :: 0 :: method:
+        when WindowEvent.HoveredFileCancelled(id = id) =>
+            select:
+                when id != 411 => return 3616
+                else => ()
+        when _ => return 3617
+
+    let pop_events = List[AppEvent] :: :: call
+    let pop_hovered_a = WindowEvent.HoveredFile :: :: call
+        id = 421
+        path = "hover.txt"
+    let pop_hovered_b = WindowEvent.HoveredFile :: :: call
+        id = 422
+        path = "beta.bin"
+    let pop_cancelled = WindowEvent.HoveredFileCancelled :: :: call
+        id = 421
+    pop_events.push :: AppEvent.Window :: pop_hovered_a :: call :: method
+    pop_events.push :: AppEvent.Window :: pop_hovered_b :: call :: method
+    pop_events.push :: AppEvent.Window :: pop_cancelled :: call :: method
+    let pop_batch = app_event_batch_from_events :: pop_events :: call
+    select pop_batch.pop_hovered_file_path :: :: method:
+        when Option.Some(_) => ()
+        when Option.None => return 3619
+    select pop_batch.pop_hovered_file_event_for :: 422 :: method:
+        when Option.Some(event) =>
+            select event:
+                when WindowEvent.HoveredFile(id = id, path = path) =>
+                    select:
+                        when id != 422 => return 3620
+                        when path.is_empty :: :: method => return 3621
+                        else => ()
+                when _ => return 3622
+        when Option.None => return 3623
+    select pop_batch.pop_hovered_file_cancelled_event_for :: 421 :: method:
+        when Option.Some(event) =>
+            select event:
+                when WindowEvent.HoveredFileCancelled(id = id) =>
+                    select:
+                        when id != 421 => return 3624
+                        else => ()
+                when _ => return 3625
+        when Option.None => return 3626
+    select:
+        when !pop_batch.is_empty :: :: method => return 3627
+        else => ()
+
+    let take_events = List[AppEvent] :: :: call
+    let take_hovered_a = WindowEvent.HoveredFile :: :: call
+        id = 431
+        path = "hover.txt"
+    let take_hovered_b = WindowEvent.HoveredFile :: :: call
+        id = 432
+        path = "beta.bin"
+    let take_cancelled_a = WindowEvent.HoveredFileCancelled :: :: call
+        id = 431
+    let take_cancelled_b = WindowEvent.HoveredFileCancelled :: :: call
+        id = 432
+    take_events.push :: AppEvent.Window :: take_hovered_a :: call :: method
+    take_events.push :: AppEvent.Window :: take_hovered_b :: call :: method
+    take_events.push :: AppEvent.Window :: take_cancelled_a :: call :: method
+    take_events.push :: AppEvent.Window :: take_cancelled_b :: call :: method
+    let take_batch = app_event_batch_from_events :: take_events :: call
+    let taken_paths = take_batch.take_hovered_file_paths_for :: 431 :: method
+    let taken_cancelled = take_batch.take_hovered_file_cancelled_events_for :: 432 :: method
+    select:
+        when taken_paths.count :: :: method != 1 => return 3628
+        when taken_paths.remove :: 0 :: method.is_empty :: :: method => return 3629
+        when taken_cancelled.count :: :: method != 1 => return 3630
+        else => ()
+    select taken_cancelled.remove :: 0 :: method:
+        when WindowEvent.HoveredFileCancelled(id = id) =>
+            select:
+                when id != 432 => return 3631
+                else => ()
+        when _ => return 3632
+    select:
+        when take_batch.event_count :: :: method != 2 => return 3633
+        else => ()
+
+    return 0

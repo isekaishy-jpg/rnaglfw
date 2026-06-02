@@ -1,4 +1,9 @@
+mod composition_support
 mod handler
+mod hovered_file_support
+mod modifier_support
+mod raw_input_support
+mod touch_support
 
 use std.{List, Option, Result, Str}
 use runa_app_run.{AppEvent, InputAction, JoystickEvent, JoystickEventKind, KeyCode, MonitorEvent}
@@ -6,9 +11,29 @@ use runa_app_run.{MouseButton, UserEvent, WindowEvent, WindowEventKind}
 use runa_app_run.{MonitorEventKind, UserEventKind}
 use runa_app_run.{ControlFlow, run_with_config_and_flow, win32_app_init_config}
 use runa_app_run.{app_event_batch_from_events, modifiers_from_raw}
+use composition_support.check_composition_batch_helpers
 use handler.SmokeHandler
+use hovered_file_support.check_hovered_file_batch_helpers
+use modifier_support.check_modifier_batch_helpers
+use raw_input_support.check_raw_mouse_batch_helpers
+use touch_support.check_touch_batch_helpers
 
 fn main() -> I32:
+    select check_composition_batch_helpers :: :: call:
+        when 0 => ()
+        when code => return code
+    select check_hovered_file_batch_helpers :: :: call:
+        when 0 => ()
+        when code => return code
+    select check_modifier_batch_helpers :: :: call:
+        when 0 => ()
+        when code => return code
+    select check_raw_mouse_batch_helpers :: :: call:
+        when 0 => ()
+        when code => return code
+    select check_touch_batch_helpers :: :: call:
+        when 0 => ()
+        when code => return code
     let key_event = WindowEvent.KeyChanged :: :: call
         id = 1
         key = KeyCode.A
@@ -1186,7 +1211,7 @@ fn main() -> I32:
         when remaining_view_window_ids.count :: :: method != 1 => return 621
         when remaining_view_window_ids.remove :: 0 :: method != 204 => return 622
         else => ()
-    let state_refreshed_event = WindowEvent.Refreshed :: :: call
+    let state_redraw_requested_event = WindowEvent.RedrawRequested :: :: call
         id = 701
     let state_moved_event = WindowEvent.Moved :: :: call
         id = 701
@@ -1216,7 +1241,7 @@ fn main() -> I32:
     let state_cursor_entered_event = WindowEvent.CursorEntered :: :: call
         id = 702
         entered = false
-    let wrapped_state_refreshed_event = AppEvent.Window :: state_refreshed_event :: call
+    let wrapped_state_redraw_requested_event = AppEvent.Window :: state_redraw_requested_event :: call
     let wrapped_state_moved_event = AppEvent.Window :: state_moved_event :: call
     let wrapped_state_resized_event = AppEvent.Window :: state_resized_event :: call
     let wrapped_state_framebuffer_resized_event = AppEvent.Window :: state_framebuffer_resized_event :: call
@@ -1226,7 +1251,7 @@ fn main() -> I32:
     let wrapped_state_maximized_event = AppEvent.Window :: state_maximized_event :: call
     let wrapped_state_cursor_entered_event = AppEvent.Window :: state_cursor_entered_event :: call
     let state_events = List[AppEvent] :: :: call
-    state_events.push :: wrapped_state_refreshed_event :: method
+    state_events.push :: wrapped_state_redraw_requested_event :: method
     state_events.push :: wrapped_state_moved_event :: method
     state_events.push :: wrapped_state_resized_event :: method
     state_events.push :: wrapped_state_framebuffer_resized_event :: method
@@ -1236,7 +1261,7 @@ fn main() -> I32:
     state_events.push :: wrapped_state_maximized_event :: method
     state_events.push :: wrapped_state_cursor_entered_event :: method
     let state_batch = app_event_batch_from_events :: state_events :: call
-    let view_refreshed_events = state_batch.refreshed_events :: :: method
+    let view_redraw_requested_events = state_batch.redraw_requested_events :: :: method
     let view_moved_events = state_batch.moved_events :: :: method
     let view_resized_events = state_batch.resized_events :: :: method
     let view_framebuffer_resized_events = state_batch.framebuffer_resized_events :: :: method
@@ -1245,7 +1270,7 @@ fn main() -> I32:
     let view_iconified_events = state_batch.iconified_events :: :: method
     let view_maximized_events = state_batch.maximized_events :: :: method
     let view_cursor_entered_events = state_batch.cursor_entered_events :: :: method
-    let view_refreshed_events_for = state_batch.refreshed_events_for :: 701 :: method
+    let view_redraw_requested_events_for = state_batch.redraw_requested_events_for :: 701 :: method
     let view_moved_events_for = state_batch.moved_events_for :: 701 :: method
     let view_resized_events_for = state_batch.resized_events_for :: 701 :: method
     let view_framebuffer_resized_events_for = state_batch.framebuffer_resized_events_for :: 701 :: method
@@ -1272,7 +1297,7 @@ fn main() -> I32:
     let view_cursor_entered_states_for = state_batch.cursor_entered_states_for :: 702 :: method
     select:
         when state_batch.event_count :: :: method != 9 => return 900
-        when view_refreshed_events.count :: :: method != 1 => return 901
+        when view_redraw_requested_events.count :: :: method != 1 => return 901
         when view_moved_events.count :: :: method != 1 => return 902
         when view_resized_events.count :: :: method != 1 => return 903
         when view_framebuffer_resized_events.count :: :: method != 1 => return 904
@@ -1281,7 +1306,7 @@ fn main() -> I32:
         when view_iconified_events.count :: :: method != 1 => return 907
         when view_maximized_events.count :: :: method != 1 => return 908
         when view_cursor_entered_events.count :: :: method != 1 => return 909
-        when view_refreshed_events_for.count :: :: method != 1 => return 910
+        when view_redraw_requested_events_for.count :: :: method != 1 => return 910
         when view_moved_events_for.count :: :: method != 1 => return 911
         when view_resized_events_for.count :: :: method != 1 => return 912
         when view_framebuffer_resized_events_for.count :: :: method != 1 => return 913
@@ -1393,7 +1418,7 @@ fn main() -> I32:
         when viewed_maximized_state != true => return 969
         when viewed_cursor_entered_state != false => return 970
         else => ()
-    let taken_refreshed_events = state_batch.take_refreshed_events_for :: 701 :: method
+    let taken_redraw_requested_events = state_batch.take_redraw_requested_events_for :: 701 :: method
     let taken_moved_events = state_batch.take_moved_events_for :: 701 :: method
     let taken_resized_events = state_batch.take_resized_events_for :: 701 :: method
     let taken_framebuffer_resized_events = state_batch.take_framebuffer_resized_events_for :: 701 :: method
@@ -1403,7 +1428,7 @@ fn main() -> I32:
     let taken_maximized_events = state_batch.take_maximized_events_for :: 702 :: method
     let taken_cursor_entered_events = state_batch.take_cursor_entered_events_for :: 702 :: method
     select:
-        when taken_refreshed_events.count :: :: method != 1 => return 933
+        when taken_redraw_requested_events.count :: :: method != 1 => return 933
         when taken_moved_events.count :: :: method != 1 => return 934
         when taken_resized_events.count :: :: method != 1 => return 935
         when taken_framebuffer_resized_events.count :: :: method != 1 => return 936
@@ -1703,7 +1728,7 @@ fn main() -> I32:
     select:
         when !state_pop_for_batch.is_empty :: :: method => return 2033
         else => ()
-    let state_pop_event_refreshed = WindowEvent.Refreshed :: :: call
+    let state_pop_event_redraw_requested = WindowEvent.RedrawRequested :: :: call
         id = 711
     let state_pop_event_moved = WindowEvent.Moved :: :: call
         id = 711
@@ -1733,7 +1758,7 @@ fn main() -> I32:
     let state_pop_event_cursor_entered = WindowEvent.CursorEntered :: :: call
         id = 712
         entered = true
-    let state_pop_event_wrapped_refreshed = AppEvent.Window :: state_pop_event_refreshed :: call
+    let state_pop_event_wrapped_redraw_requested = AppEvent.Window :: state_pop_event_redraw_requested :: call
     let state_pop_event_wrapped_moved = AppEvent.Window :: state_pop_event_moved :: call
     let state_pop_event_wrapped_resized = AppEvent.Window :: state_pop_event_resized :: call
     let state_pop_event_wrapped_framebuffer = AppEvent.Window :: state_pop_event_framebuffer :: call
@@ -1743,7 +1768,7 @@ fn main() -> I32:
     let state_pop_event_wrapped_maximized = AppEvent.Window :: state_pop_event_maximized :: call
     let state_pop_event_wrapped_cursor_entered = AppEvent.Window :: state_pop_event_cursor_entered :: call
     let state_pop_event_events = List[AppEvent] :: :: call
-    state_pop_event_events.push :: state_pop_event_wrapped_refreshed :: method
+    state_pop_event_events.push :: state_pop_event_wrapped_redraw_requested :: method
     state_pop_event_events.push :: state_pop_event_wrapped_moved :: method
     state_pop_event_events.push :: state_pop_event_wrapped_resized :: method
     state_pop_event_events.push :: state_pop_event_wrapped_framebuffer :: method
@@ -1753,10 +1778,10 @@ fn main() -> I32:
     state_pop_event_events.push :: state_pop_event_wrapped_maximized :: method
     state_pop_event_events.push :: state_pop_event_wrapped_cursor_entered :: method
     let state_pop_event_batch = app_event_batch_from_events :: state_pop_event_events :: call
-    select state_pop_event_batch.pop_refreshed_event :: :: method:
+    select state_pop_event_batch.pop_redraw_requested_event :: :: method:
         when Option.Some(event) =>
             select event.kind :: :: method:
-                when WindowEventKind.Refreshed =>
+                when WindowEventKind.RedrawRequested =>
                     select:
                         when event.window_id :: :: method != 711 => return 2034
                         else => ()
@@ -1857,7 +1882,7 @@ fn main() -> I32:
     select:
         when !state_pop_event_batch.is_empty :: :: method => return 2073
         else => ()
-    let state_pop_event_for_refreshed = WindowEvent.Refreshed :: :: call
+    let state_pop_event_for_redraw_requested = WindowEvent.RedrawRequested :: :: call
         id = 721
     let state_pop_event_for_moved = WindowEvent.Moved :: :: call
         id = 721
@@ -1887,7 +1912,7 @@ fn main() -> I32:
     let state_pop_event_for_cursor_entered = WindowEvent.CursorEntered :: :: call
         id = 722
         entered = false
-    let state_pop_event_for_wrapped_refreshed = AppEvent.Window :: state_pop_event_for_refreshed :: call
+    let state_pop_event_for_wrapped_redraw_requested = AppEvent.Window :: state_pop_event_for_redraw_requested :: call
     let state_pop_event_for_wrapped_moved = AppEvent.Window :: state_pop_event_for_moved :: call
     let state_pop_event_for_wrapped_resized = AppEvent.Window :: state_pop_event_for_resized :: call
     let state_pop_event_for_wrapped_framebuffer = AppEvent.Window :: state_pop_event_for_framebuffer :: call
@@ -1897,7 +1922,7 @@ fn main() -> I32:
     let state_pop_event_for_wrapped_maximized = AppEvent.Window :: state_pop_event_for_maximized :: call
     let state_pop_event_for_wrapped_cursor_entered = AppEvent.Window :: state_pop_event_for_cursor_entered :: call
     let state_pop_event_for_events = List[AppEvent] :: :: call
-    state_pop_event_for_events.push :: state_pop_event_for_wrapped_refreshed :: method
+    state_pop_event_for_events.push :: state_pop_event_for_wrapped_redraw_requested :: method
     state_pop_event_for_events.push :: state_pop_event_for_wrapped_moved :: method
     state_pop_event_for_events.push :: state_pop_event_for_wrapped_resized :: method
     state_pop_event_for_events.push :: state_pop_event_for_wrapped_framebuffer :: method
@@ -1907,7 +1932,7 @@ fn main() -> I32:
     state_pop_event_for_events.push :: state_pop_event_for_wrapped_maximized :: method
     state_pop_event_for_events.push :: state_pop_event_for_wrapped_cursor_entered :: method
     let state_pop_event_for_batch = app_event_batch_from_events :: state_pop_event_for_events :: call
-    select state_pop_event_for_batch.pop_refreshed_event_for :: 721 :: method:
+    select state_pop_event_for_batch.pop_redraw_requested_event_for :: 721 :: method:
         when Option.Some(event) =>
             select:
                 when event.window_id :: :: method != 721 => return 2074

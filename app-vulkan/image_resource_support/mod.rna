@@ -8,12 +8,12 @@ const FORMAT_R8G8B8A8_SRGB: CInt = 43
 const FORMAT_B8G8R8A8_UNORM: CInt = 44
 const FORMAT_B8G8R8A8_SRGB: CInt = 50
 
-struct GenericImageRequest:
+pub(package) struct GenericImageRequest:
     extent: VkExtent2D
     format: VkFormat
     usage: CUInt
 
-fn make_image_request(width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> GenericImageRequest:
+pub(package) fn make_image_request(width: CUInt, height: CUInt, format: VkFormat, usage: CUInt) -> GenericImageRequest:
     let extent2d = VkExtent2D :: :: call
         width = width
         height = height
@@ -46,7 +46,7 @@ fn make_image_plan(read requirements: VkMemoryRequirements, read allocation_plan
         allocation_plan = allocation_plan
     return plan
 
-fn generic_image_requirements(read context: VulkanPresentContext, read request: GenericImageRequest) -> Result[VkMemoryRequirements, VulkanPresentError]:
+pub(package) fn generic_image_requirements(read context: VulkanPresentContext, read request: GenericImageRequest) -> Result[VkMemoryRequirements, VulkanPresentError]:
     select:
         when request.extent.width == 0 =>
             let error = VulkanPresentError.VulkanImageExtentOutOfRange :: request.extent.width, request.extent.height :: call
@@ -171,7 +171,7 @@ pub(package) fn vulkan_image_from_plan_internal(read context: VulkanPresentConte
         layout = VK_IMAGE_LAYOUT_UNDEFINED
     return Result.Ok :: resource :: call
 
-fn generic_image_plan(read context: VulkanPresentContext, read request: GenericImageRequest, memory_type_index: CUInt) -> Result[VulkanImagePlan, VulkanPresentError]:
+pub(package) fn generic_image_plan(read context: VulkanPresentContext, read request: GenericImageRequest, memory_type_index: CUInt) -> Result[VulkanImagePlan, VulkanPresentError]:
     select generic_image_requirements :: context, request :: call:
         when Result.Ok(requirements) =>
             let memory_properties = context.memory_properties :: :: method
@@ -184,7 +184,7 @@ fn generic_image_plan(read context: VulkanPresentContext, read request: GenericI
                     return Result.Err :: error :: call
         when Result.Err(err) => return Result.Err :: err :: call
 
-fn generic_host_visible_image_plan(read context: VulkanPresentContext, read request: GenericImageRequest) -> Result[VulkanImagePlan, VulkanPresentError]:
+pub(package) fn generic_host_visible_image_plan(read context: VulkanPresentContext, read request: GenericImageRequest) -> Result[VulkanImagePlan, VulkanPresentError]:
     select generic_image_requirements :: context, request :: call:
         when Result.Ok(requirements) =>
             let memory_properties = context.memory_properties :: :: method
@@ -197,7 +197,7 @@ fn generic_host_visible_image_plan(read context: VulkanPresentContext, read requ
                     return Result.Err :: error :: call
         when Result.Err(err) => return Result.Err :: err :: call
 
-fn generic_host_coherent_image_plan(read context: VulkanPresentContext, read request: GenericImageRequest) -> Result[VulkanImagePlan, VulkanPresentError]:
+pub(package) fn generic_host_coherent_image_plan(read context: VulkanPresentContext, read request: GenericImageRequest) -> Result[VulkanImagePlan, VulkanPresentError]:
     select generic_image_requirements :: context, request :: call:
         when Result.Ok(requirements) =>
             let memory_properties = context.memory_properties :: :: method
@@ -210,7 +210,7 @@ fn generic_host_coherent_image_plan(read context: VulkanPresentContext, read req
                     return Result.Err :: error :: call
         when Result.Err(err) => return Result.Err :: err :: call
 
-fn generic_device_local_image_plan(read context: VulkanPresentContext, read request: GenericImageRequest) -> Result[VulkanImagePlan, VulkanPresentError]:
+pub(package) fn generic_device_local_image_plan(read context: VulkanPresentContext, read request: GenericImageRequest) -> Result[VulkanImagePlan, VulkanPresentError]:
     select generic_image_requirements :: context, request :: call:
         when Result.Ok(requirements) =>
             let memory_properties = context.memory_properties :: :: method

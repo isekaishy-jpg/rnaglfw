@@ -25,11 +25,9 @@ use loader_support.{lookup_vulkan_device_fns, lookup_vulkan_instance_fns}
 use surface_support.{choose_image_count, choose_present_mode}
 use surface_support.{choose_surface_format, choose_window_extent, maybe_c_string_local}
 use surface_support.surface_image_shape_from_extent
-
 const VULKAN_LIBRARY_PATH: Str = "vulkan-1.dll"
 const ENGINE_NAME: Str = "runa_app_vulkan"
 const SWAPCHAIN_EXTENSION_NAME: Str = "VK_KHR_swapchain"
-
 const MAX_PHYSICAL_DEVICES: Index = 16
 const MAX_PHYSICAL_DEVICES_RAW: CUInt = 16
 const MAX_QUEUE_FAMILIES: Index = 32
@@ -40,8 +38,9 @@ pub(package) const MAX_PRESENT_MODES: Index = 64
 const MAX_PRESENT_MODES_RAW: CUInt = 64
 pub(package) const MAX_SWAPCHAIN_IMAGES: Index = 8
 pub(package) const MAX_SWAPCHAIN_IMAGES_RAW: CUInt = 8
-
 pub(package) const VK_SUCCESS: CInt = 0
+pub(package) const VK_NOT_READY: CInt = 1
+pub(package) const VK_TIMEOUT: CInt = 2
 pub(package) const VK_SUBOPTIMAL_KHR: CInt = 1000001003
 const VK_STRUCTURE_TYPE_APPLICATION_INFO: CInt = 0
 const VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO: CInt = 1
@@ -49,6 +48,8 @@ const VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO: CInt = 2
 const VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO: CInt = 3
 pub(package) const VK_STRUCTURE_TYPE_SUBMIT_INFO: CInt = 4
 pub(package) const VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO: CInt = 5
+pub(package) const VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE: CInt = 6
+pub(package) const VK_STRUCTURE_TYPE_FENCE_CREATE_INFO: CInt = 8
 pub(package) const VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO: CInt = 9
 pub(package) const VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO: CInt = 12
 pub(package) const VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO: CInt = 14
@@ -58,11 +59,10 @@ pub(package) const VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO: CInt = 42
 pub(package) const VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER: CInt = 45
 const VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR: CInt = 1000001000
 pub(package) const VK_STRUCTURE_TYPE_PRESENT_INFO_KHR: CInt = 1000001001
-
 const VK_QUEUE_GRAPHICS_BIT: CUInt = 1
 pub const VK_COMMAND_BUFFER_LEVEL_PRIMARY: CInt = 0
 pub const VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: CUInt = 1
-
+pub const VK_FENCE_CREATE_SIGNALED_BIT: CUInt = 1
 const VK_IMAGE_ASPECT_COLOR_BIT: CUInt = 1
 pub(package) const VK_IMAGE_TYPE_2D: CInt = 1
 pub(package) const VK_IMAGE_TILING_OPTIMAL: CInt = 0
@@ -87,22 +87,19 @@ pub const VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT: CUInt = 1
 pub const VK_PIPELINE_STAGE_TRANSFER_BIT: CUInt = 4096
 pub const VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT: CUInt = 8192
 const VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR: CInt = 1
-
 const VK_PRESENT_MODE_MAILBOX_KHR: CInt = 1
 const VK_PRESENT_MODE_FIFO_KHR: CInt = 2
 const VK_COLOR_SPACE_SRGB_NONLINEAR_KHR: CInt = 0
 const VK_FORMAT_B8G8R8A8_SRGB: CInt = 50
-
-const VK_TRUE: CUInt = 1
-const VK_FALSE: CUInt = 0
+pub(package) const VK_TRUE: CUInt = 1
+pub(package) const VK_FALSE: CUInt = 0
 const VK_API_VERSION_1_0: CUInt = 4194304
 pub const VK_QUEUE_FAMILY_IGNORED: CUInt = 4294967295U32
-const VK_TIMEOUT_FOREVER: U64 = 18446744073709551615U64
+pub(package) const VK_TIMEOUT_FOREVER: U64 = 18446744073709551615U64
 const VK_MAX_MEMORY_TYPES: Index = 32
 const VK_MAX_MEMORY_TYPES_RAW: CUInt = 32
 const VK_MAX_MEMORY_HEAPS: Index = 16
 const VK_MAX_MEMORY_HEAPS_RAW: CUInt = 16
-
 pub enum VulkanPresentError:
     NotSupported
     LibraryOpen(DynamicLibraryError)
@@ -128,6 +125,7 @@ pub enum VulkanPresentError:
     PixelByteCountMismatch(Index, Index)
     BufferByteCountMismatch(Index, Index)
     BufferSizeOutOfRange(Index)
+    BufferUsageMissing(CUInt, CUInt)
     PixelFrameZeroSize
     PixelFrameStrideTooSmall(Index, Index)
     PixelFrameBufferTooSmall(Index, Index)
@@ -138,6 +136,11 @@ pub enum VulkanPresentError:
     SurfaceFormatUnsupported(CInt)
     StagingSizeOutOfRange(Index)
     VulkanImageExtentOutOfRange(CUInt, CUInt)
+    VulkanImageByteCountOutOfRange(CUInt, CUInt)
+    VulkanImageLayoutUnsupported(CInt)
+    VulkanImageUsageMissing(CUInt, CUInt)
+    VulkanImageFormatMismatch(CInt, CInt)
+    VulkanImageExtentMismatch(CUInt, CUInt, CUInt, CUInt)
     InstanceCreateFailed(GlfwVkResult)
     SurfaceCreateFailed(GlfwVkResult)
     PhysicalDeviceQueryFailed(GlfwVkResult)
@@ -151,12 +154,18 @@ pub enum VulkanPresentError:
     CommandBufferAllocateFailed(GlfwVkResult)
     CommandBufferBeginFailed(GlfwVkResult)
     CommandBufferEndFailed(GlfwVkResult)
+    FenceCreateFailed(GlfwVkResult)
+    FenceResetFailed(GlfwVkResult)
+    FenceWaitFailed(GlfwVkResult)
+    FenceStatusFailed(GlfwVkResult)
     SemaphoreCreateFailed(GlfwVkResult)
     BufferCreateFailed(GlfwVkResult)
     BufferMemoryTypeUnavailable(CUInt)
     BufferMemoryAllocateFailed(GlfwVkResult)
     BufferBindFailed(GlfwVkResult)
     BufferMemoryMapFailed(GlfwVkResult)
+    MappedMemoryFlushFailed(GlfwVkResult)
+    MappedMemoryInvalidateFailed(GlfwVkResult)
     StagingBufferCreateFailed(GlfwVkResult)
     StagingMemoryTypeUnavailable(CUInt)
     StagingMemoryAllocateFailed(GlfwVkResult)
@@ -166,6 +175,7 @@ pub enum VulkanPresentError:
     VulkanImageMemoryTypeUnavailable(CUInt)
     VulkanImageMemoryAllocateFailed(GlfwVkResult)
     VulkanImageBindFailed(GlfwVkResult)
+    VulkanImageUninitialized
     TransferDestinationImageCreateFailed(GlfwVkResult)
     TransferDestinationImageMemoryTypeUnavailable(CUInt)
     TransferDestinationImageMemoryAllocateFailed(GlfwVkResult)
@@ -181,12 +191,10 @@ pub enum VulkanPresentError:
     NoPresentModes
     NoSwapchainImages
     NoQueue
-
 pub opaque type VkDeviceRaw
 pub opaque type VkQueueRaw
 pub opaque type VkCommandBufferRaw
 pub opaque type VkPhysicalDeviceFeaturesRaw
-
 pub type VkDevice = *edit VkDeviceRaw
 pub type VkQueue = *edit VkQueueRaw
 pub type VkCommandBuffer = *edit VkCommandBufferRaw
@@ -198,7 +206,6 @@ pub type VkDeviceMemory = U64
 pub type VkSwapchain = U64
 pub type VkSemaphore = U64
 pub type VkFence = U64
-
 pub type VkCreateInstanceFn = extern["system"] fn(*read VkInstanceCreateInfo, *read GlfwVkAllocationCallbacksRaw, *edit GlfwVkInstance) -> GlfwVkResult
 pub type VkDestroyInstanceFn = extern["system"] fn(GlfwVkInstance, *read GlfwVkAllocationCallbacksRaw) -> CVoid
 pub type VkEnumeratePhysicalDevicesFn = extern["system"] fn(GlfwVkInstance, *edit CUInt, *edit GlfwVkPhysicalDevice) -> GlfwVkResult
@@ -227,6 +234,8 @@ pub type VkFreeMemoryFn = extern["system"] fn(VkDevice, VkDeviceMemory, *read Gl
 pub type VkBindBufferMemoryFn = extern["system"] fn(VkDevice, VkBuffer, VkDeviceMemory, U64) -> GlfwVkResult
 pub type VkMapMemoryFn = extern["system"] fn(VkDevice, VkDeviceMemory, U64, U64, CUInt, *edit *edit CVoid) -> GlfwVkResult
 pub type VkUnmapMemoryFn = extern["system"] fn(VkDevice, VkDeviceMemory) -> CVoid
+pub type VkFlushMappedMemoryRangesFn = extern["system"] fn(VkDevice, CUInt, *read VkMappedMemoryRange) -> GlfwVkResult
+pub type VkInvalidateMappedMemoryRangesFn = extern["system"] fn(VkDevice, CUInt, *read VkMappedMemoryRange) -> GlfwVkResult
 pub type VkCreateCommandPoolFn = extern["system"] fn(VkDevice, *read VkCommandPoolCreateInfo, *read GlfwVkAllocationCallbacksRaw, *edit VkCommandPool) -> GlfwVkResult
 pub type VkDestroyCommandPoolFn = extern["system"] fn(VkDevice, VkCommandPool, *read GlfwVkAllocationCallbacksRaw) -> CVoid
 pub type VkAllocateCommandBuffersFn = extern["system"] fn(VkDevice, *read VkCommandBufferAllocateInfo, *edit VkCommandBuffer) -> GlfwVkResult
@@ -234,9 +243,15 @@ pub type VkBeginCommandBufferFn = extern["system"] fn(VkCommandBuffer, *read VkC
 pub type VkEndCommandBufferFn = extern["system"] fn(VkCommandBuffer) -> GlfwVkResult
 pub type VkCmdPipelineBarrierFn = extern["system"] fn(VkCommandBuffer, CUInt, CUInt, CUInt, CUInt, *read CVoid, CUInt, *read CVoid, CUInt, *read VkImageMemoryBarrier) -> CVoid
 pub type VkCmdClearColorImageFn = extern["system"] fn(VkCommandBuffer, VkImage, CInt, *read VkClearColorValue, CUInt, *read VkImageSubresourceRange) -> CVoid
+pub type VkCmdCopyBufferFn = extern["system"] fn(VkCommandBuffer, VkBuffer, VkBuffer, CUInt, *read VkBufferCopy) -> CVoid
 pub type VkCmdCopyBufferToImageFn = extern["system"] fn(VkCommandBuffer, VkBuffer, VkImage, CInt, CUInt, *read VkBufferImageCopy) -> CVoid
 pub type VkCmdCopyImageFn = extern["system"] fn(VkCommandBuffer, VkImage, CInt, VkImage, CInt, CUInt, *read VkImageCopy) -> CVoid
 pub type VkCmdCopyImageToBufferFn = extern["system"] fn(VkCommandBuffer, VkImage, CInt, VkBuffer, CUInt, *read VkBufferImageCopy) -> CVoid
+pub type VkCreateFenceFn = extern["system"] fn(VkDevice, *read VkFenceCreateInfo, *read GlfwVkAllocationCallbacksRaw, *edit VkFence) -> GlfwVkResult
+pub type VkDestroyFenceFn = extern["system"] fn(VkDevice, VkFence, *read GlfwVkAllocationCallbacksRaw) -> CVoid
+pub type VkResetFencesFn = extern["system"] fn(VkDevice, CUInt, *read VkFence) -> GlfwVkResult
+pub type VkWaitForFencesFn = extern["system"] fn(VkDevice, CUInt, *read VkFence, CUInt, U64) -> GlfwVkResult
+pub type VkGetFenceStatusFn = extern["system"] fn(VkDevice, VkFence) -> GlfwVkResult
 pub type VkCreateSemaphoreFn = extern["system"] fn(VkDevice, *read VkSemaphoreCreateInfo, *read GlfwVkAllocationCallbacksRaw, *edit VkSemaphore) -> GlfwVkResult
 pub type VkDestroySemaphoreFn = extern["system"] fn(VkDevice, VkSemaphore, *read GlfwVkAllocationCallbacksRaw) -> CVoid
 pub type VkAcquireNextImageFn = extern["system"] fn(VkDevice, VkSwapchain, U64, VkSemaphore, VkFence, *edit CUInt) -> GlfwVkResult
@@ -244,19 +259,15 @@ pub type VkQueueSubmitFn = extern["system"] fn(VkQueue, CUInt, *read VkSubmitInf
 pub type VkQueuePresentFn = extern["system"] fn(VkQueue, *read VkPresentInfoKHR) -> GlfwVkResult
 pub type VkQueueWaitIdleFn = extern["system"] fn(VkQueue) -> GlfwVkResult
 pub type VkDeviceWaitIdleFn = extern["system"] fn(VkDevice) -> GlfwVkResult
-
-
 #repr[c]
 pub struct VkExtent2D:
     pub width: CUInt
     pub height: CUInt
-
 #repr[c]
 pub struct VkExtent3D:
     pub width: CUInt
     pub height: CUInt
     pub depth: CUInt
-
 #repr[c]
 pub struct VkApplicationInfo:
     pub stype: CInt
@@ -266,7 +277,6 @@ pub struct VkApplicationInfo:
     pub engine_name: *read CChar
     pub engine_version: CUInt
     pub api_version: CUInt
-
 #repr[c]
 pub struct VkInstanceCreateInfo:
     pub stype: CInt
@@ -277,14 +287,12 @@ pub struct VkInstanceCreateInfo:
     pub enabled_layer_names: *read *read CChar
     pub enabled_extension_count: CUInt
     pub enabled_extension_names: *read *read CChar
-
 #repr[c]
 pub struct VkQueueFamilyProperties:
     pub queue_flags: CUInt
     pub queue_count: CUInt
     pub timestamp_valid_bits: CUInt
     pub min_image_transfer_granularity: VkExtent3D
-
 #repr[c]
 pub struct VkSurfaceCapabilitiesKHR:
     pub min_image_count: CUInt
@@ -297,29 +305,24 @@ pub struct VkSurfaceCapabilitiesKHR:
     pub current_transform: CUInt
     pub supported_composite_alpha: CUInt
     pub supported_usage_flags: CUInt
-
 #repr[c]
 pub struct VkSurfaceFormatKHR:
     pub format: CInt
     pub color_space: CInt
-
 #repr[c]
 pub struct VkMemoryType:
     pub property_flags: CUInt
     pub heap_index: CUInt
-
 #repr[c]
 pub struct VkMemoryHeap:
     pub size: U64
     pub flags: CUInt
-
 #repr[c]
 pub struct VkPhysicalDeviceMemoryProperties:
     pub memory_type_count: CUInt
     pub memory_types: [VkMemoryType; VK_MAX_MEMORY_TYPES]
     pub memory_heap_count: CUInt
     pub memory_heaps: [VkMemoryHeap; VK_MAX_MEMORY_HEAPS]
-
 #repr[c]
 pub struct VkDeviceQueueCreateInfo:
     pub stype: CInt
@@ -328,7 +331,6 @@ pub struct VkDeviceQueueCreateInfo:
     pub queuefamily_index: CUInt
     pub queue_count: CUInt
     pub queue_priorities: *read F32
-
 #repr[c]
 pub struct VkDeviceCreateInfo:
     pub stype: CInt
@@ -341,7 +343,6 @@ pub struct VkDeviceCreateInfo:
     pub enabled_extension_count: CUInt
     pub enabled_extension_names: *read *read CChar
     pub enabled_features: *read VkPhysicalDeviceFeaturesRaw
-
 #repr[c]
 pub struct VkSwapchainCreateInfoKHR:
     pub stype: CInt
@@ -362,7 +363,6 @@ pub struct VkSwapchainCreateInfoKHR:
     pub present_mode: CInt
     pub clipped: CUInt
     pub old_swapchain: VkSwapchain
-
 #repr[c]
 pub struct VkImageCreateInfo:
     pub stype: CInt
@@ -380,7 +380,6 @@ pub struct VkImageCreateInfo:
     pub queuefamily_index_count: CUInt
     pub queuefamily_indices: *read CUInt
     pub initial_layout: CInt
-
 #repr[c]
 pub struct VkBufferCreateInfo:
     pub stype: CInt
@@ -391,27 +390,30 @@ pub struct VkBufferCreateInfo:
     pub sharing_mode: CInt
     pub queuefamily_index_count: CUInt
     pub queuefamily_indices: *read CUInt
-
 #repr[c]
 pub struct VkMemoryRequirements:
     pub size: U64
     pub alignment: U64
     pub memory_type_bits: CUInt
-
 #repr[c]
 pub struct VkMemoryAllocateInfo:
     pub stype: CInt
     pub pnext: *read CVoid
     pub allocation_size: U64
     pub memory_type_index: CUInt
-
+#repr[c]
+pub struct VkMappedMemoryRange:
+    pub stype: CInt
+    pub pnext: *read CVoid
+    pub memory: VkDeviceMemory
+    pub offset: U64
+    pub size: U64
 #repr[c]
 pub struct VkCommandPoolCreateInfo:
     pub stype: CInt
     pub pnext: *read CVoid
     pub flags: CUInt
     pub queuefamily_index: CUInt
-
 #repr[c]
 pub struct VkCommandBufferAllocateInfo:
     pub stype: CInt
@@ -419,14 +421,12 @@ pub struct VkCommandBufferAllocateInfo:
     pub command_pool: VkCommandPool
     pub level: CInt
     pub command_buffer_count: CUInt
-
 #repr[c]
 pub struct VkCommandBufferBeginInfo:
     pub stype: CInt
     pub pnext: *read CVoid
     pub flags: CUInt
     pub inheritance_info: *read CVoid
-
 #repr[c]
 pub struct VkImageSubresourceRange:
     pub aspect_mask: CUInt
@@ -434,20 +434,22 @@ pub struct VkImageSubresourceRange:
     pub level_count: CUInt
     pub base_array_layer: CUInt
     pub layer_count: CUInt
-
 #repr[c]
 pub struct VkOffset3D:
     pub x: CInt
     pub y: CInt
     pub z: CInt
-
 #repr[c]
 pub struct VkImageSubresourceLayers:
     pub aspect_mask: CUInt
     pub mip_level: CUInt
     pub base_array_layer: CUInt
     pub layer_count: CUInt
-
+#repr[c]
+pub struct VkBufferCopy:
+    pub src_offset: U64
+    pub dst_offset: U64
+    pub size: U64
 #repr[c]
 pub struct VkBufferImageCopy:
     pub buffer_offset: U64
@@ -456,7 +458,6 @@ pub struct VkBufferImageCopy:
     pub image_subresource: VkImageSubresourceLayers
     pub image_offset: VkOffset3D
     pub image_extent: VkExtent3D
-
 #repr[c]
 pub struct VkImageCopy:
     pub src_subresource: VkImageSubresourceLayers
@@ -464,7 +465,6 @@ pub struct VkImageCopy:
     pub dst_subresource: VkImageSubresourceLayers
     pub dst_offset: VkOffset3D
     pub extent: VkExtent3D
-
 #repr[c]
 pub struct VkImageMemoryBarrier:
     pub stype: CInt
@@ -477,17 +477,19 @@ pub struct VkImageMemoryBarrier:
     pub dst_queuefamily_index: CUInt
     pub image: VkImage
     pub subresource_range: VkImageSubresourceRange
-
 #repr[c]
 pub struct VkClearColorValue:
     pub float32_values: [F32; 4]
-
+#repr[c]
+pub struct VkFenceCreateInfo:
+    pub stype: CInt
+    pub pnext: *read CVoid
+    pub flags: CUInt
 #repr[c]
 pub struct VkSemaphoreCreateInfo:
     pub stype: CInt
     pub pnext: *read CVoid
     pub flags: CUInt
-
 #repr[c]
 pub struct VkSubmitInfo:
     pub stype: CInt
@@ -499,7 +501,6 @@ pub struct VkSubmitInfo:
     pub command_buffers: *read VkCommandBuffer
     pub signal_semaphore_count: CUInt
     pub signal_semaphores: *read VkSemaphore
-
 #repr[c]
 pub struct VkPresentInfoKHR:
     pub stype: CInt
@@ -516,7 +517,6 @@ pub struct PresentColor:
     pub green: F32
     pub blue: F32
     pub alpha: F32
-
 pub struct VulkanSurfaceLayout:
     pub extent: VkExtent2D
     pub width: Index
@@ -536,50 +536,43 @@ pub struct VulkanPresentBindings:
     pub queuefamily_index: CUInt
     pub swapchain_image_count: CUInt
     pub swapchain_images: List[VkImage]
-
 pub struct VulkanMemoryAllocationPlan:
     pub requirements: VkMemoryRequirements
     pub memory_type_index: CUInt
     pub memory_type: VkMemoryType
     pub memory_heap: VkMemoryHeap
-
 pub struct VulkanCommandResources:
     pub(package) command_pool: VkCommandPool
     pub(package) command_buffer: VkCommandBuffer
-
 pub struct VulkanSemaphoreResource:
     pub(package) semaphore: VkSemaphore
-
+pub struct VulkanFenceResource:
+    pub(package) fence: VkFence
 pub struct VulkanBufferPlan:
     pub byte_count: Index
     pub usage: CUInt
     pub requirements: VkMemoryRequirements
     pub allocation_plan: VulkanMemoryAllocationPlan
-
 pub struct VulkanBuffer:
     pub(package) buffer: VkBuffer
     pub(package) memory: VkDeviceMemory
     pub(package) byte_count: Index
     pub(package) usage: CUInt
     pub(package) plan: VulkanBufferPlan
-
 pub struct VulkanTransferSourceBufferPlan:
     pub byte_count: Index
     pub requirements: VkMemoryRequirements
     pub allocation_plan: VulkanMemoryAllocationPlan
-
 pub struct VulkanTransferSourceBuffer:
     pub(package) buffer: VkBuffer
     pub(package) memory: VkDeviceMemory
     pub(package) byte_count: Index
     pub(package) plan: VulkanTransferSourceBufferPlan
-
 pub struct VulkanSurfaceTransferDestinationImagePlan:
     pub extent: VkExtent2D
     pub surface_format: VkSurfaceFormatKHR
     pub requirements: VkMemoryRequirements
     pub allocation_plan: VulkanMemoryAllocationPlan
-
 pub struct VulkanImagePlan:
     pub extent: VkExtent2D
     pub format: VkFormat
@@ -598,7 +591,6 @@ pub struct VulkanSurfaceTransferDestinationImage:
     pub(package) memory: VkDeviceMemory
     pub(package) plan: VulkanSurfaceTransferDestinationImagePlan
     pub(package) layout: CInt
-
 pub struct VulkanPresentSnapshot:
     pub bindings: VulkanPresentBindings
     pub window_id: WindowId
@@ -644,6 +636,8 @@ pub struct VulkanPresentContext:
     pub(package) bind_buffer_memory: VkBindBufferMemoryFn
     pub(package) map_memory: VkMapMemoryFn
     pub(package) unmap_memory: VkUnmapMemoryFn
+    pub(package) flush_mapped_memory_ranges: VkFlushMappedMemoryRangesFn
+    pub(package) invalidate_mapped_memory_ranges: VkInvalidateMappedMemoryRangesFn
     pub(package) create_command_pool: VkCreateCommandPoolFn
     pub(package) destroy_command_pool: VkDestroyCommandPoolFn
     pub(package) allocate_command_buffers: VkAllocateCommandBuffersFn
@@ -651,12 +645,18 @@ pub struct VulkanPresentContext:
     pub(package) end_command_buffer: VkEndCommandBufferFn
     pub(package) cmd_pipeline_barrier: VkCmdPipelineBarrierFn
     cmd_clear_color_image: VkCmdClearColorImageFn
+    pub(package) cmd_copy_buffer: VkCmdCopyBufferFn
     pub(package) cmd_copy_buffer_to_image: VkCmdCopyBufferToImageFn
     pub(package) cmd_copy_image: VkCmdCopyImageFn
     pub(package) cmd_copy_image_to_buffer: VkCmdCopyImageToBufferFn
+    pub(package) create_fence: VkCreateFenceFn
+    pub(package) destroy_fence: VkDestroyFenceFn
+    pub(package) reset_fences: VkResetFencesFn
+    pub(package) wait_for_fences: VkWaitForFencesFn
+    pub(package) get_fence_status: VkGetFenceStatusFn
     pub(package) create_semaphore: VkCreateSemaphoreFn
     pub(package) destroy_semaphore: VkDestroySemaphoreFn
-    acquire_next_image: VkAcquireNextImageFn
+    pub(package) acquire_next_image: VkAcquireNextImageFn
     pub(package) queue_submit: VkQueueSubmitFn
     pub(package) queue_present: VkQueuePresentFn
     pub(package) queue_wait_idle: VkQueueWaitIdleFn
@@ -676,14 +676,6 @@ pub struct VulkanPresentContext:
     pub(package) swapchain_images: [VkImage; MAX_SWAPCHAIN_IMAGES]
     pub(package) swapchain_image_count: CUInt
     pub(package) presented_once: Bool
-
-pub(package) struct PresentResources:
-    pub(package) command_pool: VkCommandPool
-    pub(package) command_buffer: VkCommandBuffer
-    pub(package) image_available: VkSemaphore
-    pub(package) render_complete: VkSemaphore
-    pub(package) image_index: CUInt
-    pub(package) target_image: VkImage
 
 const ZERO_EXTENT2D: VkExtent2D = VkExtent2D :: :: call
     width = 0
@@ -806,6 +798,8 @@ pub(package) struct VulkanDeviceFns:
     bind_buffer_memory: VkBindBufferMemoryFn
     map_memory: VkMapMemoryFn
     unmap_memory: VkUnmapMemoryFn
+    flush_mapped_memory_ranges: VkFlushMappedMemoryRangesFn
+    invalidate_mapped_memory_ranges: VkInvalidateMappedMemoryRangesFn
     create_command_pool: VkCreateCommandPoolFn
     destroy_command_pool: VkDestroyCommandPoolFn
     allocate_command_buffers: VkAllocateCommandBuffersFn
@@ -813,9 +807,15 @@ pub(package) struct VulkanDeviceFns:
     end_command_buffer: VkEndCommandBufferFn
     cmd_pipeline_barrier: VkCmdPipelineBarrierFn
     cmd_clear_color_image: VkCmdClearColorImageFn
+    cmd_copy_buffer: VkCmdCopyBufferFn
     cmd_copy_buffer_to_image: VkCmdCopyBufferToImageFn
     cmd_copy_image: VkCmdCopyImageFn
     cmd_copy_image_to_buffer: VkCmdCopyImageToBufferFn
+    create_fence: VkCreateFenceFn
+    destroy_fence: VkDestroyFenceFn
+    reset_fences: VkResetFencesFn
+    wait_for_fences: VkWaitForFencesFn
+    get_fence_status: VkGetFenceStatusFn
     create_semaphore: VkCreateSemaphoreFn
     destroy_semaphore: VkDestroySemaphoreFn
     acquire_next_image: VkAcquireNextImageFn
@@ -1249,6 +1249,8 @@ fn bootstrap_vulkan_present_with_instance(read window: Window, take library: Dyn
                                                                 bind_buffer_memory = device_fns.bind_buffer_memory
                                                                 map_memory = device_fns.map_memory
                                                                 unmap_memory = device_fns.unmap_memory
+                                                                flush_mapped_memory_ranges = device_fns.flush_mapped_memory_ranges
+                                                                invalidate_mapped_memory_ranges = device_fns.invalidate_mapped_memory_ranges
                                                                 create_command_pool = device_fns.create_command_pool
                                                                 destroy_command_pool = device_fns.destroy_command_pool
                                                                 allocate_command_buffers = device_fns.allocate_command_buffers
@@ -1256,9 +1258,15 @@ fn bootstrap_vulkan_present_with_instance(read window: Window, take library: Dyn
                                                                 end_command_buffer = device_fns.end_command_buffer
                                                                 cmd_pipeline_barrier = device_fns.cmd_pipeline_barrier
                                                                 cmd_clear_color_image = device_fns.cmd_clear_color_image
+                                                                cmd_copy_buffer = device_fns.cmd_copy_buffer
                                                                 cmd_copy_buffer_to_image = device_fns.cmd_copy_buffer_to_image
                                                                 cmd_copy_image = device_fns.cmd_copy_image
                                                                 cmd_copy_image_to_buffer = device_fns.cmd_copy_image_to_buffer
+                                                                create_fence = device_fns.create_fence
+                                                                destroy_fence = device_fns.destroy_fence
+                                                                reset_fences = device_fns.reset_fences
+                                                                wait_for_fences = device_fns.wait_for_fences
+                                                                get_fence_status = device_fns.get_fence_status
                                                                 create_semaphore = device_fns.create_semaphore
                                                                 destroy_semaphore = device_fns.destroy_semaphore
                                                                 acquire_next_image = device_fns.acquire_next_image
@@ -1305,699 +1313,8 @@ fn bootstrap_vulkan_present_with_instance(read window: Window, take library: Dyn
             return Result.Err :: err :: call
 
 impl VulkanPresentApp:
-    fn window_id(read self) -> WindowId:
-        return self.window.id
-    fn window(read self) -> Window:
-        return self.window
-    fn title(read self) -> Result[Str, TextDecodeError]:
-        return self.window.title :: :: method
-    fn set_title(read self, title: Str) -> Result[Unit, TextDecodeError]:
-        return self.window.set_title :: title :: method
-    fn set_icon(read self, read image: GlfwImage) -> Unit:
-        self.window.set_icon :: image :: method
-        return
-    fn set_icon_image(read self, edit image: RgbaImage) -> Unit:
-        self.window.set_icon_image :: image :: method
-        return
-    fn set_icon_images(read self, edit images: List[RgbaImage]) -> Result[Unit, WindowIconError]:
-        return self.window.set_icon_images :: images :: method
-    fn clear_icon(read self) -> Unit:
-        self.window.clear_icon :: :: method
-        return
-    fn hwnd(read self) -> Win32HWnd:
-        return self.window.hwnd :: :: method
-    fn pos(read self) -> Point:
-        return self.window.pos :: :: method
-    fn set_pos(read self, x: CInt, y: CInt) -> Unit:
-        self.window.set_pos :: x, y :: method
-        return
-    fn window_monitor(read self) -> Monitor:
-        return self.window.monitor :: :: method
-    fn windowed_placement(read self) -> WindowPlacement:
-        return self.window.windowed_placement :: :: method
-    fn restore_windowed_placement(read self, read placement: WindowPlacement) -> Unit:
-        self.window.restore_windowed_placement :: placement :: method
-        return
-    fn close(read self) -> Unit:
-        self.window.close :: :: method
-        return
-    fn center_on(read self, read monitor: Monitor) -> Unit:
-        self.window.center_on :: monitor :: method
-        return
-    fn size(read self) -> Size:
-        return self.window.size :: :: method
-    fn set_size(read self, width: CInt, height: CInt) -> Unit:
-        self.window.set_size :: width, height :: method
-        return
-    fn set_size_limits(read self, min_width: CInt, min_height: CInt, max_width: CInt, max_height: CInt) -> Unit:
-        self.window.set_size_limits :: min_width, min_height, max_width, max_height :: method
-        return
-    fn apply_size_limits(read self, read limits: WindowSizeLimits) -> Unit:
-        self.window.apply_size_limits :: limits :: method
-        return
-    fn clear_size_limits(read self) -> Unit:
-        self.window.clear_size_limits :: :: method
-        return
-    fn set_aspect_ratio(read self, numerator: CInt, denominator: CInt) -> Unit:
-        self.window.set_aspect_ratio :: numerator, denominator :: method
-        return
-    fn apply_aspect_ratio(read self, read ratio: WindowAspectRatio) -> Unit:
-        self.window.apply_aspect_ratio :: ratio :: method
-        return
-    fn clear_aspect_ratio(read self) -> Unit:
-        self.window.clear_aspect_ratio :: :: method
-        return
-    fn frame_size(read self) -> FrameSize:
-        return self.window.frame_size :: :: method
-    fn framebuffer_size(read self) -> Size:
-        return self.window.framebuffer_size :: :: method
-    fn content_scale(read self) -> Scale:
-        return self.window.content_scale :: :: method
-    fn cursor_pos(read self) -> CursorPos:
-        return self.window.cursor_pos :: :: method
-    fn set_cursor_pos(read self, x: F64, y: F64) -> Unit:
-        self.window.set_cursor_pos :: x, y :: method
-        return
-    fn set_cursor(read self, read cursor: GlfwCursor) -> Unit:
-        self.window.set_cursor :: cursor :: method
-        return
-    fn set_cursor_image(read self, edit image: RgbaImage, xhot: CInt, yhot: CInt) -> Option[GlfwCursor]:
-        return self.window.set_cursor_image :: image, xhot, yhot :: method
-    fn set_standard_cursor(read self, cursor: StandardCursor) -> Option[GlfwCursor]:
-        return self.window.set_standard_cursor :: cursor :: method
-    fn use_default_cursor(read self) -> Unit:
-        self.window.use_default_cursor :: :: method
-        return
-    fn client_api(read self) -> ClientApi:
-        return self.window.client_api :: :: method
-    fn client_api_raw(read self) -> CInt:
-        return self.window.client_api_raw :: :: method
-    fn opengl_profile(read self) -> OpenGlProfile:
-        return self.window.opengl_profile :: :: method
-    fn opengl_profile_raw(read self) -> CInt:
-        return self.window.opengl_profile_raw :: :: method
-    fn context_creation_api(read self) -> ContextCreationApi:
-        return self.window.context_creation_api :: :: method
-    fn context_creation_api_raw(read self) -> CInt:
-        return self.window.context_creation_api_raw :: :: method
-    fn context_version_major(read self) -> CInt:
-        return self.window.context_version_major :: :: method
-    fn context_version_minor(read self) -> CInt:
-        return self.window.context_version_minor :: :: method
-    fn current_context(read self) -> Bool:
-        return self.window.current_context :: :: method
-    fn wgl_context(read self) -> GlfwWglContext:
-        return self.window.wgl_context :: :: method
-    fn egl_context(read self) -> GlfwEglContext:
-        return self.window.egl_context :: :: method
-    fn egl_surface(read self) -> GlfwEglSurface:
-        return self.window.egl_surface :: :: method
-    fn osmesa_context(read self) -> GlfwOsMesaContext:
-        return self.window.osmesa_context :: :: method
-    fn osmesa_color_buffer(read self) -> Option[GlfwOSMesaColorBuffer]:
-        return self.window.osmesa_color_buffer :: :: method
-    fn osmesa_depth_buffer(read self) -> Option[GlfwOSMesaDepthBuffer]:
-        return self.window.osmesa_depth_buffer :: :: method
-    fn opengl_forward_compat(read self) -> Bool:
-        return self.window.opengl_forward_compat :: :: method
-    fn opengl_debug_context(read self) -> Bool:
-        return self.window.opengl_debug_context :: :: method
-    fn context_no_error(read self) -> Bool:
-        return self.window.context_no_error :: :: method
-    fn srgb_capable(read self) -> Bool:
-        return self.window.srgb_capable :: :: method
-    fn doublebuffered(read self) -> Bool:
-        return self.window.doublebuffered :: :: method
-    fn opacity(read self) -> F32:
-        return self.window.opacity :: :: method
-    fn set_opacity(read self, opacity: F32) -> Unit:
-        self.window.set_opacity :: opacity :: method
-        return
-    fn visible(read self) -> Bool:
-        return self.window.visible :: :: method
-    fn show(read self) -> Unit:
-        self.window.show :: :: method
-        return
-    fn hide(read self) -> Unit:
-        self.window.hide :: :: method
-        return
-    fn focused(read self) -> Bool:
-        return self.window.focused :: :: method
-    fn focus(read self) -> Unit:
-        self.window.focus :: :: method
-        return
-    fn hovered(read self) -> Bool:
-        return self.window.hovered :: :: method
-    fn floating(read self) -> Bool:
-        return self.window.floating :: :: method
-    fn set_floating(read self, value: Bool) -> Unit:
-        self.window.set_floating :: value :: method
-        return
-    fn iconified(read self) -> Bool:
-        return self.window.iconified :: :: method
-    fn iconify(read self) -> Unit:
-        self.window.iconify :: :: method
-        return
-    fn restore(read self) -> Unit:
-        self.window.restore :: :: method
-        return
-    fn maximized(read self) -> Bool:
-        return self.window.maximized :: :: method
-    fn maximize(read self) -> Unit:
-        self.window.maximize :: :: method
-        return
-    fn fullscreen(read self) -> Bool:
-        return self.window.fullscreen :: :: method
-    fn set_monitor(read self, read spec: WindowMonitorSpec) -> Unit:
-        self.window.set_monitor :: spec :: method
-        return
-    fn enter_fullscreen_on(read self, read monitor: Monitor) -> Result[Unit, WindowModeError]:
-        return self.window.enter_fullscreen_on :: monitor :: method
-    fn enter_fullscreen_with_video_mode(read self, read monitor: Monitor, read mode: VideoMode) -> Result[Unit, WindowModeError]:
-        return self.window.enter_fullscreen_with_video_mode :: monitor, mode :: method
-    fn exit_fullscreen(read self, x: CInt, y: CInt, width: CInt, height: CInt) -> Unit:
-        self.window.exit_fullscreen :: x, y, width, height :: method
-        return
-    fn exit_fullscreen_with_refresh_rate(read self, x: CInt, y: CInt, width: CInt, height: CInt, refresh_rate: CInt) -> Unit:
-        self.window.exit_fullscreen_with_refresh_rate :: x, y, width, height, refresh_rate :: method
-        return
-    fn resizable(read self) -> Bool:
-        return self.window.resizable :: :: method
-    fn set_resizable(read self, value: Bool) -> Unit:
-        self.window.set_resizable :: value :: method
-        return
-    fn decorated(read self) -> Bool:
-        return self.window.decorated :: :: method
-    fn set_decorated(read self, value: Bool) -> Unit:
-        self.window.set_decorated :: value :: method
-        return
-    fn auto_iconify(read self) -> Bool:
-        return self.window.auto_iconify :: :: method
-    fn set_auto_iconify(read self, value: Bool) -> Unit:
-        self.window.set_auto_iconify :: value :: method
-        return
-    fn focus_on_show(read self) -> Bool:
-        return self.window.focus_on_show :: :: method
-    fn set_focus_on_show(read self, value: Bool) -> Unit:
-        self.window.set_focus_on_show :: value :: method
-        return
-    fn mouse_passthrough(read self) -> Bool:
-        return self.window.mouse_passthrough :: :: method
-    fn set_mouse_passthrough(read self, value: Bool) -> Unit:
-        self.window.set_mouse_passthrough :: value :: method
-        return
-    fn cursor_mode(read self) -> CursorMode:
-        return self.window.cursor_mode :: :: method
-    fn set_cursor_mode(read self, mode: CursorMode) -> Unit:
-        self.window.set_cursor_mode :: mode :: method
-        return
-    fn use_normal_cursor(read self) -> Unit:
-        self.window.use_normal_cursor :: :: method
-        return
-    fn hide_cursor(read self) -> Unit:
-        self.window.hide_cursor :: :: method
-        return
-    fn disable_cursor(read self) -> Unit:
-        self.window.disable_cursor :: :: method
-        return
-    fn capture_cursor(read self) -> Unit:
-        self.window.capture_cursor :: :: method
-        return
-    fn sticky_keys_enabled(read self) -> Bool:
-        return self.window.sticky_keys_enabled :: :: method
-    fn set_sticky_keys(read self, enabled: Bool) -> Unit:
-        self.window.set_sticky_keys :: enabled :: method
-        return
-    fn sticky_mouse_buttons_enabled(read self) -> Bool:
-        return self.window.sticky_mouse_buttons_enabled :: :: method
-    fn set_sticky_mouse_buttons(read self, enabled: Bool) -> Unit:
-        self.window.set_sticky_mouse_buttons :: enabled :: method
-        return
-    fn lock_key_mods_enabled(read self) -> Bool:
-        return self.window.lock_key_mods_enabled :: :: method
-    fn set_lock_key_mods(read self, enabled: Bool) -> Unit:
-        self.window.set_lock_key_mods :: enabled :: method
-        return
-    fn raw_mouse_motion_supported(read self) -> Bool:
-        return self.window.raw_mouse_motion_supported :: :: method
-    fn raw_mouse_motion_enabled(read self) -> Bool:
-        return self.window.raw_mouse_motion_enabled :: :: method
-    fn set_raw_mouse_motion(read self, enabled: Bool) -> Unit:
-        self.window.set_raw_mouse_motion :: enabled :: method
-        return
-    fn key_state(read self, key: KeyCode) -> InputAction:
-        return self.window.key_state :: key :: method
-    fn scancode(read self, key: KeyCode) -> ScanCode:
-        return self.window.scancode :: key :: method
-    fn key_pressed(read self, key: KeyCode) -> Bool:
-        return self.window.key_pressed :: key :: method
-    fn key_repeating(read self, key: KeyCode) -> Bool:
-        return self.window.key_repeating :: key :: method
-    fn key_down(read self, key: KeyCode) -> Bool:
-        return self.window.key_down :: key :: method
-    fn mouse_button_state(read self, button: MouseButton) -> InputAction:
-        return self.window.mouse_button_state :: button :: method
-    fn mouse_button_pressed(read self, button: MouseButton) -> Bool:
-        return self.window.mouse_button_pressed :: button :: method
-    fn mouse_button_down(read self, button: MouseButton) -> Bool:
-        return self.window.mouse_button_down :: button :: method
-    fn keyboard_snapshot(read self) -> KeyboardInputSnapshot:
-        return self.window.keyboard_snapshot :: :: method
-    fn mouse_snapshot(read self) -> MouseInputSnapshot:
-        return self.window.mouse_snapshot :: :: method
-    fn input_snapshot(read self) -> WindowInputSnapshot:
-        return self.window.input_snapshot :: :: method
-    fn should_close(read self) -> Bool:
-        return self.window.should_close :: :: method
-    fn set_should_close(read self, value: Bool) -> Unit:
-        self.window.set_should_close :: value :: method
-        return
-    fn window_by_id(read self, id: WindowId) -> Result[Window, AppError]:
-        return self.app.window :: id :: method
-
-    fn window_snapshot(read self) -> Result[WindowSnapshot, AppError]:
-        return self.app.window_snapshot :: self.window.id :: method
-
-    fn window_snapshot_by_id(read self, id: WindowId) -> Result[WindowSnapshot, AppError]:
-        return self.app.window_snapshot :: id :: method
-
-    fn request_close(read self) -> Unit:
-        self.window.close :: :: method
-        return
-    fn close_all_windows(read self) -> Unit:
-        self.app.close_all_windows :: :: method
-        return
-    fn request_attention(read self) -> Unit:
-        self.window.request_attention :: :: method
-        return
-
-    fn close_requested(read self) -> Bool:
-        return self.window.should_close :: :: method
-
-    fn is_live(read self) -> Bool:
-        return self.app.is_live :: :: method
-
-    fn has_windows(read self) -> Bool:
-        return self.app.has_windows :: :: method
-
-    fn window_count(read self) -> Index:
-        return self.app.window_count :: :: method
-
-    fn window_exists(read self, id: WindowId) -> Bool:
-        return self.app.window_exists :: id :: method
-
-    fn window_ids(read self) -> List[WindowId]:
-        return self.app.window_ids :: :: method
-
-    fn windows_snapshot(read self) -> List[Window]:
-        return self.app.windows_snapshot :: :: method
-
-    fn window_snapshots(read self) -> List[WindowSnapshot]:
-        return self.app.window_snapshots :: :: method
-
-    fn has_pending_events(read self) -> Bool:
-        return self.app.has_pending_events :: :: method
-
-    fn pending_event_count(read self) -> Index:
-        return self.app.pending_event_count :: :: method
-
-    fn has_close_requested_windows(read self) -> Bool:
-        return self.app.has_close_requested_windows :: :: method
-
-    fn close_requested_window_count(read self) -> Index:
-        return self.app.close_requested_window_count :: :: method
-
-    fn close_requested_window_ids(read self) -> List[WindowId]:
-        return self.app.close_requested_window_ids :: :: method
-
-    fn window_close_requested(read self, id: WindowId) -> Bool:
-        return self.app.window_close_requested :: id :: method
-
-    fn close_requested_window(read self, id: WindowId) -> Option[Window]:
-        return self.app.close_requested_window :: id :: method
-
-    fn close_requested_window_snapshot(read self, id: WindowId) -> Option[WindowSnapshot]:
-        return self.app.close_requested_window_snapshot :: id :: method
-
-    fn close_requested_windows(read self) -> List[Window]:
-        return self.app.close_requested_windows :: :: method
-
-    fn close_requested_window_snapshots(read self) -> List[WindowSnapshot]:
-        return self.app.close_requested_window_snapshots :: :: method
-
-    fn snapshot(read self) -> AppSnapshot:
-        return self.app.snapshot :: :: method
-
-    fn window_index(read self, id: WindowId) -> Option[Index]:
-        return self.app.window_index :: id :: method
-
-    fn monitor_index(read self, id: MonitorId) -> Option[Index]:
-        return self.app.monitor_index :: id :: method
-
-    fn joystick_index(read self, id: JoystickId) -> Option[Index]:
-        return self.app.joystick_index :: id :: method
-
-    fn has_window(read self, id: WindowId) -> Bool:
-        return self.app.has_window :: id :: method
-
-    fn has_monitor(read self, id: MonitorId) -> Bool:
-        return self.app.has_monitor :: id :: method
-
-    fn has_joystick(read self, id: JoystickId) -> Bool:
-        return self.app.has_joystick :: id :: method
-
-    fn current_context_window_index(read self) -> Option[Index]:
-        return self.app.current_context_window_index :: :: method
-
-    fn primary_monitor_index(read self) -> Option[Index]:
-        return self.app.primary_monitor_index :: :: method
-
-    fn current_context_window(read self) -> Result[Window, AppError]:
-        return self.app.current_context_window :: :: method
-
-    fn create_window(edit self, take spec: WindowSpec) -> Result[Window, AppError]:
-        return self.app.create_window :: spec :: method
-
-    fn create_centered_window_on(edit self, take spec: WindowSpec, read monitor: Monitor) -> Result[Window, AppError]:
-        return self.app.create_centered_window_on :: spec, monitor :: method
-
-    fn create_primary_centered_window(edit self, take spec: WindowSpec) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_window :: spec :: method
-
-    fn create_hidden_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_hidden_window :: title, width, height :: method
-
-    fn create_primary_centered_hidden_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_hidden_window :: title, width, height :: method
-
-    fn create_vulkan_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_vulkan_window :: title, width, height :: method
-
-    fn create_primary_centered_vulkan_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_vulkan_window :: title, width, height :: method
-
-    fn create_fullscreen_window(edit self, take title: Str, read monitor: Monitor) -> Result[Window, AppError]:
-        return self.app.create_fullscreen_window :: title, monitor :: method
-
-    fn create_fullscreen_window_with_video_mode(edit self, take title: Str, read monitor: Monitor, read mode: VideoMode) -> Result[Window, AppError]:
-        return self.app.create_fullscreen_window_with_video_mode :: title, monitor, mode :: method
-
-    fn create_fullscreen_window_matching_mode(edit self, take title: Str, read monitor: Monitor, width: CInt, height: CInt, refresh_rate: CInt) -> Result[Window, AppError]:
-        return self.app.create_fullscreen_window_matching_mode :: title, monitor, width, height, refresh_rate :: method
-
-    fn create_primary_fullscreen_window(edit self, take title: Str) -> Result[Window, AppError]:
-        return self.app.create_primary_fullscreen_window :: title :: method
-
-    fn create_primary_fullscreen_window_with_video_mode(edit self, take title: Str, read mode: VideoMode) -> Result[Window, AppError]:
-        return self.app.create_primary_fullscreen_window_with_video_mode :: title, mode :: method
-
-    fn create_primary_fullscreen_window_matching_mode(edit self, take title: Str, width: CInt, height: CInt, refresh_rate: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_fullscreen_window_matching_mode :: title, width, height, refresh_rate :: method
-
-    fn create_positioned_window(edit self, take title: Str, width: Index, height: Index, x: CInt, y: CInt) -> Result[Window, AppError]:
-        return self.app.create_positioned_window :: title, width, height, x, y :: method
-
-    fn create_fixed_size_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_fixed_size_window :: title, width, height :: method
-
-    fn create_primary_centered_fixed_size_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_fixed_size_window :: title, width, height :: method
-
-    fn create_unfocused_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_unfocused_window :: title, width, height :: method
-
-    fn create_primary_centered_unfocused_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_unfocused_window :: title, width, height :: method
-
-    fn create_undecorated_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_undecorated_window :: title, width, height :: method
-
-    fn create_primary_centered_undecorated_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_undecorated_window :: title, width, height :: method
-
-    fn create_floating_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_floating_window :: title, width, height :: method
-
-    fn create_primary_centered_floating_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_floating_window :: title, width, height :: method
-
-    fn create_maximized_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_maximized_window :: title, width, height :: method
-
-    fn create_primary_centered_maximized_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_maximized_window :: title, width, height :: method
-
-    fn create_transparent_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_transparent_window :: title, width, height :: method
-
-    fn create_primary_centered_transparent_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_transparent_window :: title, width, height :: method
-
-    fn create_mouse_passthrough_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_mouse_passthrough_window :: title, width, height :: method
-
-    fn create_primary_centered_mouse_passthrough_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_mouse_passthrough_window :: title, width, height :: method
-
-    fn create_win32_keyboard_menu_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_win32_keyboard_menu_window :: title, width, height :: method
-
-    fn create_primary_centered_win32_keyboard_menu_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_win32_keyboard_menu_window :: title, width, height :: method
-
-    fn create_win32_showdefault_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_win32_showdefault_window :: title, width, height :: method
-
-    fn create_primary_centered_win32_showdefault_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_win32_showdefault_window :: title, width, height :: method
-
-    fn create_no_api_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_no_api_window :: title, width, height :: method
-
-    fn create_primary_centered_no_api_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_no_api_window :: title, width, height :: method
-
-    fn create_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_opengl_window :: title, width, height, major, minor :: method
-
-    fn create_opengl_core_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_opengl_core_window :: title, width, height, major, minor :: method
-
-    fn create_opengl_compat_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_opengl_compat_window :: title, width, height, major, minor :: method
-
-    fn create_opengl_es_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_opengl_es_window :: title, width, height, major, minor :: method
-
-    fn create_egl_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_egl_opengl_window :: title, width, height, major, minor :: method
-
-    fn create_egl_opengl_es_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_egl_opengl_es_window :: title, width, height, major, minor :: method
-
-    fn create_osmesa_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_osmesa_opengl_window :: title, width, height, major, minor :: method
-
-    fn create_opengl_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_opengl_debug_window :: title, width, height, major, minor :: method
-
-    fn create_opengl_core_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_opengl_core_debug_window :: title, width, height, major, minor :: method
-
-    fn create_opengl_compat_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_opengl_compat_debug_window :: title, width, height, major, minor :: method
-
-    fn create_opengl_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_opengl_srgb_window :: title, width, height, major, minor :: method
-
-    fn create_opengl_core_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_opengl_core_srgb_window :: title, width, height, major, minor :: method
-
-    fn create_opengl_compat_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_opengl_compat_srgb_window :: title, width, height, major, minor :: method
-
-    fn create_opengl_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_opengl_debug_srgb_window :: title, width, height, major, minor :: method
-
-    fn create_opengl_core_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_opengl_core_debug_srgb_window :: title, width, height, major, minor :: method
-
-    fn create_opengl_compat_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_opengl_compat_debug_srgb_window :: title, width, height, major, minor :: method
-
-    fn create_primary_centered_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_opengl_window :: title, width, height, major, minor :: method
-
-    fn create_primary_centered_opengl_core_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_opengl_core_window :: title, width, height, major, minor :: method
-
-    fn create_primary_centered_opengl_compat_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_opengl_compat_window :: title, width, height, major, minor :: method
-
-    fn create_primary_centered_opengl_es_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_opengl_es_window :: title, width, height, major, minor :: method
-
-    fn create_primary_centered_egl_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_egl_opengl_window :: title, width, height, major, minor :: method
-
-    fn create_primary_centered_egl_opengl_es_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_egl_opengl_es_window :: title, width, height, major, minor :: method
-
-    fn create_primary_centered_osmesa_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_osmesa_opengl_window :: title, width, height, major, minor :: method
-
-    fn create_primary_centered_opengl_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_opengl_debug_window :: title, width, height, major, minor :: method
-
-    fn create_primary_centered_opengl_core_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_opengl_core_debug_window :: title, width, height, major, minor :: method
-
-    fn create_primary_centered_opengl_compat_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_opengl_compat_debug_window :: title, width, height, major, minor :: method
-
-    fn create_primary_centered_opengl_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_opengl_srgb_window :: title, width, height, major, minor :: method
-
-    fn create_primary_centered_opengl_core_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_opengl_core_srgb_window :: title, width, height, major, minor :: method
-
-    fn create_primary_centered_opengl_compat_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_opengl_compat_srgb_window :: title, width, height, major, minor :: method
-
-    fn create_primary_centered_opengl_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_opengl_debug_srgb_window :: title, width, height, major, minor :: method
-
-    fn create_primary_centered_opengl_core_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_opengl_core_debug_srgb_window :: title, width, height, major, minor :: method
-
-    fn create_primary_centered_opengl_compat_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
-        return self.app.create_primary_centered_opengl_compat_debug_srgb_window :: title, width, height, major, minor :: method
-
-    fn monitor(read self, id: MonitorId) -> Result[Monitor, AppError]:
-        return self.app.monitor :: id :: method
-
-    fn monitor_snapshot(read self, id: MonitorId) -> Result[MonitorSnapshot, AppError]:
-        return self.app.monitor_snapshot :: id :: method
-
-    fn primary_monitor(read self) -> Result[Monitor, AppError]:
-        return self.app.primary_monitor :: :: method
-
-    fn primary_monitor_id(read self) -> Result[MonitorId, AppError]:
-        return self.app.primary_monitor_id :: :: method
-
-    fn primary_monitor_snapshot(read self) -> Result[MonitorSnapshot, AppError]:
-        return self.app.primary_monitor_snapshot :: :: method
-
-    fn monitor_count(read self) -> Index:
-        return self.app.monitor_count :: :: method
-
-    fn monitor_ids(read self) -> List[MonitorId]:
-        return self.app.monitor_ids :: :: method
-
-    fn monitors_snapshot(read self) -> List[Monitor]:
-        return self.app.monitors_snapshot :: :: method
-
-    fn monitor_snapshots(read self) -> List[MonitorSnapshot]:
-        return self.app.monitor_snapshots :: :: method
-
-    fn version_info(read self) -> VersionInfo:
-        return self.app.version_info :: :: method
-
-    fn version_string(read self) -> Result[Str, TextDecodeError]:
-        return self.app.version_string :: :: method
-
-    fn current_platform(read self) -> Platform:
-        return self.app.current_platform :: :: method
-
-    fn platform_supported(read self, read platform: Platform) -> Bool:
-        return self.app.platform_supported :: platform :: method
-
-    fn last_error(read self) -> Result[Option[RuntimeErrorInfo], TextDecodeError]:
-        return self.app.last_error :: :: method
-
-    fn present_snapshot(read self) -> VulkanPresentSnapshot:
-        return self.context.present_snapshot :: self.window.id :: method
-
-    fn surface_extent(read self) -> VkExtent2D:
-        return self.context.surface_extent :: :: method
-
-    fn surface_width(read self) -> CUInt:
-        let extent = self.context.surface_extent :: :: method
-        return extent.width
-
-    fn surface_height(read self) -> CUInt:
-        let extent = self.context.surface_extent :: :: method
-        return extent.height
-
-    fn surface_pixel_format(read self) -> Result[VulkanPixelFormat, VulkanPresentError]:
-        return self.context.surface_pixel_format :: :: method
-
-    fn surface_pixel_count(read self) -> Result[Index, VulkanPresentError]:
-        return self.context.surface_pixel_count :: :: method
-
-    fn surface_tight_stride(read self) -> Result[Index, VulkanPresentError]:
-        return self.context.surface_tight_stride :: :: method
-
-    fn surface_rgba_byte_count(read self) -> Result[Index, VulkanPresentError]:
-        return self.context.surface_rgba_byte_count :: :: method
-
-    fn surface_pixel_frame(read self, read fill: RgbaColor) -> Result[VulkanPixelFrame, VulkanPresentError]:
-        return self.context.surface_pixel_frame :: fill :: method
-
-    fn surface_image(read self, read fill: RgbaColor) -> Result[RgbaImage, VulkanPresentError]:
-        return self.context.surface_image :: fill :: method
-
-    fn surface_image_from_pixels(read self, take pixels: ByteBuffer) -> Result[RgbaImage, VulkanPresentError]:
-        return self.context.surface_image_from_pixels :: pixels :: method
-
-    fn surface_pixel_frame_from_surface_bytes(read self, take pixels: ByteBuffer) -> Result[VulkanPixelFrame, VulkanPresentError]:
-        return self.context.surface_pixel_frame_from_surface_bytes :: pixels :: method
-
-    fn surface_pixel_frame_from_image(read self, read image: RgbaImage) -> Result[VulkanPixelFrame, VulkanPresentError]:
-        return self.context.surface_pixel_frame_from_image :: image :: method
-
-    fn surface_pixel_frame_with_color(read self, format: VulkanPixelFormat, read fill: RgbaColor) -> Result[VulkanPixelFrame, VulkanPresentError]:
-        return self.context.surface_pixel_frame_with_color :: format, fill :: method
-
-    fn surface_pixel_frame_from_pixels(read self, width: Index, height: Index, stride: Index, format: VulkanPixelFormat, take pixels: ByteBuffer) -> Result[VulkanPixelFrame, VulkanPresentError]:
-        return self.context.surface_pixel_frame_from_pixels :: width, height, stride, format, pixels :: method
-
-    fn clipboard_string(read self) -> Result[Str, AppClipboardError]:
-        return self.app.clipboard_string :: :: method
-
-    fn set_clipboard_string(read self, text: Str) -> Result[Unit, AppClipboardError]:
-        return self.app.set_clipboard_string :: text :: method
-
-    fn time(read self) -> F64:
-        return self.app.time :: :: method
-
-    fn set_time(read self, time_value: F64) -> Unit:
-        self.app.set_time :: time_value :: method
-        return
-
-    fn timer_value(read self) -> U64:
-        return self.app.timer_value :: :: method
-
-    fn timer_frequency(read self) -> U64:
-        return self.app.timer_frequency :: :: method
-
     fn present(edit self, read color: PresentColor) -> Result[Unit, VulkanPresentError]:
         return self.context.present :: color :: method
-
-    fn present_solid_rgba(edit self, read fill: RgbaColor) -> Result[Unit, VulkanPresentError]:
-        return self.context.present_solid_rgba :: fill :: method
-
-    fn present_pixels(edit self, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
-        return self.context.present_pixels :: pixels :: method
-
-    fn present_surface_pixels(edit self, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
-        return self.context.present_surface_pixels :: pixels :: method
-
-    fn present_pixel_frame(edit self, take frame: VulkanPixelFrame) -> Result[Unit, VulkanPresentError]:
-        return self.context.present_pixel_frame :: frame :: method
-
-    fn present_image(edit self, take image: RgbaImage) -> Result[Unit, VulkanPresentError]:
-        return self.context.present_image :: image :: method
 
     fn destroy(take self) -> Result[Unit, VulkanPresentError]:
         select self.context.destroy :: :: method:
@@ -2009,748 +1326,8 @@ impl VulkanPresentApp:
                 return Result.Err :: err :: call
 
 impl VulkanPresentContext:
-    fn destroy_present_resources(read self, read resources: PresentResources) -> Unit:
-        select:
-            when resources.render_complete != 0U64 => #unsafe self.destroy_semaphore :: self.device, resources.render_complete, null :: call
-            else => ()
-        select:
-            when resources.image_available != 0U64 => #unsafe self.destroy_semaphore :: self.device, resources.image_available, null :: call
-            else => ()
-        select:
-            when resources.command_pool != 0U64 => #unsafe self.destroy_command_pool :: self.device, resources.command_pool, null :: call
-            else => ()
-        return
-
-    fn prepare_present_resources(edit self) -> Result[PresentResources, VulkanPresentError]:
-        let resources = PresentResources :: :: call
-            command_pool = 0U64
-            command_buffer = null
-            image_available = 0U64
-            render_complete = 0U64
-            image_index = 0
-            target_image = 0U64
-
-        let command_pool_info = VkCommandPoolCreateInfo :: :: call
-            stype = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO
-            pnext = null
-            flags = 0
-            queuefamily_index = self.queuefamily
-        let command_pool_ptr: *edit VkCommandPool = #unsafe &raw edit resources.command_pool
-        let command_pool_info_ptr: *read VkCommandPoolCreateInfo = #unsafe &raw read command_pool_info
-        let command_pool_result = #unsafe self.create_command_pool :: self.device, command_pool_info_ptr, null, command_pool_ptr :: call
-        select:
-            when command_pool_result != VK_SUCCESS || resources.command_pool == 0U64 =>
-                let error = VulkanPresentError.CommandPoolCreateFailed :: command_pool_result :: call
-                return Result.Err :: error :: call
-            else => ()
-
-        let command_buffer_info = VkCommandBufferAllocateInfo :: :: call
-            stype = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO
-            pnext = null
-            command_pool = resources.command_pool
-            level = VK_COMMAND_BUFFER_LEVEL_PRIMARY
-            command_buffer_count = 1
-        let command_buffer_ptr: *edit VkCommandBuffer = #unsafe &raw edit resources.command_buffer
-        let command_buffer_info_ptr: *read VkCommandBufferAllocateInfo = #unsafe &raw read command_buffer_info
-        let command_buffer_result = #unsafe self.allocate_command_buffers :: self.device, command_buffer_info_ptr, command_buffer_ptr :: call
-        select:
-            when command_buffer_result != VK_SUCCESS || resources.command_buffer.is_null :: :: method =>
-                self.destroy_present_resources :: resources :: method
-                let error = VulkanPresentError.CommandBufferAllocateFailed :: command_buffer_result :: call
-                return Result.Err :: error :: call
-            else => ()
-
-        let semaphore_info = VkSemaphoreCreateInfo :: :: call
-            stype = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
-            pnext = null
-            flags = 0
-        let semaphore_info_ptr: *read VkSemaphoreCreateInfo = #unsafe &raw read semaphore_info
-        let image_available_ptr: *edit VkSemaphore = #unsafe &raw edit resources.image_available
-        let image_available_result = #unsafe self.create_semaphore :: self.device, semaphore_info_ptr, null, image_available_ptr :: call
-        select:
-            when image_available_result != VK_SUCCESS || resources.image_available == 0U64 =>
-                self.destroy_present_resources :: resources :: method
-                let error = VulkanPresentError.SemaphoreCreateFailed :: image_available_result :: call
-                return Result.Err :: error :: call
-            else => ()
-        let render_complete_ptr: *edit VkSemaphore = #unsafe &raw edit resources.render_complete
-        let render_complete_result = #unsafe self.create_semaphore :: self.device, semaphore_info_ptr, null, render_complete_ptr :: call
-        select:
-            when render_complete_result != VK_SUCCESS || resources.render_complete == 0U64 =>
-                self.destroy_present_resources :: resources :: method
-                let error = VulkanPresentError.SemaphoreCreateFailed :: render_complete_result :: call
-                return Result.Err :: error :: call
-            else => ()
-
-        let image_index_ptr: *edit CUInt = #unsafe &raw edit resources.image_index
-        let acquire_result = #unsafe self.acquire_next_image :: self.device, self.swapchain, VK_TIMEOUT_FOREVER, resources.image_available, 0U64, image_index_ptr :: call
-        select:
-            when acquire_result != VK_SUCCESS && acquire_result != VK_SUBOPTIMAL_KHR =>
-                self.destroy_present_resources :: resources :: method
-                let error = VulkanPresentError.AcquireFailed :: acquire_result :: call
-                return Result.Err :: error :: call
-            else => ()
-        let Result.Ok(image_slot) = resources.image_index as Maybe[Index] else =>
-            self.destroy_present_resources :: resources :: method
-            let error = VulkanPresentError.NoSwapchainImages :: :: call
-            return Result.Err :: error :: call
-        resources.target_image = self.swapchain_images[image_slot]
-        return Result.Ok :: resources :: call
-
-    fn transfer_source_buffer_requirements(read self, byte_count: Index) -> Result[VkMemoryRequirements, VulkanPresentError]:
-        let Result.Ok(byte_count_u64) = byte_count as Maybe[U64] else =>
-            let error = VulkanPresentError.StagingSizeOutOfRange :: byte_count :: call
-            return Result.Err :: error :: call
-        let buffer: VkBuffer = 0U64
-        let buffer_info = VkBufferCreateInfo :: :: call
-            stype = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO
-            pnext = null
-            flags = 0
-            size = byte_count_u64
-            usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT
-            sharing_mode = VK_SHARING_MODE_EXCLUSIVE
-            queuefamily_index_count = 0
-            queuefamily_indices = null
-        let buffer_ptr: *edit VkBuffer = #unsafe &raw edit buffer
-        let buffer_info_ptr: *read VkBufferCreateInfo = #unsafe &raw read buffer_info
-        let buffer_result = #unsafe self.create_buffer :: self.device, buffer_info_ptr, null, buffer_ptr :: call
-        select:
-            when buffer_result != VK_SUCCESS || buffer == 0U64 =>
-                let error = VulkanPresentError.StagingBufferCreateFailed :: buffer_result :: call
-                return Result.Err :: error :: call
-            else => ()
-        let requirements = VkMemoryRequirements :: :: call
-            size = 0U64
-            alignment = 0U64
-            memory_type_bits = 0
-        let requirements_ptr: *edit VkMemoryRequirements = #unsafe &raw edit requirements
-        #unsafe self.get_buffer_memory_requirements :: self.device, buffer, requirements_ptr :: call
-        #unsafe self.destroy_buffer :: self.device, buffer, null :: call
-        return Result.Ok :: requirements :: call
-
-    fn surface_transfer_destination_image_requirements(read self) -> Result[VkMemoryRequirements, VulkanPresentError]:
-        let image: VkImage = 0U64
-        let image_extent = VkExtent3D :: :: call
-            width = self.extent.width
-            height = self.extent.height
-            depth = 1
-        let image_info = VkImageCreateInfo :: :: call
-            stype = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO
-            pnext = null
-            flags = 0
-            image_type = VK_IMAGE_TYPE_2D
-            format = self.surface_format.format
-            extent = image_extent
-            mip_levels = 1
-            array_layers = 1
-            samples = VK_SAMPLE_COUNT_1_BIT
-            tiling = VK_IMAGE_TILING_OPTIMAL
-            usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
-            sharing_mode = VK_SHARING_MODE_EXCLUSIVE
-            queuefamily_index_count = 0
-            queuefamily_indices = null
-            initial_layout = VK_IMAGE_LAYOUT_UNDEFINED
-        let image_ptr: *edit VkImage = #unsafe &raw edit image
-        let image_info_ptr: *read VkImageCreateInfo = #unsafe &raw read image_info
-        let image_result = #unsafe self.create_image :: self.device, image_info_ptr, null, image_ptr :: call
-        select:
-            when image_result != VK_SUCCESS || image == 0U64 =>
-                let error = VulkanPresentError.TransferDestinationImageCreateFailed :: image_result :: call
-                return Result.Err :: error :: call
-            else => ()
-
-        let requirements = VkMemoryRequirements :: :: call
-            size = 0U64
-            alignment = 0U64
-            memory_type_bits = 0
-        let requirements_ptr: *edit VkMemoryRequirements = #unsafe &raw edit requirements
-        #unsafe self.get_image_memory_requirements :: self.device, image, requirements_ptr :: call
-        #unsafe self.destroy_image :: self.device, image, null :: call
-        return Result.Ok :: requirements :: call
-
-    fn find_staging_memory_type(read self, memory_type_bits: CUInt) -> Result[CUInt, VulkanPresentError]:
-        select self.memory_properties.staging_memory_type_index :: memory_type_bits :: method:
-            when Option.Some(index) => return Result.Ok :: index :: call
-            when Option.None =>
-                let error = VulkanPresentError.StagingMemoryTypeUnavailable :: memory_type_bits :: call
-                return Result.Err :: error :: call
-
-    fn destroy_surface_transfer_destination_image(read self, take image: VulkanSurfaceTransferDestinationImage) -> Unit:
-        select:
-            when image.image != 0U64 => #unsafe self.destroy_image :: self.device, image.image, null :: call
-            else => ()
-        select:
-            when image.memory != 0U64 => #unsafe self.free_memory :: self.device, image.memory, null :: call
-            else => ()
-        return
-
-    fn surface_transfer_destination_image_from_plan(read self, read plan: VulkanSurfaceTransferDestinationImagePlan) -> Result[VulkanSurfaceTransferDestinationImage, VulkanPresentError]:
-        let image: VkImage = 0U64
-        let memory: VkDeviceMemory = 0U64
-        let image_extent = VkExtent3D :: :: call
-            width = plan.extent.width
-            height = plan.extent.height
-            depth = 1
-        let image_info = VkImageCreateInfo :: :: call
-            stype = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO
-            pnext = null
-            flags = 0
-            image_type = VK_IMAGE_TYPE_2D
-            format = plan.surface_format.format
-            extent = image_extent
-            mip_levels = 1
-            array_layers = 1
-            samples = VK_SAMPLE_COUNT_1_BIT
-            tiling = VK_IMAGE_TILING_OPTIMAL
-            usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
-            sharing_mode = VK_SHARING_MODE_EXCLUSIVE
-            queuefamily_index_count = 0
-            queuefamily_indices = null
-            initial_layout = VK_IMAGE_LAYOUT_UNDEFINED
-        let image_ptr: *edit VkImage = #unsafe &raw edit image
-        let image_info_ptr: *read VkImageCreateInfo = #unsafe &raw read image_info
-        let image_result = #unsafe self.create_image :: self.device, image_info_ptr, null, image_ptr :: call
-        select:
-            when image_result != VK_SUCCESS || image == 0U64 =>
-                let error = VulkanPresentError.TransferDestinationImageCreateFailed :: image_result :: call
-                return Result.Err :: error :: call
-            else => ()
-
-        let allocation_info = VkMemoryAllocateInfo :: :: call
-            stype = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO
-            pnext = null
-            allocation_size = plan.requirements.size
-            memory_type_index = plan.allocation_plan.memory_type_index
-        let allocation_info_ptr: *read VkMemoryAllocateInfo = #unsafe &raw read allocation_info
-        let memory_ptr: *edit VkDeviceMemory = #unsafe &raw edit memory
-        let allocate_result = #unsafe self.allocate_memory :: self.device, allocation_info_ptr, null, memory_ptr :: call
-        select:
-            when allocate_result != VK_SUCCESS || memory == 0U64 =>
-                select:
-                    when image != 0U64 => #unsafe self.destroy_image :: self.device, image, null :: call
-                    else => ()
-                let error = VulkanPresentError.TransferDestinationImageMemoryAllocateFailed :: allocate_result :: call
-                return Result.Err :: error :: call
-            else => ()
-
-        let bind_result = #unsafe self.bind_image_memory :: self.device, image, memory, 0U64 :: call
-        select:
-            when bind_result != VK_SUCCESS =>
-                select:
-                    when image != 0U64 => #unsafe self.destroy_image :: self.device, image, null :: call
-                    else => ()
-                select:
-                    when memory != 0U64 => #unsafe self.free_memory :: self.device, memory, null :: call
-                    else => ()
-                let error = VulkanPresentError.TransferDestinationImageBindFailed :: bind_result :: call
-                return Result.Err :: error :: call
-            else => ()
-
-        let resource = VulkanSurfaceTransferDestinationImage :: :: call
-            image = image
-            memory = memory
-            plan = plan
-            layout = VK_IMAGE_LAYOUT_UNDEFINED
-        return Result.Ok :: resource :: call
-
-    fn destroy_transfer_source_buffer(read self, take upload: VulkanTransferSourceBuffer) -> Unit:
-        select:
-            when upload.buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, upload.buffer, null :: call
-            else => ()
-        select:
-            when upload.memory != 0U64 => #unsafe self.free_memory :: self.device, upload.memory, null :: call
-            else => ()
-        return
-
-    fn transfer_source_buffer(read self, take pixels: ByteBuffer) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
-        let byte_count = pixels.byte_count :: :: method
-        let Result.Ok(byte_count_u64) = byte_count as Maybe[U64] else =>
-            let error = VulkanPresentError.StagingSizeOutOfRange :: byte_count :: call
-            return Result.Err :: error :: call
-
-        let buffer: VkBuffer = 0U64
-        let memory: VkDeviceMemory = 0U64
-
-        let buffer_info = VkBufferCreateInfo :: :: call
-            stype = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO
-            pnext = null
-            flags = 0
-            size = byte_count_u64
-            usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT
-            sharing_mode = VK_SHARING_MODE_EXCLUSIVE
-            queuefamily_index_count = 0
-            queuefamily_indices = null
-        let buffer_ptr: *edit VkBuffer = #unsafe &raw edit buffer
-        let buffer_info_ptr: *read VkBufferCreateInfo = #unsafe &raw read buffer_info
-        let buffer_result = #unsafe self.create_buffer :: self.device, buffer_info_ptr, null, buffer_ptr :: call
-        select:
-            when buffer_result != VK_SUCCESS || buffer == 0U64 =>
-                let error = VulkanPresentError.StagingBufferCreateFailed :: buffer_result :: call
-                return Result.Err :: error :: call
-            else => ()
-
-        let requirements = VkMemoryRequirements :: :: call
-            size = 0U64
-            alignment = 0U64
-            memory_type_bits = 0
-        let requirements_ptr: *edit VkMemoryRequirements = #unsafe &raw edit requirements
-        #unsafe self.get_buffer_memory_requirements :: self.device, buffer, requirements_ptr :: call
-
-        select self.memory_properties.staging_allocation_plan :: requirements :: method:
-            when Option.Some(allocation_plan) =>
-                let allocation_info = VkMemoryAllocateInfo :: :: call
-                    stype = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO
-                    pnext = null
-                    allocation_size = requirements.size
-                    memory_type_index = allocation_plan.memory_type_index
-                let allocation_info_ptr: *read VkMemoryAllocateInfo = #unsafe &raw read allocation_info
-                let memory_ptr: *edit VkDeviceMemory = #unsafe &raw edit memory
-                let allocate_result = #unsafe self.allocate_memory :: self.device, allocation_info_ptr, null, memory_ptr :: call
-                select:
-                    when allocate_result != VK_SUCCESS || memory == 0U64 =>
-                        select:
-                            when buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, buffer, null :: call
-                            else => ()
-                        let error = VulkanPresentError.StagingMemoryAllocateFailed :: allocate_result :: call
-                        return Result.Err :: error :: call
-                    else => ()
-            when Option.None =>
-                select:
-                    when buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, buffer, null :: call
-                    else => ()
-                let error = VulkanPresentError.StagingMemoryTypeUnavailable :: requirements.memory_type_bits :: call
-                return Result.Err :: error :: call
-
-        let bind_result = #unsafe self.bind_buffer_memory :: self.device, buffer, memory, 0U64 :: call
-        select:
-            when bind_result != VK_SUCCESS =>
-                select:
-                    when buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, buffer, null :: call
-                    else => ()
-                select:
-                    when memory != 0U64 => #unsafe self.free_memory :: self.device, memory, null :: call
-                    else => ()
-                let error = VulkanPresentError.StagingBufferBindFailed :: bind_result :: call
-                return Result.Err :: error :: call
-            else => ()
-
-        let mapped_memory: *edit CVoid = null
-        let mapped_memory_ptr: *edit *edit CVoid = #unsafe &raw edit mapped_memory
-        let map_result = #unsafe self.map_memory :: self.device, memory, 0U64, byte_count_u64, 0, mapped_memory_ptr :: call
-        select:
-            when map_result != VK_SUCCESS || mapped_memory.is_null :: :: method =>
-                select:
-                    when buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, buffer, null :: call
-                    else => ()
-                select:
-                    when memory != 0U64 => #unsafe self.free_memory :: self.device, memory, null :: call
-                    else => ()
-                let error = VulkanPresentError.StagingMemoryMapFailed :: map_result :: call
-                return Result.Err :: error :: call
-            else => ()
-        let mapped_address = #unsafe raw_pointer_address_edit :: mapped_memory :: call
-        let mapped_bytes = #unsafe raw_pointer_from_address_edit[U8] :: mapped_address :: call
-        let source_ptr: *read U8 = #unsafe &raw read pixels[0]
-        let Result.Ok(scan_limit) = byte_count as Maybe[USize] else =>
-            #unsafe self.unmap_memory :: self.device, memory :: call
-            select:
-                when buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, buffer, null :: call
-                else => ()
-            select:
-                when memory != 0U64 => #unsafe self.free_memory :: self.device, memory, null :: call
-                else => ()
-            let error = VulkanPresentError.StagingSizeOutOfRange :: byte_count :: call
-            return Result.Err :: error :: call
-        let scan: USize = 0
-        repeat while scan < scan_limit:
-            let Result.Ok(offset) = scan as Maybe[ISize] else =>
-                #unsafe self.unmap_memory :: self.device, memory :: call
-                select:
-                    when buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, buffer, null :: call
-                    else => ()
-                select:
-                    when memory != 0U64 => #unsafe self.free_memory :: self.device, memory, null :: call
-                    else => ()
-                let error = VulkanPresentError.StagingSizeOutOfRange :: byte_count :: call
-                return Result.Err :: error :: call
-            let source_slot = #unsafe source_ptr.offset :: offset :: method
-            let raw: U8 = #unsafe source_slot.load :: :: method
-            let slot = #unsafe mapped_bytes.offset :: offset :: method
-            #unsafe slot.store :: raw :: method
-            scan = scan + 1
-        #unsafe self.unmap_memory :: self.device, memory :: call
-        select self.transfer_source_buffer_plan :: byte_count :: method:
-            when Result.Ok(plan) =>
-                let upload = VulkanTransferSourceBuffer :: :: call
-                    buffer = buffer
-                    memory = memory
-                    byte_count = byte_count
-                    plan = plan
-                return Result.Ok :: upload :: call
-            when Result.Err(err) =>
-                select:
-                    when buffer != 0U64 => #unsafe self.destroy_buffer :: self.device, buffer, null :: call
-                    else => ()
-                select:
-                    when memory != 0U64 => #unsafe self.free_memory :: self.device, memory, null :: call
-                    else => ()
-                return Result.Err :: err :: call
-
     fn queuefamily_index(read self) -> CUInt:
         return self.queuefamily
-
-    fn memory_properties(read self) -> VkPhysicalDeviceMemoryProperties:
-        return self.memory_properties
-
-    fn memory_type_count(read self) -> CUInt:
-        return self.memory_properties.memory_type_count
-
-    fn memory_heap_count(read self) -> CUInt:
-        return self.memory_properties.memory_heap_count
-
-    fn memory_type(read self, index: CUInt) -> Option[VkMemoryType]:
-        return self.memory_properties.memory_type :: index :: method
-
-    fn memory_heap(read self, index: CUInt) -> Option[VkMemoryHeap]:
-        return self.memory_properties.memory_heap :: index :: method
-
-    fn host_visible_memory_type_count(read self) -> CUInt:
-        return self.memory_properties.host_visible_memory_type_count :: :: method
-
-    fn host_coherent_memory_type_count(read self) -> CUInt:
-        return self.memory_properties.host_coherent_memory_type_count :: :: method
-
-    fn staging_memory_type_count(read self) -> CUInt:
-        return self.memory_properties.staging_memory_type_count :: :: method
-
-    fn device_local_memory_type_count(read self) -> CUInt:
-        return self.memory_properties.device_local_memory_type_count :: :: method
-
-    fn device_local_memory_heap_count(read self) -> CUInt:
-        return self.memory_properties.device_local_memory_heap_count :: :: method
-
-    fn has_staging_memory_type(read self) -> Bool:
-        return self.memory_properties.has_staging_memory_type :: :: method
-
-    fn first_staging_memory_type_index(read self) -> Option[CUInt]:
-        return self.memory_properties.first_staging_memory_type_index :: :: method
-
-    fn memory_type_supported(read self, index: CUInt, memory_type_bits: CUInt) -> Bool:
-        return self.memory_properties.memory_type_supported :: index, memory_type_bits :: method
-
-    fn compatible_memory_type_indices(read self, memory_type_bits: CUInt) -> List[CUInt]:
-        return self.memory_properties.compatible_memory_type_indices :: memory_type_bits :: method
-
-    fn host_visible_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
-        return self.memory_properties.host_visible_memory_type_index :: memory_type_bits :: method
-
-    fn host_coherent_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
-        return self.memory_properties.host_coherent_memory_type_index :: memory_type_bits :: method
-
-    fn staging_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
-        return self.memory_properties.staging_memory_type_index :: memory_type_bits :: method
-
-    fn device_local_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
-        return self.memory_properties.device_local_memory_type_index :: memory_type_bits :: method
-
-    fn surface_capabilities(read self) -> VkSurfaceCapabilitiesKHR:
-        return self.surface_capabilities
-
-    fn chosen_surface_format(read self) -> VkSurfaceFormatKHR:
-        return self.surface_format
-
-    fn chosen_present_mode(read self) -> CInt:
-        return self.present_mode
-
-    fn swapchain_image_count(read self) -> CUInt:
-        return self.swapchain_image_count
-
-    fn surface_extent(read self) -> VkExtent2D:
-        return self.extent
-
-    fn preferred_image_count(read self) -> CUInt:
-        return choose_image_count :: self.surface_capabilities :: call
-
-    fn surface_pixel_format(read self) -> Result[VulkanPixelFormat, VulkanPresentError]:
-        return self.surface_format.surface_pixel_format :: :: method
-
-    fn surface_pixel_count(read self) -> Result[Index, VulkanPresentError]:
-        let raw_width = self.extent.width
-        let raw_height = self.extent.height
-        select surface_image_shape_from_extent :: self.extent :: call:
-            when Result.Ok(shape) =>
-                let Result.Ok(pixel_width) = raw_width as Maybe[CInt] else =>
-                    let error = VulkanPresentError.SurfaceExtentOutOfRange :: raw_width, raw_height :: call
-                    return Result.Err :: error :: call
-                let Result.Ok(pixel_height) = raw_height as Maybe[CInt] else =>
-                    let error = VulkanPresentError.SurfaceExtentOutOfRange :: raw_width, raw_height :: call
-                    return Result.Err :: error :: call
-                let Result.Ok(width_wide) = shape.width as Maybe[USize] else =>
-                    let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
-                    return Result.Err :: error :: call
-                let Result.Ok(height_wide) = shape.height as Maybe[USize] else =>
-                    let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
-                    return Result.Err :: error :: call
-                let pixel_count_wide: USize = width_wide * height_wide
-                let Result.Ok(pixel_count) = pixel_count_wide as Maybe[Index] else =>
-                    let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
-                    return Result.Err :: error :: call
-                return Result.Ok :: pixel_count :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-
-    fn surface_tight_stride(read self) -> Result[Index, VulkanPresentError]:
-        select surface_image_shape_from_extent :: self.extent :: call:
-            when Result.Ok(shape) => return Result.Ok :: shape.tight_stride :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-
-    fn surface_rgba_byte_count(read self) -> Result[Index, VulkanPresentError]:
-        select surface_image_shape_from_extent :: self.extent :: call:
-            when Result.Ok(shape) => return Result.Ok :: shape.rgba_byte_count :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-
-    fn surface_pixel_frame(read self, read fill: RgbaColor) -> Result[VulkanPixelFrame, VulkanPresentError]:
-        select self.surface_pixel_format :: :: method:
-            when Result.Ok(format) => return self.surface_pixel_frame_with_color :: format, fill :: method
-            when Result.Err(err) => return Result.Err :: err :: call
-
-    fn surface_pixel_frame_with_color(read self, format: VulkanPixelFormat, read fill: RgbaColor) -> Result[VulkanPixelFrame, VulkanPresentError]:
-        return surface_pixel_frame_with_color :: self.extent, format, fill :: call
-
-    fn surface_pixel_frame_from_surface_bytes(read self, take pixels: ByteBuffer) -> Result[VulkanPixelFrame, VulkanPresentError]:
-        select self.surface_pixel_format :: :: method:
-            when Result.Ok(format) => return surface_pixel_frame_from_extent :: self.extent, format, pixels :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-
-    fn surface_pixel_frame_from_image(read self, read image: RgbaImage) -> Result[VulkanPixelFrame, VulkanPresentError]:
-        select image.width_index :: :: method:
-            when Result.Ok(image_width) =>
-                select image.height_index :: :: method:
-                    when Result.Ok(image_height) =>
-                        select surface_image_shape_from_extent :: self.extent :: call:
-                            when Result.Ok(shape) =>
-                                select:
-                                    when image_width != shape.width || image_height != shape.height =>
-                                        let error = VulkanPresentError.PixelFrameExtentMismatch :: image_width, image_height, self.extent.width, self.extent.height :: call
-                                        return Result.Err :: error :: call
-                                    else => ()
-                            when Result.Err(err) => return Result.Err :: err :: call
-                        select self.surface_pixel_format :: :: method:
-                            when Result.Ok(format) => return vulkan_pixel_frame_from_image :: image, format :: call
-                            when Result.Err(err) => return Result.Err :: err :: call
-                    when Result.Err(err) =>
-                        let error = VulkanPresentError.ImageAccess :: err :: call
-                        return Result.Err :: error :: call
-            when Result.Err(err) =>
-                let error = VulkanPresentError.ImageAccess :: err :: call
-                return Result.Err :: error :: call
-
-    fn surface_pixel_frame_from_pixels(read self, width: Index, height: Index, stride: Index, format: VulkanPixelFormat, take pixels: ByteBuffer) -> Result[VulkanPixelFrame, VulkanPresentError]:
-        select surface_image_shape_from_extent :: self.extent :: call:
-            when Result.Ok(shape) =>
-                select:
-                    when width != shape.width || height != shape.height =>
-                        let error = VulkanPresentError.PixelFrameExtentMismatch :: width, height, self.extent.width, self.extent.height :: call
-                        return Result.Err :: error :: call
-                    else => return vulkan_pixel_frame :: width, height, stride, format, pixels :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-
-    fn surface_image(read self, read fill: RgbaColor) -> Result[RgbaImage, VulkanPresentError]:
-        select self.surface_pixel_frame_with_color :: VulkanPixelFormat.Rgba8, fill :: method:
-            when Result.Ok(frame) => return frame.to_rgba_image :: :: method
-            when Result.Err(err) => return Result.Err :: err :: call
-
-    fn surface_image_from_pixels(read self, take pixels: ByteBuffer) -> Result[RgbaImage, VulkanPresentError]:
-        select surface_pixel_frame_from_extent :: self.extent, VulkanPixelFormat.Rgba8, pixels :: call:
-            when Result.Ok(frame) => return frame.to_rgba_image :: :: method
-            when Result.Err(err) => return Result.Err :: err :: call
-
-    fn present_solid_rgba(edit self, read fill: RgbaColor) -> Result[Unit, VulkanPresentError]:
-        select self.surface_pixel_frame_with_color :: VulkanPixelFormat.Rgba8, fill :: method:
-            when Result.Ok(frame) => return self.present_pixel_frame :: frame :: method
-            when Result.Err(err) => return Result.Err :: err :: call
-
-    fn present_pixels(edit self, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
-        select surface_pixel_frame_from_extent :: self.extent, VulkanPixelFormat.Rgba8, pixels :: call:
-            when Result.Ok(frame) => return self.present_pixel_frame :: frame :: method
-            when Result.Err(err) => return Result.Err :: err :: call
-
-    fn present_surface_pixels(edit self, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
-        return self.present_surface_bytes :: pixels :: method
-
-    fn present_transfer_source_buffer(edit self, read upload: VulkanTransferSourceBuffer) -> Result[Unit, VulkanPresentError]:
-        select self.surface_rgba_byte_count :: :: method:
-            when Result.Ok(required_byte_count) =>
-                select:
-                    when upload.byte_count != required_byte_count =>
-                        let error = VulkanPresentError.PixelByteCountMismatch :: upload.byte_count, required_byte_count :: call
-                        return Result.Err :: error :: call
-                    else => ()
-            when Result.Err(err) => return Result.Err :: err :: call
-        select self.prepare_present_resources :: :: method:
-            when Result.Ok(resources) =>
-                let begin_info = VkCommandBufferBeginInfo :: :: call
-                    stype = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
-                    pnext = null
-                    flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-                    inheritance_info = null
-                let begin_info_ptr: *read VkCommandBufferBeginInfo = #unsafe &raw read begin_info
-                let begin_result = #unsafe self.begin_command_buffer :: resources.command_buffer, begin_info_ptr :: call
-                select:
-                    when begin_result != VK_SUCCESS =>
-                        self.destroy_present_resources :: resources :: method
-                        let error = VulkanPresentError.CommandBufferBeginFailed :: begin_result :: call
-                        return Result.Err :: error :: call
-                    else => ()
-                let before_barrier = VkImageMemoryBarrier :: :: call
-                    stype = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
-                    pnext = null
-                    src_access_mask = 0
-                    dst_access_mask = VK_ACCESS_TRANSFER_WRITE_BIT
-                    old_layout = VK_IMAGE_LAYOUT_UNDEFINED
-                    new_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-                    src_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
-                    dst_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
-                    image = resources.target_image
-                    subresource_range = CLEAR_RANGE
-                select:
-                    when self.presented_once =>
-                        before_barrier.src_access_mask = VK_ACCESS_MEMORY_READ_BIT
-                        before_barrier.old_layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-                    else => ()
-                let before_barrier_ptr: *read VkImageMemoryBarrier = #unsafe &raw read before_barrier
-                let before_stage: CUInt = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
-                select:
-                    when self.presented_once => before_stage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
-                    else => ()
-                #unsafe self.cmd_pipeline_barrier :: resources.command_buffer, before_stage, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, null, 0, null, 1, before_barrier_ptr :: call
-                let copy_region = VkBufferImageCopy :: :: call
-                    buffer_offset = 0U64
-                    buffer_row_length = 0
-                    buffer_image_height = 0
-                    image_subresource = IMAGE_COPY_SUBRESOURCE
-                    image_offset = ZERO_OFFSET3D
-                    image_extent = VkExtent3D :: :: call
-                        width = self.extent.width
-                        height = self.extent.height
-                        depth = 1
-                let copy_region_ptr: *read VkBufferImageCopy = #unsafe &raw read copy_region
-                #unsafe self.cmd_copy_buffer_to_image :: resources.command_buffer, upload.buffer, resources.target_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, copy_region_ptr :: call
-                let after_barrier = VkImageMemoryBarrier :: :: call
-                    stype = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
-                    pnext = null
-                    src_access_mask = VK_ACCESS_TRANSFER_WRITE_BIT
-                    dst_access_mask = VK_ACCESS_MEMORY_READ_BIT
-                    old_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-                    new_layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-                    src_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
-                    dst_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
-                    image = resources.target_image
-                    subresource_range = CLEAR_RANGE
-                let after_barrier_ptr: *read VkImageMemoryBarrier = #unsafe &raw read after_barrier
-                #unsafe self.cmd_pipeline_barrier :: resources.command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, null, 0, null, 1, after_barrier_ptr :: call
-                let end_result = #unsafe self.end_command_buffer :: resources.command_buffer :: call
-                select:
-                    when end_result != VK_SUCCESS =>
-                        self.destroy_present_resources :: resources :: method
-                        let error = VulkanPresentError.CommandBufferEndFailed :: end_result :: call
-                        return Result.Err :: error :: call
-                    else => ()
-                let wait_stage_masks: [CUInt; 1] = [VK_PIPELINE_STAGE_TRANSFER_BIT]
-                let wait_stage_ptr: *read CUInt = #unsafe &raw read wait_stage_masks[0]
-                let wait_semaphores: [VkSemaphore; 1] = [resources.image_available]
-                let signal_semaphores: [VkSemaphore; 1] = [resources.render_complete]
-                let command_buffers: [VkCommandBuffer; 1] = [resources.command_buffer]
-                let wait_semaphore_ptr: *read VkSemaphore = #unsafe &raw read wait_semaphores[0]
-                let signal_semaphore_ptr: *read VkSemaphore = #unsafe &raw read signal_semaphores[0]
-                let command_buffer_submit_ptr: *read VkCommandBuffer = #unsafe &raw read command_buffers[0]
-                let submit_info = VkSubmitInfo :: :: call
-                    stype = VK_STRUCTURE_TYPE_SUBMIT_INFO
-                    pnext = null
-                    wait_semaphore_count = 1
-                    wait_semaphores = wait_semaphore_ptr
-                    wait_dst_stage_mask = wait_stage_ptr
-                    command_buffer_count = 1
-                    command_buffers = command_buffer_submit_ptr
-                    signal_semaphore_count = 1
-                    signal_semaphores = signal_semaphore_ptr
-                let submit_info_ptr: *read VkSubmitInfo = #unsafe &raw read submit_info
-                let submit_result = #unsafe self.queue_submit :: self.queue, 1, submit_info_ptr, 0U64 :: call
-                select:
-                    when submit_result != VK_SUCCESS =>
-                        self.destroy_present_resources :: resources :: method
-                        let error = VulkanPresentError.SubmitFailed :: submit_result :: call
-                        return Result.Err :: error :: call
-                    else => ()
-                let swapchains: [VkSwapchain; 1] = [self.swapchain]
-                let swapchain_ptr: *read VkSwapchain = #unsafe &raw read swapchains[0]
-                let image_index_ptr: *read CUInt = #unsafe &raw read resources.image_index
-                let present_info = VkPresentInfoKHR :: :: call
-                    stype = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR
-                    pnext = null
-                    wait_semaphore_count = 1
-                    wait_semaphores = signal_semaphore_ptr
-                    swapchain_count = 1
-                    swapchains = swapchain_ptr
-                    image_indices = image_index_ptr
-                    results = null
-                let present_info_ptr: *read VkPresentInfoKHR = #unsafe &raw read present_info
-                let present_result = #unsafe self.queue_present :: self.queue, present_info_ptr :: call
-                let idle_result = #unsafe self.queue_wait_idle :: self.queue :: call
-                self.destroy_present_resources :: resources :: method
-                select:
-                    when present_result != VK_SUCCESS && present_result != VK_SUBOPTIMAL_KHR =>
-                        let error = VulkanPresentError.PresentFailed :: present_result :: call
-                        return Result.Err :: error :: call
-                    when idle_result != VK_SUCCESS =>
-                        let error = VulkanPresentError.QueueWaitIdleFailed :: idle_result :: call
-                        return Result.Err :: error :: call
-                    else => ()
-                self.presented_once = true
-                return Result.Ok :: () :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-
-    fn present_surface_bytes(edit self, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
-        select self.surface_transfer_source_buffer :: pixels :: method:
-            when Result.Ok(upload) =>
-                select self.present_transfer_source_buffer :: upload :: method:
-                    when Result.Ok(_) =>
-                        self.destroy_transfer_source_buffer :: upload :: method
-                        return Result.Ok :: () :: call
-                    when Result.Err(err) =>
-                        self.destroy_transfer_source_buffer :: upload :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-
-    fn present_pixel_frame(edit self, take frame: VulkanPixelFrame) -> Result[Unit, VulkanPresentError]:
-        select surface_image_shape_from_extent :: self.extent :: call:
-            when Result.Ok(shape) =>
-                select:
-                    when frame.width :: :: method != shape.width || frame.height :: :: method != shape.height =>
-                        let error = VulkanPresentError.PixelFrameExtentMismatch :: frame.width :: :: method, frame.height :: :: method, self.extent.width, self.extent.height :: call
-                        return Result.Err :: error :: call
-                    else => ()
-            when Result.Err(err) => return Result.Err :: err :: call
-        let surface_format = self.chosen_surface_format :: :: method
-        select frame.to_surface_bytes :: surface_format :: method:
-            when Result.Ok(surface_pixels) => return self.present_surface_bytes :: surface_pixels :: method
-            when Result.Err(err) => return Result.Err :: err :: call
-
-    fn present_image(edit self, take image: RgbaImage) -> Result[Unit, VulkanPresentError]:
-        let raw_width = image.width :: :: method
-        let raw_height = image.height :: :: method
-        let Result.Ok(image_width) = raw_width as Maybe[Index] else =>
-            let error = VulkanPresentError.PixelExtentOutOfRange :: raw_width, raw_height :: call
-            return Result.Err :: error :: call
-        let Result.Ok(image_height) = raw_height as Maybe[Index] else =>
-            let error = VulkanPresentError.PixelExtentOutOfRange :: raw_width, raw_height :: call
-            return Result.Err :: error :: call
-        let pixels = image.take_pixels :: :: method
-        select self.surface_tight_stride :: :: method:
-            when Result.Ok(tight_stride) =>
-                select self.surface_pixel_frame_from_pixels :: image_width, image_height, tight_stride, VulkanPixelFormat.Rgba8, pixels :: method:
-                    when Result.Ok(frame) => return self.present_pixel_frame :: frame :: method
-                    when Result.Err(err) => return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
 
     fn present(edit self, read color: PresentColor) -> Result[Unit, VulkanPresentError]:
         let command_pool: VkCommandPool = 0U64

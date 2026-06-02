@@ -1,0 +1,150 @@
+use std.{Option, Result}
+
+use runa_app.WindowId
+use runa_app_vulkan.VulkanPresentApp
+
+pub fn prove_window_touch_runtime(edit present_app: VulkanPresentApp, window_id: WindowId) -> I32:
+    let pending_events = present_app.pending_touch_events_for :: window_id :: method
+    let pending_data = present_app.pending_touch_data_for :: window_id :: method
+    select:
+        when pending_events.count :: :: method != 0 => return 3650
+        when pending_data.count :: :: method != 0 => return 3651
+        else => ()
+
+    present_app.post_user_event :: 331 :: method
+    select present_app.next_touch_data_for :: window_id :: method:
+        when Option.Some(_) => return 3652
+        when Option.None => ()
+    select present_app.next_user_event_for :: 331 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 331 => return 3653
+                else => ()
+        when Option.None => return 3654
+
+    present_app.post_user_event :: 332 :: method
+    select present_app.next_touch_event_for :: window_id :: method:
+        when Option.Some(_) => return 3655
+        when Option.None => ()
+    select present_app.next_user_event_for :: 332 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 332 => return 3656
+                else => ()
+        when Option.None => return 3657
+
+    present_app.post_user_event :: 333 :: method
+    select present_app.poll_next_touch_data_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3658
+        when Result.Err(_) => return 3659
+    select present_app.next_user_event_for :: 333 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 333 => return 3660
+                else => ()
+        when Option.None => return 3661
+
+    present_app.post_user_event :: 334 :: method
+    select present_app.poll_next_touch_event_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3662
+        when Result.Err(_) => return 3663
+    select present_app.next_user_event_for :: 334 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 334 => return 3664
+                else => ()
+        when Option.None => return 3665
+
+    present_app.post_user_event :: 335 :: method
+    select present_app.wait_next_touch_data_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3666
+        when Result.Err(_) => return 3667
+    select present_app.next_user_event_for :: 335 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 335 => return 3668
+                else => ()
+        when Option.None => return 3669
+
+    present_app.post_user_event :: 336 :: method
+    select present_app.wait_next_touch_event_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3670
+        when Result.Err(_) => return 3671
+    select present_app.next_user_event_for :: 336 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 336 => return 3672
+                else => ()
+        when Option.None => return 3673
+
+    present_app.post_user_event :: 337 :: method
+    select present_app.wait_timeout_next_touch_data_for :: window_id, 0.0 :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3674
+        when Result.Err(_) => return 3675
+    select present_app.next_user_event_for :: 337 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 337 => return 3676
+                else => ()
+        when Option.None => return 3677
+
+    present_app.post_user_event :: 338 :: method
+    select present_app.wait_timeout_next_touch_event_for :: window_id, 0.0 :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3678
+        when Result.Err(_) => return 3679
+    select present_app.next_user_event_for :: 338 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 338 => return 3680
+                else => ()
+        when Option.None => return 3681
+
+    present_app.post_user_event :: 339 :: method
+    let polled_data = present_app.poll_touch_data_for :: window_id :: method
+    let polled_events = present_app.poll_touch_events_for :: window_id :: method
+    select:
+        when polled_data.count :: :: method != 0 => return 3682
+        when polled_events.count :: :: method != 0 => return 3683
+        else => ()
+    select present_app.next_user_event_for :: 339 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 339 => return 3684
+                else => ()
+        when Option.None => return 3685
+
+    present_app.post_user_event :: 340 :: method
+    let waited_data = present_app.wait_touch_data_for :: window_id :: method
+    let waited_events = present_app.wait_touch_events_for :: window_id :: method
+    select:
+        when waited_data.count :: :: method != 0 => return 3686
+        when waited_events.count :: :: method != 0 => return 3687
+        else => ()
+    select present_app.next_user_event_for :: 340 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 340 => return 3688
+                else => ()
+        when Option.None => return 3689
+
+    present_app.post_user_event :: 341 :: method
+    let timeout_data = present_app.wait_timeout_touch_data_for :: window_id, 0.0 :: method
+    let timeout_events = present_app.wait_timeout_touch_events_for :: window_id, 0.0 :: method
+    select:
+        when timeout_data.count :: :: method != 0 => return 3690
+        when timeout_events.count :: :: method != 0 => return 3691
+        else => ()
+    select present_app.next_user_event_for :: 341 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 341 => return 3692
+                else => ()
+        when Option.None => return 3693
+
+    return 0

@@ -1,0 +1,105 @@
+use std.Result
+
+use present.{VK_COMMAND_BUFFER_LEVEL_PRIMARY, VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO}
+use present.{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO}
+use present.{VK_SUBOPTIMAL_KHR, VK_SUCCESS, VK_TIMEOUT_FOREVER}
+use present.{VkCommandBuffer, VkCommandBufferAllocateInfo, VkCommandPool, VkCommandPoolCreateInfo}
+use present.{VkImage, VkSemaphore, VkSemaphoreCreateInfo}
+use present.{VulkanPresentContext, VulkanPresentError}
+
+pub(package) struct PresentResources:
+    pub(package) command_pool: VkCommandPool
+    pub(package) command_buffer: VkCommandBuffer
+    pub(package) image_available: VkSemaphore
+    pub(package) render_complete: VkSemaphore
+    pub(package) image_index: CUInt
+    pub(package) target_image: VkImage
+
+impl VulkanPresentContext:
+    fn destroy_present_resources(read self, read resources: PresentResources) -> Unit:
+        select:
+            when resources.render_complete != 0U64 => #unsafe self.destroy_semaphore :: self.device, resources.render_complete, null :: call
+            else => ()
+        select:
+            when resources.image_available != 0U64 => #unsafe self.destroy_semaphore :: self.device, resources.image_available, null :: call
+            else => ()
+        select:
+            when resources.command_pool != 0U64 => #unsafe self.destroy_command_pool :: self.device, resources.command_pool, null :: call
+            else => ()
+        return
+
+    fn prepare_present_resources(edit self) -> Result[PresentResources, VulkanPresentError]:
+        let resources = PresentResources :: :: call
+            command_pool = 0U64
+            command_buffer = null
+            image_available = 0U64
+            render_complete = 0U64
+            image_index = 0
+            target_image = 0U64
+
+        let command_pool_info = VkCommandPoolCreateInfo :: :: call
+            stype = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO
+            pnext = null
+            flags = 0
+            queuefamily_index = self.queuefamily
+        let command_pool_ptr: *edit VkCommandPool = #unsafe &raw edit resources.command_pool
+        let command_pool_info_ptr: *read VkCommandPoolCreateInfo = #unsafe &raw read command_pool_info
+        let command_pool_result = #unsafe self.create_command_pool :: self.device, command_pool_info_ptr, null, command_pool_ptr :: call
+        select:
+            when command_pool_result != VK_SUCCESS || resources.command_pool == 0U64 =>
+                let error = VulkanPresentError.CommandPoolCreateFailed :: command_pool_result :: call
+                return Result.Err :: error :: call
+            else => ()
+
+        let command_buffer_info = VkCommandBufferAllocateInfo :: :: call
+            stype = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO
+            pnext = null
+            command_pool = resources.command_pool
+            level = VK_COMMAND_BUFFER_LEVEL_PRIMARY
+            command_buffer_count = 1
+        let command_buffer_ptr: *edit VkCommandBuffer = #unsafe &raw edit resources.command_buffer
+        let command_buffer_info_ptr: *read VkCommandBufferAllocateInfo = #unsafe &raw read command_buffer_info
+        let command_buffer_result = #unsafe self.allocate_command_buffers :: self.device, command_buffer_info_ptr, command_buffer_ptr :: call
+        select:
+            when command_buffer_result != VK_SUCCESS || resources.command_buffer.is_null :: :: method =>
+                self.destroy_present_resources :: resources :: method
+                let error = VulkanPresentError.CommandBufferAllocateFailed :: command_buffer_result :: call
+                return Result.Err :: error :: call
+            else => ()
+
+        let semaphore_info = VkSemaphoreCreateInfo :: :: call
+            stype = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
+            pnext = null
+            flags = 0
+        let semaphore_info_ptr: *read VkSemaphoreCreateInfo = #unsafe &raw read semaphore_info
+        let image_available_ptr: *edit VkSemaphore = #unsafe &raw edit resources.image_available
+        let image_available_result = #unsafe self.create_semaphore :: self.device, semaphore_info_ptr, null, image_available_ptr :: call
+        select:
+            when image_available_result != VK_SUCCESS || resources.image_available == 0U64 =>
+                self.destroy_present_resources :: resources :: method
+                let error = VulkanPresentError.SemaphoreCreateFailed :: image_available_result :: call
+                return Result.Err :: error :: call
+            else => ()
+        let render_complete_ptr: *edit VkSemaphore = #unsafe &raw edit resources.render_complete
+        let render_complete_result = #unsafe self.create_semaphore :: self.device, semaphore_info_ptr, null, render_complete_ptr :: call
+        select:
+            when render_complete_result != VK_SUCCESS || resources.render_complete == 0U64 =>
+                self.destroy_present_resources :: resources :: method
+                let error = VulkanPresentError.SemaphoreCreateFailed :: render_complete_result :: call
+                return Result.Err :: error :: call
+            else => ()
+
+        let image_index_ptr: *edit CUInt = #unsafe &raw edit resources.image_index
+        let acquire_result = #unsafe self.acquire_next_image :: self.device, self.swapchain, VK_TIMEOUT_FOREVER, resources.image_available, 0U64, image_index_ptr :: call
+        select:
+            when acquire_result != VK_SUCCESS && acquire_result != VK_SUBOPTIMAL_KHR =>
+                self.destroy_present_resources :: resources :: method
+                let error = VulkanPresentError.AcquireFailed :: acquire_result :: call
+                return Result.Err :: error :: call
+            else => ()
+        let Result.Ok(image_slot) = resources.image_index as Maybe[Index] else =>
+            self.destroy_present_resources :: resources :: method
+            let error = VulkanPresentError.NoSwapchainImages :: :: call
+            return Result.Err :: error :: call
+        resources.target_image = self.swapchain_images[image_slot]
+        return Result.Ok :: resources :: call

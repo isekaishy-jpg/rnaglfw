@@ -1,0 +1,198 @@
+use std.{List, Option, Result}
+use event.WindowEvent
+use input.Modifiers
+use runtime.{App, AppError}
+use window.WindowId
+
+impl App:
+    fn next_modifiers_state(edit self) -> Option[Modifiers]:
+        let batch = self.take_event_batch :: :: method
+        let state = batch.pop_modifiers_state :: :: method
+        self.pending = batch.events
+        return state
+
+    fn next_modifiers_state_for(edit self, id: WindowId) -> Option[Modifiers]:
+        let batch = self.take_event_batch :: :: method
+        let state = batch.pop_modifiers_state_for :: id :: method
+        self.pending = batch.events
+        return state
+
+    fn next_modifiers_changed_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_modifiers_changed_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_modifiers_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_modifiers_changed_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn poll_next_modifiers_state(edit self) -> Result[Option[Modifiers], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_modifiers_state :: :: method :: call
+
+    fn poll_next_modifiers_state_for(edit self, id: WindowId) -> Result[Option[Modifiers], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_modifiers_state_for :: id :: method :: call
+
+    fn poll_next_modifiers_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_modifiers_changed_event :: :: method :: call
+
+    fn poll_next_modifiers_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_modifiers_changed_event_for :: id :: method :: call
+
+    fn wait_next_modifiers_state(edit self) -> Result[Option[Modifiers], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_modifiers_state :: :: method :: call
+
+    fn wait_next_modifiers_state_for(edit self, id: WindowId) -> Result[Option[Modifiers], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_modifiers_state_for :: id :: method :: call
+
+    fn wait_next_modifiers_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_modifiers_changed_event :: :: method :: call
+
+    fn wait_next_modifiers_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_modifiers_changed_event_for :: id :: method :: call
+
+    fn wait_timeout_next_modifiers_state(edit self, timeout: F64) -> Result[Option[Modifiers], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_modifiers_state :: :: method :: call
+
+    fn wait_timeout_next_modifiers_state_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Modifiers], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_modifiers_state_for :: id :: method :: call
+
+    fn wait_timeout_next_modifiers_changed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_modifiers_changed_event :: :: method :: call
+
+    fn wait_timeout_next_modifiers_changed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_modifiers_changed_event_for :: id :: method :: call
+
+    fn pending_modifiers_states(edit self) -> List[Modifiers]:
+        let batch = self.take_event_batch :: :: method
+        let states = batch.modifier_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn pending_modifiers_states_for(edit self, id: WindowId) -> List[Modifiers]:
+        let batch = self.take_event_batch :: :: method
+        let states = batch.modifier_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn pending_modifiers_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.modifiers_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_modifiers_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.modifiers_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_modifiers_states(edit self) -> List[Modifiers]:
+        let batch = self.poll_event_batch :: :: method
+        let states = batch.take_modifiers_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn poll_modifiers_states_for(edit self, id: WindowId) -> List[Modifiers]:
+        let batch = self.poll_event_batch :: :: method
+        let states = batch.take_modifiers_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn poll_modifiers_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_modifiers_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_modifiers_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_modifiers_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_modifiers_states(edit self) -> List[Modifiers]:
+        let batch = self.wait_event_batch :: :: method
+        let states = batch.take_modifiers_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_modifiers_states_for(edit self, id: WindowId) -> List[Modifiers]:
+        let batch = self.wait_event_batch :: :: method
+        let states = batch.take_modifiers_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_modifiers_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_modifiers_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_modifiers_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_modifiers_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_modifiers_states(edit self, timeout: F64) -> List[Modifiers]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let states = batch.take_modifiers_states :: :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_timeout_modifiers_states_for(edit self, id: WindowId, timeout: F64) -> List[Modifiers]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let states = batch.take_modifiers_states_for :: id :: method
+        self.pending = batch.events
+        return states
+
+    fn wait_timeout_modifiers_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_modifiers_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_modifiers_changed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_modifiers_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events

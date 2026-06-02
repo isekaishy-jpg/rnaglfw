@@ -1,0 +1,312 @@
+use std.{ByteBuffer, Option, Result}
+
+use runa_app.{RgbaColor, RgbaImage, rgba_color}
+use runa_app_vulkan.{VulkanPixelFrame, VulkanPresentApp}
+
+fn byte_buffers_equal(read left: ByteBuffer, read right: ByteBuffer) -> Bool:
+    let left_count = left.byte_count :: :: method
+    let right_count = right.byte_count :: :: method
+    select:
+        when left_count != right_count => return false
+        else => ()
+    let Result.Ok(scan_limit) = left_count as Maybe[USize] else => return false
+    let scan: USize = 0USize
+    repeat while scan < scan_limit:
+        let Result.Ok(slot) = scan as Maybe[Index] else => return false
+        select:
+            when left[slot] != right[slot] => return false
+            else => ()
+        scan = scan + 1USize
+    return true
+
+fn check_image_color(read image: RgbaImage, read color: RgbaColor) -> I32:
+    select image.pixel :: 0, 0 :: method:
+        when Result.Ok(pixel) =>
+            select:
+                when pixel.red != color.red => return 1
+                when pixel.green != color.green => return 2
+                when pixel.blue != color.blue => return 3
+                when pixel.alpha != color.alpha => return 4
+                else => return 0
+        when Result.Err(_) => return 5
+
+fn check_frame_color(read frame: VulkanPixelFrame, read color: RgbaColor) -> I32:
+    select frame.pixel :: 0, 0 :: method:
+        when Result.Ok(pixel) =>
+            select:
+                when pixel.red != color.red => return 1
+                when pixel.green != color.green => return 2
+                when pixel.blue != color.blue => return 3
+                when pixel.alpha != color.alpha => return 4
+                else => return 0
+        when Result.Err(_) => return 5
+
+pub fn check_vulkan_image_io_helpers(edit present_app: VulkanPresentApp) -> I32:
+    let image_usage = present_app.transfer_source_image_usage :: :: method | present_app.transfer_destination_image_usage :: :: method
+    let buffer_usage = present_app.transfer_source_buffer_usage :: :: method | present_app.transfer_destination_buffer_usage :: :: method
+    select:
+        when present_app.image_transfer_buffer_usage :: :: method != buffer_usage => return 1
+        else => ()
+    let Result.Ok(surface_plan) = present_app.surface_transfer_destination_image_plan :: :: method else => return 2
+    let surface_format = surface_plan.surface_format :: :: method
+    let width = surface_plan.width :: :: method
+    let height = surface_plan.height :: :: method
+    let Result.Ok(requirements) = present_app.image_requirements :: width, height, surface_format.format, image_usage :: method else => return 3
+    select:
+        when requirements.size == 0U64 => return 4
+        when requirements.alignment == 0U64 => return 5
+        when requirements.memory_type_bits == 0 => return 6
+        else => ()
+    let fill_a = rgba_color :: 17, 34, 68, 255 :: call
+    let fill_b = rgba_color :: 170, 85, 51, 255 :: call
+    let Result.Ok(source_image) = present_app.surface_image :: fill_a :: method else => return 7
+    let Result.Ok(source_frame) = present_app.surface_pixel_frame :: fill_a :: method else => return 8
+    let Result.Ok(source_pixels_a) = source_frame.copy_pixels :: :: method else => return 9
+    let source_byte_count = source_pixels_a.byte_count :: :: method
+
+    let Result.Ok(device_plan) = present_app.device_local_image_plan :: width, height, surface_format.format, image_usage :: method else => return 10
+    select:
+        when device_plan.width :: :: method != width => return 11
+        when device_plan.height :: :: method != height => return 12
+        when device_plan.format :: :: method != surface_format.format => return 13
+        when device_plan.usage :: :: method != image_usage => return 14
+        when device_plan.memory_type_bits :: :: method != requirements.memory_type_bits => return 15
+        when !device_plan.device_local :: :: method => return 16
+        else => ()
+
+    select present_app.image_from_plan_with_pixels :: device_plan, source_pixels_a :: method:
+        when Result.Ok(device_image) =>
+            select:
+                when !device_image.valid :: :: method =>
+                    present_app.destroy_image :: device_image :: method
+                    return 17
+                when !device_image.transfer_destination_ready :: :: method =>
+                    present_app.destroy_image :: device_image :: method
+                    return 18
+                else => ()
+            select present_app.image_transfer_buffer :: device_image :: method:
+                when Result.Ok(transfer_buffer) =>
+                    select:
+                        when !transfer_buffer.valid :: :: method =>
+                            present_app.destroy_buffer :: transfer_buffer :: method
+                            present_app.destroy_image :: device_image :: method
+                            return 19
+                        when transfer_buffer.byte_count :: :: method != source_byte_count =>
+                            present_app.destroy_buffer :: transfer_buffer :: method
+                            present_app.destroy_image :: device_image :: method
+                            return 20
+                        when transfer_buffer.usage :: :: method != buffer_usage =>
+                            present_app.destroy_buffer :: transfer_buffer :: method
+                            present_app.destroy_image :: device_image :: method
+                            return 21
+                        else => ()
+                    present_app.destroy_buffer :: transfer_buffer :: method
+                when Result.Err(_) =>
+                    present_app.destroy_image :: device_image :: method
+                    return 22
+            select present_app.image_to_transfer_buffer :: device_image :: method:
+                when Result.Ok(roundtrip_buffer) =>
+                    select present_app.buffer_bytes :: roundtrip_buffer :: method:
+                        when Result.Ok(roundtrip_bytes) =>
+                            let Result.Ok(source_pixels_compare) = source_frame.copy_pixels :: :: method else =>
+                                present_app.destroy_buffer :: roundtrip_buffer :: method
+                                present_app.destroy_image :: device_image :: method
+                                return 23
+                            select:
+                                when !byte_buffers_equal :: roundtrip_bytes, source_pixels_compare :: call =>
+                                    present_app.destroy_buffer :: roundtrip_buffer :: method
+                                    present_app.destroy_image :: device_image :: method
+                                    return 24
+                                else => ()
+                        when Result.Err(_) =>
+                            present_app.destroy_buffer :: roundtrip_buffer :: method
+                            present_app.destroy_image :: device_image :: method
+                            return 25
+                    present_app.destroy_buffer :: roundtrip_buffer :: method
+                when Result.Err(_) =>
+                    present_app.destroy_image :: device_image :: method
+                    return 26
+            select:
+                when !device_image.transfer_source_ready :: :: method =>
+                    present_app.destroy_image :: device_image :: method
+                    return 27
+                else => ()
+            select present_app.image_pixel_frame :: device_image :: method:
+                when Result.Ok(roundtrip_frame) =>
+                    let frame_status = check_frame_color :: roundtrip_frame, fill_a :: call
+                    select:
+                        when frame_status != 0 =>
+                            present_app.destroy_image :: device_image :: method
+                            return 260 + frame_status
+                        else => ()
+                when Result.Err(_) =>
+                    present_app.destroy_image :: device_image :: method
+                    return 28
+            select present_app.image_image :: device_image :: method:
+                when Result.Ok(roundtrip_image) =>
+                    let image_status = check_image_color :: roundtrip_image, fill_a :: call
+                    select:
+                        when image_status != 0 =>
+                            present_app.destroy_image :: device_image :: method
+                            return 270 + image_status
+                        else => ()
+                when Result.Err(_) =>
+                    present_app.destroy_image :: device_image :: method
+                    return 29
+            let Result.Ok(rewrite_frame) = present_app.surface_pixel_frame :: fill_b :: method else =>
+                present_app.destroy_image :: device_image :: method
+                return 30
+            select present_app.write_image_from_pixel_frame :: device_image, rewrite_frame :: method:
+                when Result.Ok(_) =>
+                    select:
+                        when !device_image.transfer_destination_ready :: :: method =>
+                            present_app.destroy_image :: device_image :: method
+                            return 31
+                        else => ()
+                when Result.Err(_) =>
+                    present_app.destroy_image :: device_image :: method
+                    return 32
+            select present_app.image_image :: device_image :: method:
+                when Result.Ok(rewritten_image) =>
+                    let rewritten_status = check_image_color :: rewritten_image, fill_b :: call
+                    select:
+                        when rewritten_status != 0 =>
+                            present_app.destroy_image :: device_image :: method
+                            return 280 + rewritten_status
+                        else => ()
+                when Result.Err(_) =>
+                    present_app.destroy_image :: device_image :: method
+                    return 33
+            select present_app.write_image_from_image :: device_image, source_image :: method:
+                when Result.Ok(_) =>
+                    select:
+                        when !device_image.transfer_destination_ready :: :: method =>
+                            present_app.destroy_image :: device_image :: method
+                            return 34
+                        else => ()
+                when Result.Err(_) =>
+                    present_app.destroy_image :: device_image :: method
+                    return 35
+            let Result.Ok(source_pixels_b) = source_frame.copy_pixels :: :: method else =>
+                present_app.destroy_image :: device_image :: method
+                return 36
+            select present_app.write_image :: device_image, source_pixels_b :: method:
+                when Result.Ok(_) =>
+                    select:
+                        when !device_image.transfer_destination_ready :: :: method =>
+                            present_app.destroy_image :: device_image :: method
+                            return 37
+                        else => ()
+                when Result.Err(_) =>
+                    present_app.destroy_image :: device_image :: method
+                    return 38
+            present_app.destroy_image :: device_image :: method
+        when Result.Err(_) => return 39
+
+    select present_app.image_from_plan_with_pixel_frame :: device_plan, source_frame :: method:
+        when Result.Ok(image) =>
+            select:
+                when !image.valid :: :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 40
+                when !image.transfer_destination_ready :: :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 41
+                else => ()
+            present_app.destroy_image :: image :: method
+        when Result.Err(_) => return 42
+
+    select present_app.image_from_plan_with_image :: device_plan, source_image :: method:
+        when Result.Ok(image) =>
+            select:
+                when !image.valid :: :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 43
+                when !image.transfer_destination_ready :: :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 44
+                else => ()
+            present_app.destroy_image :: image :: method
+        when Result.Err(_) => return 45
+
+    let Result.Ok(source_pixels_c) = source_frame.copy_pixels :: :: method else => return 45
+    select present_app.device_local_image_from_pixels :: width, height, surface_format.format, image_usage, source_pixels_c :: method:
+        when Result.Ok(image) =>
+            select:
+                when !image.valid :: :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 47
+                when !image.transfer_destination_ready :: :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 48
+                else => ()
+            present_app.destroy_image :: image :: method
+        when Result.Err(_) => return 49
+
+    select present_app.device_local_image_from_pixel_frame :: width, height, surface_format.format, image_usage, source_frame :: method:
+        when Result.Ok(image) =>
+            select:
+                when !image.valid :: :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 50
+                when !image.transfer_destination_ready :: :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 51
+                else => ()
+            present_app.destroy_image :: image :: method
+        when Result.Err(_) => return 52
+
+    select present_app.device_local_image_from_image :: width, height, surface_format.format, image_usage, source_image :: method:
+        when Result.Ok(image) =>
+            select:
+                when !image.valid :: :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 53
+                when !image.transfer_destination_ready :: :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 54
+                else => ()
+            present_app.destroy_image :: image :: method
+        when Result.Err(_) => return 55
+
+    select present_app.host_coherent_memory_type_index :: requirements.memory_type_bits :: method:
+        when Option.Some(_) =>
+            let Result.Ok(source_pixels_d) = source_frame.copy_pixels :: :: method else => return 55
+            select present_app.host_coherent_image_from_pixels :: width, height, surface_format.format, image_usage, source_pixels_d :: method:
+                when Result.Ok(image) =>
+                    select:
+                        when !image.valid :: :: method =>
+                            present_app.destroy_image :: image :: method
+                            return 57
+                        when !image.transfer_destination_ready :: :: method =>
+                            present_app.destroy_image :: image :: method
+                            return 58
+                        else => ()
+                    present_app.destroy_image :: image :: method
+                when Result.Err(_) => return 59
+        when Option.None =>
+            select present_app.host_coherent_image_plan :: width, height, surface_format.format, image_usage :: method:
+                when Result.Ok(_) => return 60
+                when Result.Err(_) => ()
+
+    select present_app.host_visible_memory_type_index :: requirements.memory_type_bits :: method:
+        when Option.Some(_) =>
+            let Result.Ok(source_pixels_e) = source_frame.copy_pixels :: :: method else => return 60
+            select present_app.host_visible_image_from_pixels :: width, height, surface_format.format, image_usage, source_pixels_e :: method:
+                when Result.Ok(image) =>
+                    select:
+                        when !image.valid :: :: method =>
+                            present_app.destroy_image :: image :: method
+                            return 62
+                        when !image.transfer_destination_ready :: :: method =>
+                            present_app.destroy_image :: image :: method
+                            return 63
+                        else => ()
+                    present_app.destroy_image :: image :: method
+                when Result.Err(_) => return 64
+        when Option.None =>
+            select present_app.host_visible_image_plan :: width, height, surface_format.format, image_usage :: method:
+                when Result.Ok(_) => return 65
+                when Result.Err(_) => ()
+
+    return 0

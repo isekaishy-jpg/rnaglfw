@@ -3,6 +3,12 @@ use runa_app.{Joystick, JoystickId, JoystickSnapshot}
 use present.VulkanPresentApp
 
 impl VulkanPresentApp:
+    fn joystick_index(read self, id: JoystickId) -> Option[Index]:
+        return self.app.joystick_index :: id :: method
+
+    fn has_joystick(read self, id: JoystickId) -> Bool:
+        return self.app.has_joystick :: id :: method
+
     fn connected_joystick_count(read self) -> Index:
         return self.app.connected_joystick_count :: :: method
 

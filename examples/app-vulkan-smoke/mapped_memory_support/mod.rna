@@ -1,0 +1,153 @@
+use std.{ByteBuffer, Option, Result}
+
+use runa_app_vulkan.VulkanPresentApp
+
+fn sample_bytes() -> ByteBuffer:
+    let bytes = ByteBuffer :: :: call
+    bytes.push :: 19U8 :: method
+    bytes.push :: 53U8 :: method
+    bytes.push :: 87U8 :: method
+    bytes.push :: 121U8 :: method
+    return bytes
+
+fn byte_buffers_equal(read left: ByteBuffer, read right: ByteBuffer) -> Bool:
+    let left_count = left.byte_count :: :: method
+    let right_count = right.byte_count :: :: method
+    select:
+        when left_count != right_count => return false
+        else => ()
+    let Result.Ok(scan_limit) = left_count as Maybe[USize] else => return false
+    let scan: USize = 0USize
+    repeat while scan < scan_limit:
+        let Result.Ok(slot) = scan as Maybe[Index] else => return false
+        select:
+            when left[slot] != right[slot] => return false
+            else => ()
+        scan = scan + 1USize
+    return true
+
+fn first_host_visible_noncoherent_memory_type(read present_app: VulkanPresentApp, byte_count: Index, usage: CUInt) -> Option[CUInt]:
+    select present_app.buffer_requirements :: byte_count, usage :: method:
+        when Result.Ok(requirements) =>
+            let indices = present_app.compatible_memory_type_indices :: requirements.memory_type_bits :: method
+            let Result.Ok(index_count) = (indices.count :: :: method) as Maybe[USize] else => return Option.None
+            let scan: USize = 0USize
+            repeat while scan < index_count:
+                let Result.Ok(slot) = scan as Maybe[Index] else => return Option.None
+                let memory_type_index = indices[slot]
+                select present_app.memory_type :: memory_type_index :: method:
+                    when Option.Some(memory_type) =>
+                        select:
+                            when memory_type.host_visible :: :: method && !memory_type.host_coherent :: :: method =>
+                                return Option.Some :: memory_type_index :: call
+                            else => ()
+                    when Option.None => ()
+                scan = scan + 1USize
+            return Option.None
+        when Result.Err(_) => return Option.None
+
+pub fn check_vulkan_mapped_memory_helpers(edit present_app: VulkanPresentApp) -> I32:
+    let usage = present_app.transfer_source_buffer_usage :: :: method | present_app.transfer_destination_buffer_usage :: :: method
+    let sample = sample_bytes :: :: call
+    let byte_count = sample.byte_count :: :: method
+
+    select present_app.host_coherent_buffer :: byte_count, usage :: method:
+        when Result.Ok(coherent_buffer) =>
+            select:
+                when !coherent_buffer.valid :: :: method =>
+                    present_app.destroy_buffer :: coherent_buffer :: method
+                    return 1
+                when !coherent_buffer.host_visible :: :: method =>
+                    present_app.destroy_buffer :: coherent_buffer :: method
+                    return 2
+                when !coherent_buffer.host_coherent :: :: method =>
+                    present_app.destroy_buffer :: coherent_buffer :: method
+                    return 3
+                else => ()
+            select present_app.write_buffer :: coherent_buffer, sample_bytes :: :: call :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) =>
+                    present_app.destroy_buffer :: coherent_buffer :: method
+                    return 4
+            select present_app.flush_buffer :: coherent_buffer :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) =>
+                    present_app.destroy_buffer :: coherent_buffer :: method
+                    return 5
+            select present_app.invalidate_buffer :: coherent_buffer :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) =>
+                    present_app.destroy_buffer :: coherent_buffer :: method
+                    return 6
+            select present_app.buffer_bytes :: coherent_buffer :: method:
+                when Result.Ok(roundtrip_bytes) =>
+                    let expected = sample_bytes :: :: call
+                    select:
+                        when !byte_buffers_equal :: expected, roundtrip_bytes :: call =>
+                            present_app.destroy_buffer :: coherent_buffer :: method
+                            return 7
+                        else => ()
+                when Result.Err(_) =>
+                    present_app.destroy_buffer :: coherent_buffer :: method
+                    return 8
+            present_app.destroy_buffer :: coherent_buffer :: method
+        when Result.Err(_) => return 9
+
+    select first_host_visible_noncoherent_memory_type :: present_app, byte_count, usage :: call:
+        when Option.Some(memory_type_index) =>
+            select present_app.buffer_empty :: byte_count, usage, memory_type_index :: method:
+                when Result.Ok(noncoherent_buffer) =>
+                    select:
+                        when !noncoherent_buffer.valid :: :: method =>
+                            present_app.destroy_buffer :: noncoherent_buffer :: method
+                            return 10
+                        when !noncoherent_buffer.host_visible :: :: method =>
+                            present_app.destroy_buffer :: noncoherent_buffer :: method
+                            return 11
+                        when noncoherent_buffer.host_coherent :: :: method =>
+                            present_app.destroy_buffer :: noncoherent_buffer :: method
+                            return 12
+                        else => ()
+                    select present_app.write_buffer :: noncoherent_buffer, sample_bytes :: :: call :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) =>
+                            present_app.destroy_buffer :: noncoherent_buffer :: method
+                            return 13
+                    select present_app.flush_buffer :: noncoherent_buffer :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) =>
+                            present_app.destroy_buffer :: noncoherent_buffer :: method
+                            return 14
+                    select present_app.invalidate_buffer :: noncoherent_buffer :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) =>
+                            present_app.destroy_buffer :: noncoherent_buffer :: method
+                            return 15
+                    let memory = noncoherent_buffer.memory_handle :: :: method
+                    let allocation_size = noncoherent_buffer.allocation_size :: :: method
+                    select present_app.flush_mapped_memory :: memory, allocation_size :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) =>
+                            present_app.destroy_buffer :: noncoherent_buffer :: method
+                            return 16
+                    select present_app.invalidate_mapped_memory :: memory, allocation_size :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) =>
+                            present_app.destroy_buffer :: noncoherent_buffer :: method
+                            return 17
+                    select present_app.buffer_bytes :: noncoherent_buffer :: method:
+                        when Result.Ok(roundtrip_bytes) =>
+                            let expected = sample_bytes :: :: call
+                            select:
+                                when !byte_buffers_equal :: expected, roundtrip_bytes :: call =>
+                                    present_app.destroy_buffer :: noncoherent_buffer :: method
+                                    return 18
+                                else => ()
+                        when Result.Err(_) =>
+                            present_app.destroy_buffer :: noncoherent_buffer :: method
+                            return 19
+                    present_app.destroy_buffer :: noncoherent_buffer :: method
+                when Result.Err(_) => return 20
+        when Option.None => ()
+
+    return 0

@@ -1,0 +1,54 @@
+use std.{Option, Result}
+
+use window.{RgbaColor, Window, WindowAppearanceError}
+use window.{WindowCornerPreference, WindowSystemBackdrop}
+
+pub(package) struct WindowAppearanceSettings:
+    pub undecorated_shadow: Bool
+    pub system_backdrop: WindowSystemBackdrop
+    pub border_color: Option[RgbaColor]
+    pub title_background_color: Option[RgbaColor]
+    pub title_text_color: Option[RgbaColor]
+    pub corner_preference: WindowCornerPreference
+
+pub(package) fn apply_window_appearance(read window: Window, read settings: WindowAppearanceSettings) -> Result[Unit, WindowAppearanceError]:
+    select:
+        when settings.undecorated_shadow =>
+            select window.set_undecorated_shadow :: true :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(error) => return Result.Err :: error :: call
+        else => ()
+    select settings.system_backdrop:
+        when WindowSystemBackdrop.Auto => ()
+        else =>
+            select window.set_system_backdrop :: settings.system_backdrop :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(error) => return Result.Err :: error :: call
+    select settings.border_color:
+        when Option.Some(color) =>
+            let border_color = Option.Some :: color :: call
+            select window.set_border_color :: border_color :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(error) => return Result.Err :: error :: call
+        when Option.None => ()
+    select settings.title_background_color:
+        when Option.Some(color) =>
+            let title_background_color = Option.Some :: color :: call
+            select window.set_title_background_color :: title_background_color :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(error) => return Result.Err :: error :: call
+        when Option.None => ()
+    select settings.title_text_color:
+        when Option.Some(color) =>
+            let title_text_color = Option.Some :: color :: call
+            select window.set_title_text_color :: title_text_color :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(error) => return Result.Err :: error :: call
+        when Option.None => ()
+    select settings.corner_preference:
+        when WindowCornerPreference.Default => ()
+        else =>
+            select window.set_corner_preference :: settings.corner_preference :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(error) => return Result.Err :: error :: call
+    return Result.Ok :: () :: call

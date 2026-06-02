@@ -1,0 +1,505 @@
+use std.Result
+
+use command_support.{acquire_recording_command_resources, finish_recording_command_resources_sync}
+use present.{CLEAR_RANGE, IMAGE_COPY_SUBRESOURCE, ZERO_OFFSET3D, VK_ACCESS_MEMORY_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_QUEUE_FAMILY_IGNORED, VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, VkBuffer, VkBufferCopy, VkBufferImageCopy, VkExtent3D, VkImage, VkImageCopy, VkImageMemoryBarrier, VulkanBuffer, VulkanCommandResources, VulkanImage, VulkanImagePlan, VulkanPresentApp, VulkanPresentContext, VulkanPresentError}
+
+struct LayoutTransitionInfo:
+    src_access_mask: CUInt
+    dst_access_mask: CUInt
+    src_stage: CUInt
+    dst_stage: CUInt
+
+struct BufferCopyRequest:
+    source: VkBuffer
+    target: VkBuffer
+    byte_count: U64
+
+struct BufferImageCopyRequest:
+    buffer: VkBuffer
+    image: VkImage
+    extent: VkExtent3D
+
+struct ImageBufferCopyRequest:
+    image: VkImage
+    buffer: VkBuffer
+    extent: VkExtent3D
+
+struct ImageCopyRequest:
+    source: VkImage
+    target: VkImage
+    extent: VkExtent3D
+
+fn usage_has_bits(usage: CUInt, required: CUInt) -> Bool:
+    return (usage & required) == required
+
+fn image_transfer_byte_count(read image: VulkanImage) -> Result[Index, VulkanPresentError]:
+    select image.pixel_format :: :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(err) => return Result.Err :: err :: call
+    let width_raw = image.width :: :: method
+    let height_raw = image.height :: :: method
+    let Result.Ok(width) = width_raw as Maybe[Index] else =>
+        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+        return Result.Err :: error :: call
+    let Result.Ok(height) = height_raw as Maybe[Index] else =>
+        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+        return Result.Err :: error :: call
+    let Result.Ok(width_wide) = width as Maybe[USize] else =>
+        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+        return Result.Err :: error :: call
+    let Result.Ok(height_wide) = height as Maybe[USize] else =>
+        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+        return Result.Err :: error :: call
+    let pixel_count_wide: USize = width_wide * height_wide
+    let byte_count_wide: USize = pixel_count_wide * 4USize
+    let Result.Ok(byte_count) = byte_count_wide as Maybe[Index] else =>
+        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+        return Result.Err :: error :: call
+    return Result.Ok :: byte_count :: call
+
+fn image_plan_transfer_byte_count(read plan: VulkanImagePlan) -> Result[Index, VulkanPresentError]:
+    select plan.pixel_format :: :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(err) => return Result.Err :: err :: call
+    let width_raw = plan.width :: :: method
+    let height_raw = plan.height :: :: method
+    let Result.Ok(width) = width_raw as Maybe[Index] else =>
+        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+        return Result.Err :: error :: call
+    let Result.Ok(height) = height_raw as Maybe[Index] else =>
+        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+        return Result.Err :: error :: call
+    let Result.Ok(width_wide) = width as Maybe[USize] else =>
+        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+        return Result.Err :: error :: call
+    let Result.Ok(height_wide) = height as Maybe[USize] else =>
+        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+        return Result.Err :: error :: call
+    let pixel_count_wide: USize = width_wide * height_wide
+    let byte_count_wide: USize = pixel_count_wide * 4USize
+    let Result.Ok(byte_count) = byte_count_wide as Maybe[Index] else =>
+        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+        return Result.Err :: error :: call
+    return Result.Ok :: byte_count :: call
+
+fn image_extent3d(read image: VulkanImage) -> VkExtent3D:
+    return VkExtent3D :: :: call
+        width = image.width :: :: method
+        height = image.height :: :: method
+        depth = 1
+
+fn layout_transition_info(old_layout: CInt, new_layout: CInt) -> Result[LayoutTransitionInfo, VulkanPresentError]:
+    select:
+        when old_layout == new_layout =>
+            let info = LayoutTransitionInfo :: :: call
+                src_access_mask = 0
+                dst_access_mask = 0
+                src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+                dst_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+            return Result.Ok :: info :: call
+        else => ()
+    let src_access_mask: CUInt = 0
+    let src_stage: CUInt = 0
+    select:
+        when old_layout == VK_IMAGE_LAYOUT_UNDEFINED =>
+            src_access_mask = 0
+            src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+        when old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL =>
+            src_access_mask = VK_ACCESS_TRANSFER_WRITE_BIT
+            src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT
+        when old_layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL =>
+            src_access_mask = VK_ACCESS_TRANSFER_READ_BIT
+            src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT
+        when old_layout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR =>
+            src_access_mask = VK_ACCESS_MEMORY_READ_BIT
+            src_stage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
+        else =>
+            let error = VulkanPresentError.VulkanImageLayoutUnsupported :: old_layout :: call
+            return Result.Err :: error :: call
+    let dst_access_mask: CUInt = 0
+    let dst_stage: CUInt = 0
+    select:
+        when new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL =>
+            dst_access_mask = VK_ACCESS_TRANSFER_WRITE_BIT
+            dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT
+        when new_layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL =>
+            dst_access_mask = VK_ACCESS_TRANSFER_READ_BIT
+            dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT
+        when new_layout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR =>
+            dst_access_mask = VK_ACCESS_MEMORY_READ_BIT
+            dst_stage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
+        else =>
+            let error = VulkanPresentError.VulkanImageLayoutUnsupported :: new_layout :: call
+            return Result.Err :: error :: call
+    let info = LayoutTransitionInfo :: :: call
+        src_access_mask = src_access_mask
+        dst_access_mask = dst_access_mask
+        src_stage = src_stage
+        dst_stage = dst_stage
+    return Result.Ok :: info :: call
+
+fn record_image_layout_transition(read context: VulkanPresentContext, read resources: VulkanCommandResources, image: VkImage, old_layout: CInt, new_layout: CInt) -> Result[Unit, VulkanPresentError]:
+    select:
+        when old_layout == new_layout => return Result.Ok :: :: call
+        else => ()
+    select layout_transition_info :: old_layout, new_layout :: call:
+        when Result.Ok(info) =>
+            let barrier = VkImageMemoryBarrier :: :: call
+                stype = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
+                pnext = null
+                src_access_mask = info.src_access_mask
+                dst_access_mask = info.dst_access_mask
+                old_layout = old_layout
+                new_layout = new_layout
+                src_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
+                dst_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
+                image = image
+                subresource_range = CLEAR_RANGE
+            let barrier_ptr: *read VkImageMemoryBarrier = #unsafe &raw read barrier
+            #unsafe context.cmd_pipeline_barrier :: resources.command_buffer, info.src_stage, info.dst_stage, 0, 0, null, 0, null, 1, barrier_ptr :: call
+            return Result.Ok :: :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+fn record_buffer_to_image_copy(read context: VulkanPresentContext, read resources: VulkanCommandResources, read request: BufferImageCopyRequest) -> Unit:
+    let copy_region = VkBufferImageCopy :: :: call
+        buffer_offset = 0U64
+        buffer_row_length = 0
+        buffer_image_height = 0
+        image_subresource = IMAGE_COPY_SUBRESOURCE
+        image_offset = ZERO_OFFSET3D
+        image_extent = request.extent
+    let copy_region_ptr: *read VkBufferImageCopy = #unsafe &raw read copy_region
+    #unsafe context.cmd_copy_buffer_to_image :: resources.command_buffer, request.buffer, request.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, copy_region_ptr :: call
+    return
+
+fn record_buffer_to_buffer_copy(read context: VulkanPresentContext, read resources: VulkanCommandResources, read request: BufferCopyRequest) -> Unit:
+    let copy_region = VkBufferCopy :: :: call
+        src_offset = 0U64
+        dst_offset = 0U64
+        size = request.byte_count
+    let copy_region_ptr: *read VkBufferCopy = #unsafe &raw read copy_region
+    #unsafe context.cmd_copy_buffer :: resources.command_buffer, request.source, request.target, 1, copy_region_ptr :: call
+    return
+
+fn record_image_to_buffer_copy(read context: VulkanPresentContext, read resources: VulkanCommandResources, read request: ImageBufferCopyRequest) -> Unit:
+    let copy_region = VkBufferImageCopy :: :: call
+        buffer_offset = 0U64
+        buffer_row_length = 0
+        buffer_image_height = 0
+        image_subresource = IMAGE_COPY_SUBRESOURCE
+        image_offset = ZERO_OFFSET3D
+        image_extent = request.extent
+    let copy_region_ptr: *read VkBufferImageCopy = #unsafe &raw read copy_region
+    #unsafe context.cmd_copy_image_to_buffer :: resources.command_buffer, request.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, request.buffer, 1, copy_region_ptr :: call
+    return
+
+fn record_image_to_image_copy(read context: VulkanPresentContext, read resources: VulkanCommandResources, read request: ImageCopyRequest) -> Unit:
+    let copy_region = VkImageCopy :: :: call
+        src_subresource = IMAGE_COPY_SUBRESOURCE
+        src_offset = ZERO_OFFSET3D
+        dst_subresource = IMAGE_COPY_SUBRESOURCE
+        dst_offset = ZERO_OFFSET3D
+        extent = request.extent
+    let copy_region_ptr: *read VkImageCopy = #unsafe &raw read copy_region
+    #unsafe context.cmd_copy_image :: resources.command_buffer, request.source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, request.target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, copy_region_ptr :: call
+    return
+
+impl VulkanBuffer:
+    fn transfer_source_compatible(read self) -> Bool:
+        let usage = self.usage :: :: method
+        return usage_has_bits :: usage, VK_BUFFER_USAGE_TRANSFER_SRC_BIT :: call
+
+    fn transfer_destination_compatible(read self) -> Bool:
+        let usage = self.usage :: :: method
+        return usage_has_bits :: usage, VK_BUFFER_USAGE_TRANSFER_DST_BIT :: call
+
+impl VulkanImagePlan:
+    fn transfer_source_compatible(read self) -> Bool:
+        let usage = self.usage :: :: method
+        return usage_has_bits :: usage, VK_IMAGE_USAGE_TRANSFER_SRC_BIT :: call
+
+    fn transfer_destination_compatible(read self) -> Bool:
+        let usage = self.usage :: :: method
+        return usage_has_bits :: usage, VK_IMAGE_USAGE_TRANSFER_DST_BIT :: call
+
+    fn transfer_byte_count(read self) -> Result[Index, VulkanPresentError]:
+        return image_plan_transfer_byte_count :: self :: call
+
+impl VulkanImage:
+    fn transfer_source_compatible(read self) -> Bool:
+        let usage = self.usage :: :: method
+        return usage_has_bits :: usage, VK_IMAGE_USAGE_TRANSFER_SRC_BIT :: call
+
+    fn transfer_destination_compatible(read self) -> Bool:
+        let usage = self.usage :: :: method
+        return usage_has_bits :: usage, VK_IMAGE_USAGE_TRANSFER_DST_BIT :: call
+
+    fn transfer_byte_count(read self) -> Result[Index, VulkanPresentError]:
+        return image_transfer_byte_count :: self :: call
+
+impl VulkanPresentContext:
+    fn record_transition_image_layout(read self, read resources: VulkanCommandResources, edit image: VulkanImage, new_layout: CInt) -> Result[Unit, VulkanPresentError]:
+        let old_layout = image.layout_code :: :: method
+        let image_handle = image.image_handle :: :: method
+        select record_image_layout_transition :: self, resources, image_handle, old_layout, new_layout :: call:
+            when Result.Ok(_) =>
+                image.layout = new_layout
+                return Result.Ok :: :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn transition_image_layout(edit self, edit image: VulkanImage, new_layout: CInt) -> Result[Unit, VulkanPresentError]:
+        let old_layout = image.layout_code :: :: method
+        select acquire_recording_command_resources :: self :: call:
+            when Result.Ok(resources) =>
+                select self.record_transition_image_layout :: resources, image, new_layout :: method:
+                    when Result.Ok(_) =>
+                        select finish_recording_command_resources_sync :: self, resources :: call:
+                            when Result.Ok(_) => return Result.Ok :: :: call
+                            when Result.Err(err) =>
+                                image.layout = old_layout
+                                return Result.Err :: err :: call
+                    when Result.Err(err) =>
+                        image.layout = old_layout
+                        self.destroy_command_resources :: resources :: method
+                        return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn record_copy_buffer(read self, read resources: VulkanCommandResources, read source: VulkanBuffer, read target: VulkanBuffer) -> Result[Unit, VulkanPresentError]:
+        let source_usage = source.usage :: :: method
+        let target_usage = target.usage :: :: method
+        select:
+            when !source.transfer_source_compatible :: :: method =>
+                let error = VulkanPresentError.BufferUsageMissing :: VK_BUFFER_USAGE_TRANSFER_SRC_BIT, source_usage :: call
+                return Result.Err :: error :: call
+            when !target.transfer_destination_compatible :: :: method =>
+                let error = VulkanPresentError.BufferUsageMissing :: VK_BUFFER_USAGE_TRANSFER_DST_BIT, target_usage :: call
+                return Result.Err :: error :: call
+            else => ()
+        let source_byte_count = source.byte_count :: :: method
+        let target_byte_count = target.byte_count :: :: method
+        select:
+            when source_byte_count != target_byte_count =>
+                let error = VulkanPresentError.BufferByteCountMismatch :: source_byte_count, target_byte_count :: call
+                return Result.Err :: error :: call
+            else => ()
+        let Result.Ok(byte_count_u64) = source_byte_count as Maybe[U64] else =>
+            let error = VulkanPresentError.BufferSizeOutOfRange :: source_byte_count :: call
+            return Result.Err :: error :: call
+        let request = BufferCopyRequest :: :: call
+            source = source.buffer_handle :: :: method
+            target = target.buffer_handle :: :: method
+            byte_count = byte_count_u64
+        record_buffer_to_buffer_copy :: self, resources, request :: call
+        return Result.Ok :: :: call
+
+    fn copy_buffer(read self, read source: VulkanBuffer, read target: VulkanBuffer) -> Result[Unit, VulkanPresentError]:
+        select acquire_recording_command_resources :: self :: call:
+            when Result.Ok(resources) =>
+                select self.record_copy_buffer :: resources, source, target :: method:
+                    when Result.Ok(_) =>
+                        select finish_recording_command_resources_sync :: self, resources :: call:
+                            when Result.Ok(_) => return Result.Ok :: :: call
+                            when Result.Err(err) => return Result.Err :: err :: call
+                    when Result.Err(err) =>
+                        self.destroy_command_resources :: resources :: method
+                        return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn record_copy_buffer_to_image(read self, read resources: VulkanCommandResources, read buffer: VulkanBuffer, edit image: VulkanImage) -> Result[Unit, VulkanPresentError]:
+        let buffer_usage = buffer.usage :: :: method
+        let image_usage = image.usage :: :: method
+        select:
+            when !buffer.transfer_source_compatible :: :: method =>
+                let error = VulkanPresentError.BufferUsageMissing :: VK_BUFFER_USAGE_TRANSFER_SRC_BIT, buffer_usage :: call
+                return Result.Err :: error :: call
+            when !image.transfer_destination_compatible :: :: method =>
+                let error = VulkanPresentError.VulkanImageUsageMissing :: VK_IMAGE_USAGE_TRANSFER_DST_BIT, image_usage :: call
+                return Result.Err :: error :: call
+            else => ()
+        let required_byte_count: Index = 0
+        select image.transfer_byte_count :: :: method:
+            when Result.Ok(count) => required_byte_count = count
+            when Result.Err(err) => return Result.Err :: err :: call
+        let actual_byte_count = buffer.byte_count :: :: method
+        select:
+            when actual_byte_count != required_byte_count =>
+                let error = VulkanPresentError.BufferByteCountMismatch :: actual_byte_count, required_byte_count :: call
+                return Result.Err :: error :: call
+            else => ()
+        select:
+            when !image.transfer_destination_ready :: :: method =>
+                select self.record_transition_image_layout :: resources, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL :: method:
+                    when Result.Ok(_) => ()
+                    when Result.Err(err) => return Result.Err :: err :: call
+            else => ()
+        let request = BufferImageCopyRequest :: :: call
+            buffer = buffer.buffer_handle :: :: method
+            image = image.image_handle :: :: method
+            extent = image_extent3d :: image :: call
+        record_buffer_to_image_copy :: self, resources, request :: call
+        return Result.Ok :: :: call
+
+    fn copy_buffer_to_image(edit self, read buffer: VulkanBuffer, edit image: VulkanImage) -> Result[Unit, VulkanPresentError]:
+        let old_layout = image.layout_code :: :: method
+        select acquire_recording_command_resources :: self :: call:
+            when Result.Ok(resources) =>
+                select self.record_copy_buffer_to_image :: resources, buffer, image :: method:
+                    when Result.Ok(_) =>
+                        select finish_recording_command_resources_sync :: self, resources :: call:
+                            when Result.Ok(_) => return Result.Ok :: :: call
+                            when Result.Err(err) =>
+                                image.layout = old_layout
+                                return Result.Err :: err :: call
+                    when Result.Err(err) =>
+                        image.layout = old_layout
+                        self.destroy_command_resources :: resources :: method
+                        return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn record_copy_image_to_buffer(read self, read resources: VulkanCommandResources, edit image: VulkanImage, read buffer: VulkanBuffer) -> Result[Unit, VulkanPresentError]:
+        let image_usage = image.usage :: :: method
+        let buffer_usage = buffer.usage :: :: method
+        select:
+            when !image.transfer_source_compatible :: :: method =>
+                let error = VulkanPresentError.VulkanImageUsageMissing :: VK_IMAGE_USAGE_TRANSFER_SRC_BIT, image_usage :: call
+                return Result.Err :: error :: call
+            when !buffer.transfer_destination_compatible :: :: method =>
+                let error = VulkanPresentError.BufferUsageMissing :: VK_BUFFER_USAGE_TRANSFER_DST_BIT, buffer_usage :: call
+                return Result.Err :: error :: call
+            else => ()
+        let required_byte_count: Index = 0
+        select image.transfer_byte_count :: :: method:
+            when Result.Ok(count) => required_byte_count = count
+            when Result.Err(err) => return Result.Err :: err :: call
+        let actual_byte_count = buffer.byte_count :: :: method
+        select:
+            when actual_byte_count != required_byte_count =>
+                let error = VulkanPresentError.BufferByteCountMismatch :: actual_byte_count, required_byte_count :: call
+                return Result.Err :: error :: call
+            else => ()
+        select:
+            when !image.transfer_source_ready :: :: method =>
+                select self.record_transition_image_layout :: resources, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL :: method:
+                    when Result.Ok(_) => ()
+                    when Result.Err(err) => return Result.Err :: err :: call
+            else => ()
+        let request = ImageBufferCopyRequest :: :: call
+            image = image.image_handle :: :: method
+            buffer = buffer.buffer_handle :: :: method
+            extent = image_extent3d :: image :: call
+        record_image_to_buffer_copy :: self, resources, request :: call
+        return Result.Ok :: :: call
+
+    fn copy_image_to_buffer(edit self, edit image: VulkanImage, read buffer: VulkanBuffer) -> Result[Unit, VulkanPresentError]:
+        let old_layout = image.layout_code :: :: method
+        select acquire_recording_command_resources :: self :: call:
+            when Result.Ok(resources) =>
+                select self.record_copy_image_to_buffer :: resources, image, buffer :: method:
+                    when Result.Ok(_) =>
+                        select finish_recording_command_resources_sync :: self, resources :: call:
+                            when Result.Ok(_) => return Result.Ok :: :: call
+                            when Result.Err(err) =>
+                                image.layout = old_layout
+                                return Result.Err :: err :: call
+                    when Result.Err(err) =>
+                        image.layout = old_layout
+                        self.destroy_command_resources :: resources :: method
+                        return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn record_copy_image(read self, read resources: VulkanCommandResources, edit source: VulkanImage, edit target: VulkanImage) -> Result[Unit, VulkanPresentError]:
+        let source_width = source.width :: :: method
+        let source_height = source.height :: :: method
+        let target_width = target.width :: :: method
+        let target_height = target.height :: :: method
+        let source_usage = source.usage :: :: method
+        let target_usage = target.usage :: :: method
+        let source_format = source.format :: :: method
+        let target_format = target.format :: :: method
+        select:
+            when !source.transfer_source_compatible :: :: method =>
+                let error = VulkanPresentError.VulkanImageUsageMissing :: VK_IMAGE_USAGE_TRANSFER_SRC_BIT, source_usage :: call
+                return Result.Err :: error :: call
+            when !target.transfer_destination_compatible :: :: method =>
+                let error = VulkanPresentError.VulkanImageUsageMissing :: VK_IMAGE_USAGE_TRANSFER_DST_BIT, target_usage :: call
+                return Result.Err :: error :: call
+            when source_format != target_format =>
+                let error = VulkanPresentError.VulkanImageFormatMismatch :: source_format, target_format :: call
+                return Result.Err :: error :: call
+            when source_width != target_width =>
+                let error = VulkanPresentError.VulkanImageExtentMismatch :: source_width, source_height, target_width, target_height :: call
+                return Result.Err :: error :: call
+            when source_height != target_height =>
+                let error = VulkanPresentError.VulkanImageExtentMismatch :: source_width, source_height, target_width, target_height :: call
+                return Result.Err :: error :: call
+            else => ()
+        select:
+            when !source.transfer_source_ready :: :: method =>
+                select self.record_transition_image_layout :: resources, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL :: method:
+                    when Result.Ok(_) => ()
+                    when Result.Err(err) => return Result.Err :: err :: call
+            else => ()
+        select:
+            when !target.transfer_destination_ready :: :: method =>
+                select self.record_transition_image_layout :: resources, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL :: method:
+                    when Result.Ok(_) => ()
+                    when Result.Err(err) => return Result.Err :: err :: call
+            else => ()
+        let request = ImageCopyRequest :: :: call
+            source = source.image_handle :: :: method
+            target = target.image_handle :: :: method
+            extent = image_extent3d :: source :: call
+        record_image_to_image_copy :: self, resources, request :: call
+        return Result.Ok :: :: call
+
+    fn copy_image(edit self, edit source: VulkanImage, edit target: VulkanImage) -> Result[Unit, VulkanPresentError]:
+        let source_layout = source.layout_code :: :: method
+        let target_layout = target.layout_code :: :: method
+        select acquire_recording_command_resources :: self :: call:
+            when Result.Ok(resources) =>
+                select self.record_copy_image :: resources, source, target :: method:
+                    when Result.Ok(_) =>
+                        select finish_recording_command_resources_sync :: self, resources :: call:
+                            when Result.Ok(_) => return Result.Ok :: :: call
+                            when Result.Err(err) =>
+                                source.layout = source_layout
+                                target.layout = target_layout
+                                return Result.Err :: err :: call
+                    when Result.Err(err) =>
+                        source.layout = source_layout
+                        target.layout = target_layout
+                        self.destroy_command_resources :: resources :: method
+                        return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+impl VulkanPresentApp:
+    fn record_transition_image_layout(read self, read resources: VulkanCommandResources, edit image: VulkanImage, new_layout: CInt) -> Result[Unit, VulkanPresentError]:
+        return self.context.record_transition_image_layout :: resources, image, new_layout :: method
+
+    fn transition_image_layout(edit self, edit image: VulkanImage, new_layout: CInt) -> Result[Unit, VulkanPresentError]:
+        return self.context.transition_image_layout :: image, new_layout :: method
+
+    fn record_copy_buffer(read self, read resources: VulkanCommandResources, read source: VulkanBuffer, read target: VulkanBuffer) -> Result[Unit, VulkanPresentError]:
+        return self.context.record_copy_buffer :: resources, source, target :: method
+
+    fn copy_buffer(read self, read source: VulkanBuffer, read target: VulkanBuffer) -> Result[Unit, VulkanPresentError]:
+        return self.context.copy_buffer :: source, target :: method
+
+    fn record_copy_buffer_to_image(read self, read resources: VulkanCommandResources, read buffer: VulkanBuffer, edit image: VulkanImage) -> Result[Unit, VulkanPresentError]:
+        return self.context.record_copy_buffer_to_image :: resources, buffer, image :: method
+
+    fn copy_buffer_to_image(edit self, read buffer: VulkanBuffer, edit image: VulkanImage) -> Result[Unit, VulkanPresentError]:
+        return self.context.copy_buffer_to_image :: buffer, image :: method
+
+    fn record_copy_image_to_buffer(read self, read resources: VulkanCommandResources, edit image: VulkanImage, read buffer: VulkanBuffer) -> Result[Unit, VulkanPresentError]:
+        return self.context.record_copy_image_to_buffer :: resources, image, buffer :: method
+
+    fn copy_image_to_buffer(edit self, edit image: VulkanImage, read buffer: VulkanBuffer) -> Result[Unit, VulkanPresentError]:
+        return self.context.copy_image_to_buffer :: image, buffer :: method
+
+    fn record_copy_image(read self, read resources: VulkanCommandResources, edit source: VulkanImage, edit target: VulkanImage) -> Result[Unit, VulkanPresentError]:
+        return self.context.record_copy_image :: resources, source, target :: method
+
+    fn copy_image(edit self, edit source: VulkanImage, edit target: VulkanImage) -> Result[Unit, VulkanPresentError]:
+        return self.context.copy_image :: source, target :: method
+

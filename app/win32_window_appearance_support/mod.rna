@@ -1,0 +1,295 @@
+use std.{Option, Result}
+
+use mailbox.WindowMailbox
+use glfw.{GlfwWindow, GlfwWindowRaw, glfw_window_raw_handle}
+use window.{RgbaColor, Win32HWnd, WindowAppearanceError}
+use window.{WindowCornerPreference, WindowSystemBackdrop}
+use window.{window_corner_preference_from_raw, window_corner_preference_raw}
+use window.{window_system_backdrop_from_raw, window_system_backdrop_raw}
+
+const DWMWA_NCRENDERING_POLICY: CUInt = 2
+const DWMWA_WINDOW_CORNER_PREFERENCE: CUInt = 33
+const DWMWA_BORDER_COLOR: CUInt = 34
+const DWMWA_CAPTION_COLOR: CUInt = 35
+const DWMWA_TEXT_COLOR: CUInt = 36
+const DWMWA_SYSTEMBACKDROP_TYPE: CUInt = 38
+const DWMNCRP_DISABLED: CInt = 1
+const DWMNCRP_ENABLED: CInt = 2
+const DWMWA_COLOR_DEFAULT: CUInt = 0xFFFFFFFF
+const COLORREF_RED_MASK: CUInt = 0x000000FF
+const COLORREF_GREEN_MASK: CUInt = 0x0000FF00
+const COLORREF_BLUE_MASK: CUInt = 0x00FF0000
+
+type ReadVoidPointer = *read CVoid
+type ReadUIntPointer = *read CUInt
+type ReadIntPointer = *read CInt
+
+#link[name = "dwmapi"]
+#unsafe
+extern["system"] fn DwmSetWindowAttribute(window: Win32HWnd, attribute: CUInt, value: ReadVoidPointer, size: CUInt) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetWindowUserPointer(window: *edit GlfwWindowRaw) -> *edit CVoid
+
+fn read_uint_as_void(pointer: ReadUIntPointer) -> ReadVoidPointer:
+    let address = #unsafe raw_pointer_address_read :: pointer :: call
+    return #unsafe raw_pointer_from_address_read[CVoid] :: address :: call
+
+fn read_int_as_void(pointer: ReadIntPointer) -> ReadVoidPointer:
+    let address = #unsafe raw_pointer_address_read :: pointer :: call
+    return #unsafe raw_pointer_from_address_read[CVoid] :: address :: call
+
+fn void_as_mailbox(pointer: *edit CVoid) -> *edit WindowMailbox:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[WindowMailbox] :: address :: call
+
+fn window_mailbox(read window: GlfwWindow) -> *edit WindowMailbox:
+    let raw = glfw_window_raw_handle :: window :: call
+    let user = #unsafe glfwGetWindowUserPointer :: raw :: call
+    select:
+        when user.is_null :: :: method =>
+            let none: *edit WindowMailbox = null
+            return none
+        else => return void_as_mailbox :: user :: call
+
+fn window_handle(read window: GlfwWindow) -> Result[Win32HWnd, WindowAppearanceError]:
+    let hwnd = window.win32_window :: :: method
+    select:
+        when hwnd.is_null :: :: method => return Result.Err :: WindowAppearanceError.NativeWindowUnavailable :: call
+        else => return Result.Ok :: hwnd :: call
+
+fn colorref_from_rgba(read color: RgbaColor) -> CUInt:
+    let Result.Ok(red) = color.red as Maybe[CUInt] else => return 0
+    let Result.Ok(green) = color.green as Maybe[CUInt] else => return 0
+    let Result.Ok(blue) = color.blue as Maybe[CUInt] else => return 0
+    return red | (green << 8) | (blue << 16)
+
+fn rgba_from_colorref(colorref: CUInt) -> Option[RgbaColor]:
+    select:
+        when colorref == DWMWA_COLOR_DEFAULT => return Option.None
+        else => ()
+    let red_bits = colorref & COLORREF_RED_MASK
+    let green_bits = (colorref & COLORREF_GREEN_MASK) >> 8
+    let blue_bits = (colorref & COLORREF_BLUE_MASK) >> 16
+    let Result.Ok(red) = red_bits as Maybe[U8] else => return Option.None
+    let Result.Ok(green) = green_bits as Maybe[U8] else => return Option.None
+    let Result.Ok(blue) = blue_bits as Maybe[U8] else => return Option.None
+    let color = RgbaColor :: :: call
+        red = red
+        green = green
+        blue = blue
+        alpha = 255
+    return Option.Some :: color :: call
+
+fn mailbox_undecorated_shadow(mailbox: *edit WindowMailbox) -> Bool:
+    select:
+        when mailbox.is_null :: :: method => return false
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            return stored.appearance_undecorated_shadow != 0
+
+fn set_mailbox_undecorated_shadow(mailbox: *edit WindowMailbox, shadow: Bool) -> Unit:
+    select:
+        when mailbox.is_null :: :: method => return
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            select:
+                when shadow => stored.appearance_undecorated_shadow = 1
+                else => stored.appearance_undecorated_shadow = 0
+            #unsafe mailbox.store :: stored :: method
+            return
+
+fn mailbox_system_backdrop(mailbox: *edit WindowMailbox) -> WindowSystemBackdrop:
+    select:
+        when mailbox.is_null :: :: method => return WindowSystemBackdrop.Auto
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            return window_system_backdrop_from_raw :: stored.appearance_system_backdrop :: call
+
+fn set_mailbox_system_backdrop(mailbox: *edit WindowMailbox, read backdrop: WindowSystemBackdrop) -> Unit:
+    select:
+        when mailbox.is_null :: :: method => return
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            stored.appearance_system_backdrop = window_system_backdrop_raw :: backdrop :: call
+            #unsafe mailbox.store :: stored :: method
+            return
+
+fn mailbox_border_color(mailbox: *edit WindowMailbox) -> Option[RgbaColor]:
+    select:
+        when mailbox.is_null :: :: method => return Option.None
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            return rgba_from_colorref :: stored.appearance_border_color :: call
+
+fn set_mailbox_border_color(mailbox: *edit WindowMailbox, read color: Option[RgbaColor]) -> Unit:
+    select:
+        when mailbox.is_null :: :: method => return
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            select color:
+                when Option.Some(value) => stored.appearance_border_color = colorref_from_rgba :: value :: call
+                when Option.None => stored.appearance_border_color = DWMWA_COLOR_DEFAULT
+            #unsafe mailbox.store :: stored :: method
+            return
+
+fn mailbox_title_background_color(mailbox: *edit WindowMailbox) -> Option[RgbaColor]:
+    select:
+        when mailbox.is_null :: :: method => return Option.None
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            return rgba_from_colorref :: stored.appearance_title_background_color :: call
+
+fn set_mailbox_title_background_color(mailbox: *edit WindowMailbox, read color: Option[RgbaColor]) -> Unit:
+    select:
+        when mailbox.is_null :: :: method => return
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            select color:
+                when Option.Some(value) => stored.appearance_title_background_color = colorref_from_rgba :: value :: call
+                when Option.None => stored.appearance_title_background_color = DWMWA_COLOR_DEFAULT
+            #unsafe mailbox.store :: stored :: method
+            return
+
+fn mailbox_title_text_color(mailbox: *edit WindowMailbox) -> Option[RgbaColor]:
+    select:
+        when mailbox.is_null :: :: method => return Option.None
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            return rgba_from_colorref :: stored.appearance_title_text_color :: call
+
+fn set_mailbox_title_text_color(mailbox: *edit WindowMailbox, read color: Option[RgbaColor]) -> Unit:
+    select:
+        when mailbox.is_null :: :: method => return
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            select color:
+                when Option.Some(value) => stored.appearance_title_text_color = colorref_from_rgba :: value :: call
+                when Option.None => stored.appearance_title_text_color = DWMWA_COLOR_DEFAULT
+            #unsafe mailbox.store :: stored :: method
+            return
+
+fn mailbox_corner_preference(mailbox: *edit WindowMailbox) -> WindowCornerPreference:
+    select:
+        when mailbox.is_null :: :: method => return WindowCornerPreference.Default
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            return window_corner_preference_from_raw :: stored.appearance_corner_preference :: call
+
+fn set_mailbox_corner_preference(mailbox: *edit WindowMailbox, read preference: WindowCornerPreference) -> Unit:
+    select:
+        when mailbox.is_null :: :: method => return
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            stored.appearance_corner_preference = window_corner_preference_raw :: preference :: call
+            #unsafe mailbox.store :: stored :: method
+            return
+
+fn apply_window_attribute_int(hwnd: Win32HWnd, attribute: CUInt, value: CInt, error: WindowAppearanceError) -> Result[Unit, WindowAppearanceError]:
+    let value_ptr: ReadIntPointer = #unsafe &raw read value
+    let raw_value = read_int_as_void :: value_ptr :: call
+    let Result.Ok(byte_count) = size_of[CInt] as Maybe[CUInt] else => return Result.Err :: error :: call
+    let status = #unsafe DwmSetWindowAttribute :: hwnd, attribute, raw_value, byte_count :: call
+    select:
+        when status != 0 => return Result.Err :: error :: call
+        else => return Result.Ok :: () :: call
+
+fn apply_window_attribute_uint(hwnd: Win32HWnd, attribute: CUInt, value: CUInt, error: WindowAppearanceError) -> Result[Unit, WindowAppearanceError]:
+    let value_ptr: ReadUIntPointer = #unsafe &raw read value
+    let raw_value = read_uint_as_void :: value_ptr :: call
+    let Result.Ok(byte_count) = size_of[CUInt] as Maybe[CUInt] else => return Result.Err :: error :: call
+    let status = #unsafe DwmSetWindowAttribute :: hwnd, attribute, raw_value, byte_count :: call
+    select:
+        when status != 0 => return Result.Err :: error :: call
+        else => return Result.Ok :: () :: call
+
+pub(package) fn current_window_undecorated_shadow(read window: GlfwWindow) -> Bool:
+    let mailbox = window_mailbox :: window :: call
+    return mailbox_undecorated_shadow :: mailbox :: call
+
+pub(package) fn set_window_undecorated_shadow(read window: GlfwWindow, shadow: Bool) -> Result[Unit, WindowAppearanceError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowAppearanceError.NativeWindowUnavailable :: call
+    let policy = DWMNCRP_DISABLED
+    select:
+        when shadow => policy = DWMNCRP_ENABLED
+        else => ()
+    let Result.Ok(_) = apply_window_attribute_int :: hwnd, DWMWA_NCRENDERING_POLICY, policy, WindowAppearanceError.UndecoratedShadowUpdateFailed :: call else =>
+        return Result.Err :: WindowAppearanceError.UndecoratedShadowUpdateFailed :: call
+    let mailbox = window_mailbox :: window :: call
+    set_mailbox_undecorated_shadow :: mailbox, shadow :: call
+    return Result.Ok :: () :: call
+
+pub(package) fn current_window_system_backdrop(read window: GlfwWindow) -> WindowSystemBackdrop:
+    let mailbox = window_mailbox :: window :: call
+    return mailbox_system_backdrop :: mailbox :: call
+
+pub(package) fn set_window_system_backdrop(read window: GlfwWindow, read backdrop: WindowSystemBackdrop) -> Result[Unit, WindowAppearanceError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowAppearanceError.NativeWindowUnavailable :: call
+    let raw = window_system_backdrop_raw :: backdrop :: call
+    let Result.Ok(_) = apply_window_attribute_int :: hwnd, DWMWA_SYSTEMBACKDROP_TYPE, raw, WindowAppearanceError.SystemBackdropUpdateFailed :: call else =>
+        return Result.Err :: WindowAppearanceError.SystemBackdropUpdateFailed :: call
+    let mailbox = window_mailbox :: window :: call
+    set_mailbox_system_backdrop :: mailbox, backdrop :: call
+    return Result.Ok :: () :: call
+
+pub(package) fn current_window_border_color(read window: GlfwWindow) -> Option[RgbaColor]:
+    let mailbox = window_mailbox :: window :: call
+    return mailbox_border_color :: mailbox :: call
+
+pub(package) fn set_window_border_color(read window: GlfwWindow, read color: Option[RgbaColor]) -> Result[Unit, WindowAppearanceError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowAppearanceError.NativeWindowUnavailable :: call
+    let raw = DWMWA_COLOR_DEFAULT
+    select color:
+        when Option.Some(value) => raw = colorref_from_rgba :: value :: call
+        when Option.None => ()
+    let Result.Ok(_) = apply_window_attribute_uint :: hwnd, DWMWA_BORDER_COLOR, raw, WindowAppearanceError.BorderColorUpdateFailed :: call else =>
+        return Result.Err :: WindowAppearanceError.BorderColorUpdateFailed :: call
+    let mailbox = window_mailbox :: window :: call
+    set_mailbox_border_color :: mailbox, color :: call
+    return Result.Ok :: () :: call
+
+pub(package) fn current_window_title_background_color(read window: GlfwWindow) -> Option[RgbaColor]:
+    let mailbox = window_mailbox :: window :: call
+    return mailbox_title_background_color :: mailbox :: call
+
+pub(package) fn set_window_title_background_color(read window: GlfwWindow, read color: Option[RgbaColor]) -> Result[Unit, WindowAppearanceError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowAppearanceError.NativeWindowUnavailable :: call
+    let raw = DWMWA_COLOR_DEFAULT
+    select color:
+        when Option.Some(value) => raw = colorref_from_rgba :: value :: call
+        when Option.None => ()
+    let Result.Ok(_) = apply_window_attribute_uint :: hwnd, DWMWA_CAPTION_COLOR, raw, WindowAppearanceError.TitleBackgroundColorUpdateFailed :: call else =>
+        return Result.Err :: WindowAppearanceError.TitleBackgroundColorUpdateFailed :: call
+    let mailbox = window_mailbox :: window :: call
+    set_mailbox_title_background_color :: mailbox, color :: call
+    return Result.Ok :: () :: call
+
+pub(package) fn current_window_title_text_color(read window: GlfwWindow) -> Option[RgbaColor]:
+    let mailbox = window_mailbox :: window :: call
+    return mailbox_title_text_color :: mailbox :: call
+
+pub(package) fn set_window_title_text_color(read window: GlfwWindow, read color: Option[RgbaColor]) -> Result[Unit, WindowAppearanceError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowAppearanceError.NativeWindowUnavailable :: call
+    let raw = DWMWA_COLOR_DEFAULT
+    select color:
+        when Option.Some(value) => raw = colorref_from_rgba :: value :: call
+        when Option.None => ()
+    let Result.Ok(_) = apply_window_attribute_uint :: hwnd, DWMWA_TEXT_COLOR, raw, WindowAppearanceError.TitleTextColorUpdateFailed :: call else =>
+        return Result.Err :: WindowAppearanceError.TitleTextColorUpdateFailed :: call
+    let mailbox = window_mailbox :: window :: call
+    set_mailbox_title_text_color :: mailbox, color :: call
+    return Result.Ok :: () :: call
+
+pub(package) fn current_window_corner_preference(read window: GlfwWindow) -> WindowCornerPreference:
+    let mailbox = window_mailbox :: window :: call
+    return mailbox_corner_preference :: mailbox :: call
+
+pub(package) fn set_window_corner_preference(read window: GlfwWindow, read preference: WindowCornerPreference) -> Result[Unit, WindowAppearanceError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowAppearanceError.NativeWindowUnavailable :: call
+    let raw = window_corner_preference_raw :: preference :: call
+    let Result.Ok(_) = apply_window_attribute_int :: hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, raw, WindowAppearanceError.CornerPreferenceUpdateFailed :: call else =>
+        return Result.Err :: WindowAppearanceError.CornerPreferenceUpdateFailed :: call
+    let mailbox = window_mailbox :: window :: call
+    set_mailbox_corner_preference :: mailbox, preference :: call
+    return Result.Ok :: () :: call

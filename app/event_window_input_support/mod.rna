@@ -1,6 +1,8 @@
 use std.{List, Option, Str}
 use event.{AppEvent, AppEventBatch, WindowCharacterData, WindowCharacterModsData}
 use event.{WindowCursorData, WindowEvent, WindowEventKind, WindowKeyData}
+use event.{WindowRawKeyData, WindowRawMouseButtonData, WindowRawMouseMotionData}
+use event.WindowRawMouseWheelData
 use event.WindowMouseButtonData
 use event.WindowScrollData
 use window.WindowId
@@ -27,6 +29,92 @@ impl AppEventBatch:
                                     let value = WindowCursorData :: :: call
                                         x = x
                                         y = y
+                                    found = Option.Some :: value :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_raw_mouse_motion_data(edit self) -> Option[WindowRawMouseMotionData]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowRawMouseMotionData] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.RawMouseMotion(id = _, delta_x = delta_x, delta_y = delta_y) =>
+                                    let value = WindowRawMouseMotionData :: :: call
+                                        delta_x = delta_x
+                                        delta_y = delta_y
+                                    found = Option.Some :: value :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_raw_mouse_button_data(edit self) -> Option[WindowRawMouseButtonData]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowRawMouseButtonData] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.RawMouseButtonChanged(id = _, button = button, action = action) =>
+                                    let value = WindowRawMouseButtonData :: :: call
+                                        button = button
+                                        action = action
+                                    found = Option.Some :: value :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_raw_mouse_wheel_data(edit self) -> Option[WindowRawMouseWheelData]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowRawMouseWheelData] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.RawMouseWheel(id = _, delta_x = delta_x, delta_y = delta_y) =>
+                                    let value = WindowRawMouseWheelData :: :: call
+                                        delta_x = delta_x
+                                        delta_y = delta_y
+                                    found = Option.Some :: value :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_raw_key_data(edit self) -> Option[WindowRawKeyData]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowRawKeyData] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.RawKeyChanged(id = _, raw_key = raw_key, scancode = scancode, action = action, extended = extended) =>
+                                    let value = WindowRawKeyData :: :: call
+                                        raw_key = raw_key
+                                        scancode = scancode
+                                        action = action
+                                        extended = extended
                                     found = Option.Some :: value :: call
                                 when _ => push_window :: remaining, window_event :: call
                         when Option.Some(_) => push_window :: remaining, window_event :: call
@@ -119,6 +207,7 @@ impl AppEventBatch:
         self.events = remaining
         return found
 
+
     fn pop_mouse_button_data(edit self) -> Option[WindowMouseButtonData]:
         let remaining = List[AppEvent] :: :: call
         let found: Option[WindowMouseButtonData] = Option.None
@@ -180,6 +269,126 @@ impl AppEventBatch:
                                                 id = event_id
                                                 x = x
                                                 y = y
+                                            push_window :: remaining, restored :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_raw_mouse_motion_data_for(edit self, id: WindowId) -> Option[WindowRawMouseMotionData]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowRawMouseMotionData] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.RawMouseMotion(id = event_id, delta_x = delta_x, delta_y = delta_y) =>
+                                    select:
+                                        when event_id == id =>
+                                            let value = WindowRawMouseMotionData :: :: call
+                                                delta_x = delta_x
+                                                delta_y = delta_y
+                                            found = Option.Some :: value :: call
+                                        else =>
+                                            let restored = WindowEvent.RawMouseMotion :: :: call
+                                                id = event_id
+                                                delta_x = delta_x
+                                                delta_y = delta_y
+                                            push_window :: remaining, restored :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_raw_mouse_button_data_for(edit self, id: WindowId) -> Option[WindowRawMouseButtonData]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowRawMouseButtonData] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.RawMouseButtonChanged(id = event_id, button = button, action = action) =>
+                                    select:
+                                        when event_id == id =>
+                                            let value = WindowRawMouseButtonData :: :: call
+                                                button = button
+                                                action = action
+                                            found = Option.Some :: value :: call
+                                        else =>
+                                            let restored = WindowEvent.RawMouseButtonChanged :: :: call
+                                                id = event_id
+                                                button = button
+                                                action = action
+                                            push_window :: remaining, restored :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_raw_mouse_wheel_data_for(edit self, id: WindowId) -> Option[WindowRawMouseWheelData]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowRawMouseWheelData] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.RawMouseWheel(id = event_id, delta_x = delta_x, delta_y = delta_y) =>
+                                    select:
+                                        when event_id == id =>
+                                            let value = WindowRawMouseWheelData :: :: call
+                                                delta_x = delta_x
+                                                delta_y = delta_y
+                                            found = Option.Some :: value :: call
+                                        else =>
+                                            let restored = WindowEvent.RawMouseWheel :: :: call
+                                                id = event_id
+                                                delta_x = delta_x
+                                                delta_y = delta_y
+                                            push_window :: remaining, restored :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_raw_key_data_for(edit self, id: WindowId) -> Option[WindowRawKeyData]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowRawKeyData] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.RawKeyChanged(id = event_id, raw_key = raw_key, scancode = scancode, action = action, extended = extended) =>
+                                    select:
+                                        when event_id == id =>
+                                            let value = WindowRawKeyData :: :: call
+                                                raw_key = raw_key
+                                                scancode = scancode
+                                                action = action
+                                                extended = extended
+                                            found = Option.Some :: value :: call
+                                        else =>
+                                            let restored = WindowEvent.RawKeyChanged :: :: call
+                                                id = event_id
+                                                raw_key = raw_key
+                                                scancode = scancode
+                                                action = action
+                                                extended = extended
                                             push_window :: remaining, restored :: call
                                 when _ => push_window :: remaining, window_event :: call
                         when Option.Some(_) => push_window :: remaining, window_event :: call
@@ -305,6 +514,7 @@ impl AppEventBatch:
         self.events = remaining
         return found
 
+
     fn pop_mouse_button_data_for(edit self, id: WindowId) -> Option[WindowMouseButtonData]:
         let remaining = List[AppEvent] :: :: call
         let found: Option[WindowMouseButtonData] = Option.None
@@ -411,6 +621,7 @@ impl AppEventBatch:
         self.events = remaining
         return found
 
+
     fn pop_mouse_button_changed_event(edit self) -> Option[WindowEvent]:
         let remaining = List[AppEvent] :: :: call
         let found: Option[WindowEvent] = Option.None
@@ -439,6 +650,74 @@ impl AppEventBatch:
                         when Option.None =>
                             select window_event.kind :: :: method:
                                 when WindowEventKind.CursorMoved => found = Option.Some :: window_event :: call
+                                else => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_raw_mouse_motion_event(edit self) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.RawMouseMotion => found = Option.Some :: window_event :: call
+                                else => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_raw_mouse_button_changed_event(edit self) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.RawMouseButtonChanged => found = Option.Some :: window_event :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_raw_mouse_wheel_event(edit self) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.RawMouseWheel => found = Option.Some :: window_event :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_raw_key_changed_event(edit self) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.RawKeyChanged => found = Option.Some :: window_event :: call
                                 else => push_window :: remaining, window_event :: call
                         when Option.Some(_) => push_window :: remaining, window_event :: call
                 when _ => push_passthrough :: remaining, event :: call
@@ -539,6 +818,7 @@ impl AppEventBatch:
         self.events = remaining
         return found
 
+
     fn pop_mouse_button_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
         let remaining = List[AppEvent] :: :: call
         let found: Option[WindowEvent] = Option.None
@@ -570,6 +850,86 @@ impl AppEventBatch:
                         when Option.None =>
                             select window_event.kind :: :: method:
                                 when WindowEventKind.CursorMoved =>
+                                    select:
+                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
+                                        else => push_window :: remaining, window_event :: call
+                                else => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_raw_mouse_motion_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.RawMouseMotion =>
+                                    select:
+                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
+                                        else => push_window :: remaining, window_event :: call
+                                else => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_raw_mouse_button_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.RawMouseButtonChanged =>
+                                    select:
+                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
+                                        else => push_window :: remaining, window_event :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_raw_mouse_wheel_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.RawMouseWheel =>
+                                    select:
+                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
+                                        else => push_window :: remaining, window_event :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_raw_key_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.RawKeyChanged =>
                                     select:
                                         when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
                                         else => push_window :: remaining, window_event :: call

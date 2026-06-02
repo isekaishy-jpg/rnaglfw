@@ -4,9 +4,9 @@ use runtime.{App, AppError}
 use window.WindowId
 
 impl App:
-    fn next_refreshed_event(edit self) -> Option[WindowEvent]:
+    fn next_redraw_requested_event(edit self) -> Option[WindowEvent]:
         let batch = self.take_event_batch :: :: method
-        let event = batch.pop_refreshed_event :: :: method
+        let event = batch.pop_redraw_requested_event :: :: method
         self.pending = batch.events
         return event
 
@@ -58,9 +58,15 @@ impl App:
         self.pending = batch.events
         return event
 
-    fn next_refreshed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+    fn next_theme_changed_event(edit self) -> Option[WindowEvent]:
         let batch = self.take_event_batch :: :: method
-        let event = batch.pop_refreshed_event_for :: id :: method
+        let event = batch.pop_theme_changed_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_redraw_requested_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_redraw_requested_event_for :: id :: method
         self.pending = batch.events
         return event
 
@@ -112,11 +118,17 @@ impl App:
         self.pending = batch.events
         return event
 
-    fn poll_next_refreshed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+    fn next_theme_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_theme_changed_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn poll_next_redraw_requested_event(edit self) -> Result[Option[WindowEvent], AppError]:
         select:
             when self.has_pending_events :: :: method => ()
             else => self.pump_poll :: :: method
-        return Result.Ok :: self.next_refreshed_event :: :: method :: call
+        return Result.Ok :: self.next_redraw_requested_event :: :: method :: call
 
     fn poll_next_moved_event(edit self) -> Result[Option[WindowEvent], AppError]:
         select:
@@ -166,11 +178,17 @@ impl App:
             else => self.pump_poll :: :: method
         return Result.Ok :: self.next_cursor_entered_event :: :: method :: call
 
-    fn poll_next_refreshed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+    fn poll_next_theme_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
         select:
             when self.has_pending_events :: :: method => ()
             else => self.pump_poll :: :: method
-        return Result.Ok :: self.next_refreshed_event_for :: id :: method :: call
+        return Result.Ok :: self.next_theme_changed_event :: :: method :: call
+
+    fn poll_next_redraw_requested_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_redraw_requested_event_for :: id :: method :: call
 
     fn poll_next_moved_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
         select:
@@ -220,11 +238,17 @@ impl App:
             else => self.pump_poll :: :: method
         return Result.Ok :: self.next_cursor_entered_event_for :: id :: method :: call
 
-    fn wait_next_refreshed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+    fn poll_next_theme_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_theme_changed_event_for :: id :: method :: call
+
+    fn wait_next_redraw_requested_event(edit self) -> Result[Option[WindowEvent], AppError]:
         select:
             when self.has_pending_events :: :: method => ()
             else => self.pump_wait :: :: method
-        return Result.Ok :: self.next_refreshed_event :: :: method :: call
+        return Result.Ok :: self.next_redraw_requested_event :: :: method :: call
 
     fn wait_next_moved_event(edit self) -> Result[Option[WindowEvent], AppError]:
         select:
@@ -274,11 +298,17 @@ impl App:
             else => self.pump_wait :: :: method
         return Result.Ok :: self.next_cursor_entered_event :: :: method :: call
 
-    fn wait_next_refreshed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+    fn wait_next_theme_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
         select:
             when self.has_pending_events :: :: method => ()
             else => self.pump_wait :: :: method
-        return Result.Ok :: self.next_refreshed_event_for :: id :: method :: call
+        return Result.Ok :: self.next_theme_changed_event :: :: method :: call
+
+    fn wait_next_redraw_requested_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_redraw_requested_event_for :: id :: method :: call
 
     fn wait_next_moved_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
         select:
@@ -328,11 +358,17 @@ impl App:
             else => self.pump_wait :: :: method
         return Result.Ok :: self.next_cursor_entered_event_for :: id :: method :: call
 
-    fn wait_timeout_next_refreshed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+    fn wait_next_theme_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_theme_changed_event_for :: id :: method :: call
+
+    fn wait_timeout_next_redraw_requested_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         select:
             when self.has_pending_events :: :: method => ()
             else => self.pump_wait_timeout :: timeout :: method
-        return Result.Ok :: self.next_refreshed_event :: :: method :: call
+        return Result.Ok :: self.next_redraw_requested_event :: :: method :: call
 
     fn wait_timeout_next_moved_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         select:
@@ -382,11 +418,17 @@ impl App:
             else => self.pump_wait_timeout :: timeout :: method
         return Result.Ok :: self.next_cursor_entered_event :: :: method :: call
 
-    fn wait_timeout_next_refreshed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+    fn wait_timeout_next_theme_changed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         select:
             when self.has_pending_events :: :: method => ()
             else => self.pump_wait_timeout :: timeout :: method
-        return Result.Ok :: self.next_refreshed_event_for :: id :: method :: call
+        return Result.Ok :: self.next_theme_changed_event :: :: method :: call
+
+    fn wait_timeout_next_redraw_requested_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_redraw_requested_event_for :: id :: method :: call
 
     fn wait_timeout_next_moved_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         select:
@@ -435,3 +477,9 @@ impl App:
             when self.has_pending_events :: :: method => ()
             else => self.pump_wait_timeout :: timeout :: method
         return Result.Ok :: self.next_cursor_entered_event_for :: id :: method :: call
+
+    fn wait_timeout_next_theme_changed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_theme_changed_event_for :: id :: method :: call

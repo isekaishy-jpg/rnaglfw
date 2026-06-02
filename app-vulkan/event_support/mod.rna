@@ -1,15 +1,23 @@
 use std.{List, Option, Result, Str}
 use runa_app.{AppError, AppEvent, AppEventBatch, ControlFlow}
 use runa_app.{JoystickEvent, JoystickId, MonitorEvent, MonitorId}
-use runa_app.{UserEvent, UserEventId, WindowEvent, WindowId}
+use runa_app.{Theme, UserEvent, UserEventId, WindowEvent, WindowId}
 use runa_app.{JoystickSnapshot, Monitor, MonitorSnapshot, Window, WindowSnapshot}
 use runa_app.Joystick
+use runa_app.WindowCompositionData
 use runa_app.{WindowCharacterData, WindowCharacterModsData, WindowCursorData}
+use runa_app.{WindowRawKeyData, WindowRawMouseMotionData}
 use runa_app.{WindowKeyData, WindowMouseButtonData, WindowMoveData}
 use runa_app.{WindowScaleData, WindowScrollData, WindowSizeData}
 use present.VulkanPresentApp
 
 impl VulkanPresentApp:
+    fn has_pending_events(read self) -> Bool:
+        return self.app.has_pending_events :: :: method
+
+    fn pending_event_count(read self) -> Index:
+        return self.app.pending_event_count :: :: method
+
     fn post_user_event(edit self, id: UserEventId) -> Unit:
         self.app.post_user_event :: id :: method
         return
@@ -48,6 +56,12 @@ impl VulkanPresentApp:
     fn next_cursor_data(edit self) -> Option[WindowCursorData]:
         return self.app.next_cursor_data_for :: self.window.id :: method
 
+    fn next_raw_mouse_motion_data(edit self) -> Option[WindowRawMouseMotionData]:
+        return self.app.next_raw_mouse_motion_data_for :: self.window.id :: method
+
+    fn next_raw_key_data(edit self) -> Option[WindowRawKeyData]:
+        return self.app.next_raw_key_data_for :: self.window.id :: method
+
     fn next_scroll_data(edit self) -> Option[WindowScrollData]:
         return self.app.next_scroll_data_for :: self.window.id :: method
 
@@ -68,6 +82,12 @@ impl VulkanPresentApp:
 
     fn next_cursor_data_for(edit self, id: WindowId) -> Option[WindowCursorData]:
         return self.app.next_cursor_data_for :: id :: method
+
+    fn next_raw_mouse_motion_data_for(edit self, id: WindowId) -> Option[WindowRawMouseMotionData]:
+        return self.app.next_raw_mouse_motion_data_for :: id :: method
+
+    fn next_raw_key_data_for(edit self, id: WindowId) -> Option[WindowRawKeyData]:
+        return self.app.next_raw_key_data_for :: id :: method
 
     fn next_scroll_data_for(edit self, id: WindowId) -> Option[WindowScrollData]:
         return self.app.next_scroll_data_for :: id :: method
@@ -102,6 +122,12 @@ impl VulkanPresentApp:
     fn next_cursor_moved_event(edit self) -> Option[WindowEvent]:
         return self.app.next_cursor_moved_event_for :: self.window.id :: method
 
+    fn next_raw_mouse_motion_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_raw_mouse_motion_event_for :: self.window.id :: method
+
+    fn next_raw_key_changed_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_raw_key_changed_event_for :: self.window.id :: method
+
     fn next_scrolled_event(edit self) -> Option[WindowEvent]:
         return self.app.next_scrolled_event_for :: self.window.id :: method
 
@@ -123,14 +149,20 @@ impl VulkanPresentApp:
     fn next_cursor_moved_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
         return self.app.next_cursor_moved_event_for :: id :: method
 
+    fn next_raw_mouse_motion_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_raw_mouse_motion_event_for :: id :: method
+
+    fn next_raw_key_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_raw_key_changed_event_for :: id :: method
+
     fn next_scrolled_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
         return self.app.next_scrolled_event_for :: id :: method
 
     fn next_dropped_path_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
         return self.app.next_dropped_path_event_for :: id :: method
 
-    fn next_refreshed_event(edit self) -> Option[WindowEvent]:
-        return self.app.next_refreshed_event_for :: self.window.id :: method
+    fn next_redraw_requested_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_redraw_requested_event_for :: self.window.id :: method
 
     fn next_moved_event(edit self) -> Option[WindowEvent]:
         return self.app.next_moved_event_for :: self.window.id :: method
@@ -156,8 +188,11 @@ impl VulkanPresentApp:
     fn next_cursor_entered_event(edit self) -> Option[WindowEvent]:
         return self.app.next_cursor_entered_event_for :: self.window.id :: method
 
-    fn next_refreshed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
-        return self.app.next_refreshed_event_for :: id :: method
+    fn next_theme_changed_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_theme_changed_event_for :: self.window.id :: method
+
+    fn next_redraw_requested_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_redraw_requested_event_for :: id :: method
 
     fn next_moved_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
         return self.app.next_moved_event_for :: id :: method
@@ -182,6 +217,9 @@ impl VulkanPresentApp:
 
     fn next_cursor_entered_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
         return self.app.next_cursor_entered_event_for :: id :: method
+
+    fn next_theme_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_theme_changed_event_for :: id :: method
 
     fn next_created_window_event(edit self) -> Option[WindowEvent]:
         return self.app.next_created_window_event_for :: self.window.id :: method
@@ -318,6 +356,9 @@ impl VulkanPresentApp:
     fn next_cursor_entered_state(edit self) -> Option[Bool]:
         return self.app.next_cursor_entered_state_for :: self.window.id :: method
 
+    fn next_theme(edit self) -> Option[Theme]:
+        return self.app.next_theme_for :: self.window.id :: method
+
     fn next_moved_data_for(edit self, id: WindowId) -> Option[WindowMoveData]:
         return self.app.next_moved_data_for :: id :: method
 
@@ -341,6 +382,9 @@ impl VulkanPresentApp:
 
     fn next_cursor_entered_state_for(edit self, id: WindowId) -> Option[Bool]:
         return self.app.next_cursor_entered_state_for :: id :: method
+
+    fn next_theme_for(edit self, id: WindowId) -> Option[Theme]:
+        return self.app.next_theme_for :: id :: method
 
     fn take_pending_events(edit self) -> List[AppEvent]:
         return self.app.take_pending_events :: :: method
@@ -465,6 +509,12 @@ impl VulkanPresentApp:
     fn poll_next_cursor_data(edit self) -> Result[Option[WindowCursorData], AppError]:
         return self.app.poll_next_cursor_data_for :: self.window.id :: method
 
+    fn poll_next_raw_mouse_motion_data(edit self) -> Result[Option[WindowRawMouseMotionData], AppError]:
+        return self.app.poll_next_raw_mouse_motion_data_for :: self.window.id :: method
+
+    fn poll_next_raw_key_data(edit self) -> Result[Option[WindowRawKeyData], AppError]:
+        return self.app.poll_next_raw_key_data_for :: self.window.id :: method
+
     fn poll_next_scroll_data(edit self) -> Result[Option[WindowScrollData], AppError]:
         return self.app.poll_next_scroll_data_for :: self.window.id :: method
 
@@ -485,6 +535,12 @@ impl VulkanPresentApp:
 
     fn poll_next_cursor_data_for(edit self, id: WindowId) -> Result[Option[WindowCursorData], AppError]:
         return self.app.poll_next_cursor_data_for :: id :: method
+
+    fn poll_next_raw_mouse_motion_data_for(edit self, id: WindowId) -> Result[Option[WindowRawMouseMotionData], AppError]:
+        return self.app.poll_next_raw_mouse_motion_data_for :: id :: method
+
+    fn poll_next_raw_key_data_for(edit self, id: WindowId) -> Result[Option[WindowRawKeyData], AppError]:
+        return self.app.poll_next_raw_key_data_for :: id :: method
 
     fn poll_next_scroll_data_for(edit self, id: WindowId) -> Result[Option[WindowScrollData], AppError]:
         return self.app.poll_next_scroll_data_for :: id :: method
@@ -519,6 +575,12 @@ impl VulkanPresentApp:
     fn poll_next_cursor_moved_event(edit self) -> Result[Option[WindowEvent], AppError]:
         return self.app.poll_next_cursor_moved_event_for :: self.window.id :: method
 
+    fn poll_next_raw_mouse_motion_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_raw_mouse_motion_event_for :: self.window.id :: method
+
+    fn poll_next_raw_key_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_raw_key_changed_event_for :: self.window.id :: method
+
     fn poll_next_scrolled_event(edit self) -> Result[Option[WindowEvent], AppError]:
         return self.app.poll_next_scrolled_event_for :: self.window.id :: method
 
@@ -540,14 +602,20 @@ impl VulkanPresentApp:
     fn poll_next_cursor_moved_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
         return self.app.poll_next_cursor_moved_event_for :: id :: method
 
+    fn poll_next_raw_mouse_motion_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_raw_mouse_motion_event_for :: id :: method
+
+    fn poll_next_raw_key_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_raw_key_changed_event_for :: id :: method
+
     fn poll_next_scrolled_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
         return self.app.poll_next_scrolled_event_for :: id :: method
 
     fn poll_next_dropped_path_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
         return self.app.poll_next_dropped_path_event_for :: id :: method
 
-    fn poll_next_refreshed_event(edit self) -> Result[Option[WindowEvent], AppError]:
-        return self.app.poll_next_refreshed_event_for :: self.window.id :: method
+    fn poll_next_redraw_requested_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_redraw_requested_event_for :: self.window.id :: method
 
     fn poll_next_moved_event(edit self) -> Result[Option[WindowEvent], AppError]:
         return self.app.poll_next_moved_event_for :: self.window.id :: method
@@ -573,8 +641,11 @@ impl VulkanPresentApp:
     fn poll_next_cursor_entered_event(edit self) -> Result[Option[WindowEvent], AppError]:
         return self.app.poll_next_cursor_entered_event_for :: self.window.id :: method
 
-    fn poll_next_refreshed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
-        return self.app.poll_next_refreshed_event_for :: id :: method
+    fn poll_next_theme_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_theme_changed_event_for :: self.window.id :: method
+
+    fn poll_next_redraw_requested_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_redraw_requested_event_for :: id :: method
 
     fn poll_next_moved_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
         return self.app.poll_next_moved_event_for :: id :: method
@@ -599,6 +670,9 @@ impl VulkanPresentApp:
 
     fn poll_next_cursor_entered_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
         return self.app.poll_next_cursor_entered_event_for :: id :: method
+
+    fn poll_next_theme_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_theme_changed_event_for :: id :: method
 
     fn poll_next_created_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
         return self.app.poll_next_created_window_event_for :: self.window.id :: method
@@ -735,6 +809,9 @@ impl VulkanPresentApp:
     fn poll_next_cursor_entered_state(edit self) -> Result[Option[Bool], AppError]:
         return self.app.poll_next_cursor_entered_state_for :: self.window.id :: method
 
+    fn poll_next_theme(edit self) -> Result[Option[Theme], AppError]:
+        return self.app.poll_next_theme_for :: self.window.id :: method
+
     fn poll_next_moved_data_for(edit self, id: WindowId) -> Result[Option[WindowMoveData], AppError]:
         return self.app.poll_next_moved_data_for :: id :: method
 
@@ -758,6 +835,9 @@ impl VulkanPresentApp:
 
     fn poll_next_cursor_entered_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
         return self.app.poll_next_cursor_entered_state_for :: id :: method
+
+    fn poll_next_theme_for(edit self, id: WindowId) -> Result[Option[Theme], AppError]:
+        return self.app.poll_next_theme_for :: id :: method
 
     fn poll_monitor_events(edit self) -> List[MonitorEvent]:
         return self.app.poll_monitor_events :: :: method
@@ -924,6 +1004,12 @@ impl VulkanPresentApp:
     fn wait_next_cursor_data(edit self) -> Result[Option[WindowCursorData], AppError]:
         return self.app.wait_next_cursor_data_for :: self.window.id :: method
 
+    fn wait_next_raw_mouse_motion_data(edit self) -> Result[Option[WindowRawMouseMotionData], AppError]:
+        return self.app.wait_next_raw_mouse_motion_data_for :: self.window.id :: method
+
+    fn wait_next_raw_key_data(edit self) -> Result[Option[WindowRawKeyData], AppError]:
+        return self.app.wait_next_raw_key_data_for :: self.window.id :: method
+
     fn wait_next_scroll_data(edit self) -> Result[Option[WindowScrollData], AppError]:
         return self.app.wait_next_scroll_data_for :: self.window.id :: method
 
@@ -944,6 +1030,12 @@ impl VulkanPresentApp:
 
     fn wait_next_cursor_data_for(edit self, id: WindowId) -> Result[Option[WindowCursorData], AppError]:
         return self.app.wait_next_cursor_data_for :: id :: method
+
+    fn wait_next_raw_mouse_motion_data_for(edit self, id: WindowId) -> Result[Option[WindowRawMouseMotionData], AppError]:
+        return self.app.wait_next_raw_mouse_motion_data_for :: id :: method
+
+    fn wait_next_raw_key_data_for(edit self, id: WindowId) -> Result[Option[WindowRawKeyData], AppError]:
+        return self.app.wait_next_raw_key_data_for :: id :: method
 
     fn wait_next_scroll_data_for(edit self, id: WindowId) -> Result[Option[WindowScrollData], AppError]:
         return self.app.wait_next_scroll_data_for :: id :: method
@@ -978,6 +1070,12 @@ impl VulkanPresentApp:
     fn wait_next_cursor_moved_event(edit self) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_next_cursor_moved_event_for :: self.window.id :: method
 
+    fn wait_next_raw_mouse_motion_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_raw_mouse_motion_event_for :: self.window.id :: method
+
+    fn wait_next_raw_key_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_raw_key_changed_event_for :: self.window.id :: method
+
     fn wait_next_scrolled_event(edit self) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_next_scrolled_event_for :: self.window.id :: method
 
@@ -999,14 +1097,20 @@ impl VulkanPresentApp:
     fn wait_next_cursor_moved_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_next_cursor_moved_event_for :: id :: method
 
+    fn wait_next_raw_mouse_motion_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_raw_mouse_motion_event_for :: id :: method
+
+    fn wait_next_raw_key_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_raw_key_changed_event_for :: id :: method
+
     fn wait_next_scrolled_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_next_scrolled_event_for :: id :: method
 
     fn wait_next_dropped_path_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_next_dropped_path_event_for :: id :: method
 
-    fn wait_next_refreshed_event(edit self) -> Result[Option[WindowEvent], AppError]:
-        return self.app.wait_next_refreshed_event_for :: self.window.id :: method
+    fn wait_next_redraw_requested_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_redraw_requested_event_for :: self.window.id :: method
 
     fn wait_next_moved_event(edit self) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_next_moved_event_for :: self.window.id :: method
@@ -1032,8 +1136,11 @@ impl VulkanPresentApp:
     fn wait_next_cursor_entered_event(edit self) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_next_cursor_entered_event_for :: self.window.id :: method
 
-    fn wait_next_refreshed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
-        return self.app.wait_next_refreshed_event_for :: id :: method
+    fn wait_next_theme_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_theme_changed_event_for :: self.window.id :: method
+
+    fn wait_next_redraw_requested_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_redraw_requested_event_for :: id :: method
 
     fn wait_next_moved_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_next_moved_event_for :: id :: method
@@ -1058,6 +1165,9 @@ impl VulkanPresentApp:
 
     fn wait_next_cursor_entered_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_next_cursor_entered_event_for :: id :: method
+
+    fn wait_next_theme_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_theme_changed_event_for :: id :: method
 
     fn wait_next_created_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_next_created_window_event_for :: self.window.id :: method
@@ -1194,6 +1304,9 @@ impl VulkanPresentApp:
     fn wait_next_cursor_entered_state(edit self) -> Result[Option[Bool], AppError]:
         return self.app.wait_next_cursor_entered_state_for :: self.window.id :: method
 
+    fn wait_next_theme(edit self) -> Result[Option[Theme], AppError]:
+        return self.app.wait_next_theme_for :: self.window.id :: method
+
     fn wait_next_moved_data_for(edit self, id: WindowId) -> Result[Option[WindowMoveData], AppError]:
         return self.app.wait_next_moved_data_for :: id :: method
 
@@ -1217,6 +1330,9 @@ impl VulkanPresentApp:
 
     fn wait_next_cursor_entered_state_for(edit self, id: WindowId) -> Result[Option[Bool], AppError]:
         return self.app.wait_next_cursor_entered_state_for :: id :: method
+
+    fn wait_next_theme_for(edit self, id: WindowId) -> Result[Option[Theme], AppError]:
+        return self.app.wait_next_theme_for :: id :: method
 
     fn wait_monitor_events(edit self) -> List[MonitorEvent]:
         return self.app.wait_monitor_events :: :: method
@@ -1383,6 +1499,12 @@ impl VulkanPresentApp:
     fn wait_timeout_next_cursor_data(edit self, timeout: F64) -> Result[Option[WindowCursorData], AppError]:
         return self.app.wait_timeout_next_cursor_data_for :: self.window.id, timeout :: method
 
+    fn wait_timeout_next_raw_mouse_motion_data(edit self, timeout: F64) -> Result[Option[WindowRawMouseMotionData], AppError]:
+        return self.app.wait_timeout_next_raw_mouse_motion_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_raw_key_data(edit self, timeout: F64) -> Result[Option[WindowRawKeyData], AppError]:
+        return self.app.wait_timeout_next_raw_key_data_for :: self.window.id, timeout :: method
+
     fn wait_timeout_next_scroll_data(edit self, timeout: F64) -> Result[Option[WindowScrollData], AppError]:
         return self.app.wait_timeout_next_scroll_data_for :: self.window.id, timeout :: method
 
@@ -1403,6 +1525,12 @@ impl VulkanPresentApp:
 
     fn wait_timeout_next_cursor_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowCursorData], AppError]:
         return self.app.wait_timeout_next_cursor_data_for :: id, timeout :: method
+
+    fn wait_timeout_next_raw_mouse_motion_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowRawMouseMotionData], AppError]:
+        return self.app.wait_timeout_next_raw_mouse_motion_data_for :: id, timeout :: method
+
+    fn wait_timeout_next_raw_key_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowRawKeyData], AppError]:
+        return self.app.wait_timeout_next_raw_key_data_for :: id, timeout :: method
 
     fn wait_timeout_next_scroll_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowScrollData], AppError]:
         return self.app.wait_timeout_next_scroll_data_for :: id, timeout :: method
@@ -1437,6 +1565,12 @@ impl VulkanPresentApp:
     fn wait_timeout_next_cursor_moved_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_timeout_next_cursor_moved_event_for :: self.window.id, timeout :: method
 
+    fn wait_timeout_next_raw_mouse_motion_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_raw_mouse_motion_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_raw_key_changed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_raw_key_changed_event_for :: self.window.id, timeout :: method
+
     fn wait_timeout_next_scrolled_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_timeout_next_scrolled_event_for :: self.window.id, timeout :: method
 
@@ -1458,14 +1592,20 @@ impl VulkanPresentApp:
     fn wait_timeout_next_cursor_moved_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_timeout_next_cursor_moved_event_for :: id, timeout :: method
 
+    fn wait_timeout_next_raw_mouse_motion_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_raw_mouse_motion_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_raw_key_changed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_raw_key_changed_event_for :: id, timeout :: method
+
     fn wait_timeout_next_scrolled_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_timeout_next_scrolled_event_for :: id, timeout :: method
 
     fn wait_timeout_next_dropped_path_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_timeout_next_dropped_path_event_for :: id, timeout :: method
 
-    fn wait_timeout_next_refreshed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
-        return self.app.wait_timeout_next_refreshed_event_for :: self.window.id, timeout :: method
+    fn wait_timeout_next_redraw_requested_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_redraw_requested_event_for :: self.window.id, timeout :: method
 
     fn wait_timeout_next_moved_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_timeout_next_moved_event_for :: self.window.id, timeout :: method
@@ -1491,8 +1631,11 @@ impl VulkanPresentApp:
     fn wait_timeout_next_cursor_entered_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_timeout_next_cursor_entered_event_for :: self.window.id, timeout :: method
 
-    fn wait_timeout_next_refreshed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
-        return self.app.wait_timeout_next_refreshed_event_for :: id, timeout :: method
+    fn wait_timeout_next_theme_changed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_theme_changed_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_redraw_requested_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_redraw_requested_event_for :: id, timeout :: method
 
     fn wait_timeout_next_moved_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_timeout_next_moved_event_for :: id, timeout :: method
@@ -1517,6 +1660,9 @@ impl VulkanPresentApp:
 
     fn wait_timeout_next_cursor_entered_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_timeout_next_cursor_entered_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_theme_changed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_theme_changed_event_for :: id, timeout :: method
 
     fn wait_timeout_next_created_window_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         return self.app.wait_timeout_next_created_window_event_for :: self.window.id, timeout :: method
@@ -1653,6 +1799,9 @@ impl VulkanPresentApp:
     fn wait_timeout_next_cursor_entered_state(edit self, timeout: F64) -> Result[Option[Bool], AppError]:
         return self.app.wait_timeout_next_cursor_entered_state_for :: self.window.id, timeout :: method
 
+    fn wait_timeout_next_theme(edit self, timeout: F64) -> Result[Option[Theme], AppError]:
+        return self.app.wait_timeout_next_theme_for :: self.window.id, timeout :: method
+
     fn wait_timeout_next_moved_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowMoveData], AppError]:
         return self.app.wait_timeout_next_moved_data_for :: id, timeout :: method
 
@@ -1676,6 +1825,9 @@ impl VulkanPresentApp:
 
     fn wait_timeout_next_cursor_entered_state_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Bool], AppError]:
         return self.app.wait_timeout_next_cursor_entered_state_for :: id, timeout :: method
+
+    fn wait_timeout_next_theme_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Theme], AppError]:
+        return self.app.wait_timeout_next_theme_for :: id, timeout :: method
 
     fn wait_timeout_monitor_events(edit self, timeout: F64) -> List[MonitorEvent]:
         return self.app.wait_timeout_monitor_events :: timeout :: method
@@ -1929,8 +2081,8 @@ impl VulkanPresentApp:
     fn pending_user_ids(edit self) -> List[UserEventId]:
         return self.app.pending_user_ids :: :: method
 
-    fn pending_refreshed_events(edit self) -> List[WindowEvent]:
-        return self.app.pending_refreshed_events_for :: self.window.id :: method
+    fn pending_redraw_requested_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_redraw_requested_events_for :: self.window.id :: method
 
     fn pending_moved_events(edit self) -> List[WindowEvent]:
         return self.app.pending_moved_events_for :: self.window.id :: method
@@ -1956,8 +2108,11 @@ impl VulkanPresentApp:
     fn pending_cursor_entered_events(edit self) -> List[WindowEvent]:
         return self.app.pending_cursor_entered_events_for :: self.window.id :: method
 
-    fn pending_refreshed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        return self.app.pending_refreshed_events_for :: id :: method
+    fn pending_theme_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_theme_changed_events_for :: self.window.id :: method
+
+    fn pending_redraw_requested_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_redraw_requested_events_for :: id :: method
 
     fn pending_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         return self.app.pending_moved_events_for :: id :: method
@@ -1983,6 +2138,9 @@ impl VulkanPresentApp:
     fn pending_cursor_entered_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         return self.app.pending_cursor_entered_events_for :: id :: method
 
+    fn pending_theme_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_theme_changed_events_for :: id :: method
+
     fn pending_moved_data(edit self) -> List[WindowMoveData]:
         return self.app.pending_moved_data_for :: self.window.id :: method
 
@@ -2006,6 +2164,9 @@ impl VulkanPresentApp:
 
     fn pending_cursor_entered_states(edit self) -> List[Bool]:
         return self.app.pending_cursor_entered_states_for :: self.window.id :: method
+
+    fn pending_themes(edit self) -> List[Theme]:
+        return self.app.pending_themes_for :: self.window.id :: method
 
     fn pending_moved_data_for(edit self, id: WindowId) -> List[WindowMoveData]:
         return self.app.pending_moved_data_for :: id :: method
@@ -2031,6 +2192,9 @@ impl VulkanPresentApp:
     fn pending_cursor_entered_states_for(edit self, id: WindowId) -> List[Bool]:
         return self.app.pending_cursor_entered_states_for :: id :: method
 
+    fn pending_themes_for(edit self, id: WindowId) -> List[Theme]:
+        return self.app.pending_themes_for :: id :: method
+
     fn pending_key_changed_events(edit self) -> List[WindowEvent]:
         return self.app.pending_key_changed_events_for :: self.window.id :: method
 
@@ -2045,6 +2209,12 @@ impl VulkanPresentApp:
 
     fn pending_cursor_moved_events(edit self) -> List[WindowEvent]:
         return self.app.pending_cursor_moved_events_for :: self.window.id :: method
+
+    fn pending_raw_mouse_motion_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_raw_mouse_motion_events_for :: self.window.id :: method
+
+    fn pending_raw_key_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_raw_key_changed_events_for :: self.window.id :: method
 
     fn pending_scrolled_events(edit self) -> List[WindowEvent]:
         return self.app.pending_scrolled_events_for :: self.window.id :: method
@@ -2064,11 +2234,23 @@ impl VulkanPresentApp:
     fn pending_cursor_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         return self.app.pending_cursor_moved_events_for :: id :: method
 
+    fn pending_raw_mouse_motion_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_raw_mouse_motion_events_for :: id :: method
+
+    fn pending_raw_key_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_raw_key_changed_events_for :: id :: method
+
     fn pending_scrolled_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         return self.app.pending_scrolled_events_for :: id :: method
 
     fn pending_cursor_data(edit self) -> List[WindowCursorData]:
         return self.app.pending_cursor_data_for :: self.window.id :: method
+
+    fn pending_raw_mouse_motion_data(edit self) -> List[WindowRawMouseMotionData]:
+        return self.app.pending_raw_mouse_motion_data_for :: self.window.id :: method
+
+    fn pending_raw_key_data(edit self) -> List[WindowRawKeyData]:
+        return self.app.pending_raw_key_data_for :: self.window.id :: method
 
     fn pending_scroll_data(edit self) -> List[WindowScrollData]:
         return self.app.pending_scroll_data_for :: self.window.id :: method
@@ -2088,6 +2270,12 @@ impl VulkanPresentApp:
     fn pending_cursor_data_for(edit self, id: WindowId) -> List[WindowCursorData]:
         return self.app.pending_cursor_data_for :: id :: method
 
+    fn pending_raw_mouse_motion_data_for(edit self, id: WindowId) -> List[WindowRawMouseMotionData]:
+        return self.app.pending_raw_mouse_motion_data_for :: id :: method
+
+    fn pending_raw_key_data_for(edit self, id: WindowId) -> List[WindowRawKeyData]:
+        return self.app.pending_raw_key_data_for :: id :: method
+
     fn pending_scroll_data_for(edit self, id: WindowId) -> List[WindowScrollData]:
         return self.app.pending_scroll_data_for :: id :: method
 
@@ -2105,6 +2293,12 @@ impl VulkanPresentApp:
 
     fn poll_cursor_data(edit self) -> List[WindowCursorData]:
         return self.app.poll_cursor_data_for :: self.window.id :: method
+
+    fn poll_raw_mouse_motion_data(edit self) -> List[WindowRawMouseMotionData]:
+        return self.app.poll_raw_mouse_motion_data_for :: self.window.id :: method
+
+    fn poll_raw_key_data(edit self) -> List[WindowRawKeyData]:
+        return self.app.poll_raw_key_data_for :: self.window.id :: method
 
     fn poll_scroll_data(edit self) -> List[WindowScrollData]:
         return self.app.poll_scroll_data_for :: self.window.id :: method
@@ -2127,6 +2321,12 @@ impl VulkanPresentApp:
     fn poll_cursor_data_for(edit self, id: WindowId) -> List[WindowCursorData]:
         return self.app.poll_cursor_data_for :: id :: method
 
+    fn poll_raw_mouse_motion_data_for(edit self, id: WindowId) -> List[WindowRawMouseMotionData]:
+        return self.app.poll_raw_mouse_motion_data_for :: id :: method
+
+    fn poll_raw_key_data_for(edit self, id: WindowId) -> List[WindowRawKeyData]:
+        return self.app.poll_raw_key_data_for :: id :: method
+
     fn poll_scroll_data_for(edit self, id: WindowId) -> List[WindowScrollData]:
         return self.app.poll_scroll_data_for :: id :: method
 
@@ -2145,8 +2345,8 @@ impl VulkanPresentApp:
     fn poll_dropped_paths_lists_for(edit self, id: WindowId) -> List[List[Str]]:
         return self.app.poll_dropped_paths_lists_for :: id :: method
 
-    fn poll_refreshed_events(edit self) -> List[WindowEvent]:
-        return self.app.poll_refreshed_events_for :: self.window.id :: method
+    fn poll_redraw_requested_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_redraw_requested_events_for :: self.window.id :: method
 
     fn poll_moved_events(edit self) -> List[WindowEvent]:
         return self.app.poll_moved_events_for :: self.window.id :: method
@@ -2172,8 +2372,11 @@ impl VulkanPresentApp:
     fn poll_cursor_entered_events(edit self) -> List[WindowEvent]:
         return self.app.poll_cursor_entered_events_for :: self.window.id :: method
 
-    fn poll_refreshed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        return self.app.poll_refreshed_events_for :: id :: method
+    fn poll_theme_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_theme_changed_events_for :: self.window.id :: method
+
+    fn poll_redraw_requested_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_redraw_requested_events_for :: id :: method
 
     fn poll_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         return self.app.poll_moved_events_for :: id :: method
@@ -2199,6 +2402,9 @@ impl VulkanPresentApp:
     fn poll_cursor_entered_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         return self.app.poll_cursor_entered_events_for :: id :: method
 
+    fn poll_theme_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_theme_changed_events_for :: id :: method
+
     fn poll_moved_data(edit self) -> List[WindowMoveData]:
         return self.app.poll_moved_data_for :: self.window.id :: method
 
@@ -2222,6 +2428,9 @@ impl VulkanPresentApp:
 
     fn poll_cursor_entered_states(edit self) -> List[Bool]:
         return self.app.poll_cursor_entered_states_for :: self.window.id :: method
+
+    fn poll_themes(edit self) -> List[Theme]:
+        return self.app.poll_themes_for :: self.window.id :: method
 
     fn poll_moved_data_for(edit self, id: WindowId) -> List[WindowMoveData]:
         return self.app.poll_moved_data_for :: id :: method
@@ -2247,6 +2456,9 @@ impl VulkanPresentApp:
     fn poll_cursor_entered_states_for(edit self, id: WindowId) -> List[Bool]:
         return self.app.poll_cursor_entered_states_for :: id :: method
 
+    fn poll_themes_for(edit self, id: WindowId) -> List[Theme]:
+        return self.app.poll_themes_for :: id :: method
+
     fn poll_key_changed_events(edit self) -> List[WindowEvent]:
         return self.app.poll_key_changed_events_for :: self.window.id :: method
 
@@ -2261,6 +2473,12 @@ impl VulkanPresentApp:
 
     fn poll_cursor_moved_events(edit self) -> List[WindowEvent]:
         return self.app.poll_cursor_moved_events_for :: self.window.id :: method
+
+    fn poll_raw_mouse_motion_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_raw_mouse_motion_events_for :: self.window.id :: method
+
+    fn poll_raw_key_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_raw_key_changed_events_for :: self.window.id :: method
 
     fn poll_scrolled_events(edit self) -> List[WindowEvent]:
         return self.app.poll_scrolled_events_for :: self.window.id :: method
@@ -2283,6 +2501,12 @@ impl VulkanPresentApp:
     fn poll_cursor_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         return self.app.poll_cursor_moved_events_for :: id :: method
 
+    fn poll_raw_mouse_motion_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_raw_mouse_motion_events_for :: id :: method
+
+    fn poll_raw_key_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_raw_key_changed_events_for :: id :: method
+
     fn poll_scrolled_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         return self.app.poll_scrolled_events_for :: id :: method
 
@@ -2291,6 +2515,12 @@ impl VulkanPresentApp:
 
     fn wait_cursor_data(edit self) -> List[WindowCursorData]:
         return self.app.wait_cursor_data_for :: self.window.id :: method
+
+    fn wait_raw_mouse_motion_data(edit self) -> List[WindowRawMouseMotionData]:
+        return self.app.wait_raw_mouse_motion_data_for :: self.window.id :: method
+
+    fn wait_raw_key_data(edit self) -> List[WindowRawKeyData]:
+        return self.app.wait_raw_key_data_for :: self.window.id :: method
 
     fn wait_scroll_data(edit self) -> List[WindowScrollData]:
         return self.app.wait_scroll_data_for :: self.window.id :: method
@@ -2313,6 +2543,12 @@ impl VulkanPresentApp:
     fn wait_cursor_data_for(edit self, id: WindowId) -> List[WindowCursorData]:
         return self.app.wait_cursor_data_for :: id :: method
 
+    fn wait_raw_mouse_motion_data_for(edit self, id: WindowId) -> List[WindowRawMouseMotionData]:
+        return self.app.wait_raw_mouse_motion_data_for :: id :: method
+
+    fn wait_raw_key_data_for(edit self, id: WindowId) -> List[WindowRawKeyData]:
+        return self.app.wait_raw_key_data_for :: id :: method
+
     fn wait_scroll_data_for(edit self, id: WindowId) -> List[WindowScrollData]:
         return self.app.wait_scroll_data_for :: id :: method
 
@@ -2331,8 +2567,8 @@ impl VulkanPresentApp:
     fn wait_dropped_paths_lists_for(edit self, id: WindowId) -> List[List[Str]]:
         return self.app.wait_dropped_paths_lists_for :: id :: method
 
-    fn wait_refreshed_events(edit self) -> List[WindowEvent]:
-        return self.app.wait_refreshed_events_for :: self.window.id :: method
+    fn wait_redraw_requested_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_redraw_requested_events_for :: self.window.id :: method
 
     fn wait_moved_events(edit self) -> List[WindowEvent]:
         return self.app.wait_moved_events_for :: self.window.id :: method
@@ -2358,8 +2594,11 @@ impl VulkanPresentApp:
     fn wait_cursor_entered_events(edit self) -> List[WindowEvent]:
         return self.app.wait_cursor_entered_events_for :: self.window.id :: method
 
-    fn wait_refreshed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        return self.app.wait_refreshed_events_for :: id :: method
+    fn wait_theme_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_theme_changed_events_for :: self.window.id :: method
+
+    fn wait_redraw_requested_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_redraw_requested_events_for :: id :: method
 
     fn wait_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         return self.app.wait_moved_events_for :: id :: method
@@ -2385,6 +2624,9 @@ impl VulkanPresentApp:
     fn wait_cursor_entered_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         return self.app.wait_cursor_entered_events_for :: id :: method
 
+    fn wait_theme_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_theme_changed_events_for :: id :: method
+
     fn wait_moved_data(edit self) -> List[WindowMoveData]:
         return self.app.wait_moved_data_for :: self.window.id :: method
 
@@ -2408,6 +2650,9 @@ impl VulkanPresentApp:
 
     fn wait_cursor_entered_states(edit self) -> List[Bool]:
         return self.app.wait_cursor_entered_states_for :: self.window.id :: method
+
+    fn wait_themes(edit self) -> List[Theme]:
+        return self.app.wait_themes_for :: self.window.id :: method
 
     fn wait_moved_data_for(edit self, id: WindowId) -> List[WindowMoveData]:
         return self.app.wait_moved_data_for :: id :: method
@@ -2433,6 +2678,9 @@ impl VulkanPresentApp:
     fn wait_cursor_entered_states_for(edit self, id: WindowId) -> List[Bool]:
         return self.app.wait_cursor_entered_states_for :: id :: method
 
+    fn wait_themes_for(edit self, id: WindowId) -> List[Theme]:
+        return self.app.wait_themes_for :: id :: method
+
     fn wait_key_changed_events(edit self) -> List[WindowEvent]:
         return self.app.wait_key_changed_events_for :: self.window.id :: method
 
@@ -2447,6 +2695,12 @@ impl VulkanPresentApp:
 
     fn wait_cursor_moved_events(edit self) -> List[WindowEvent]:
         return self.app.wait_cursor_moved_events_for :: self.window.id :: method
+
+    fn wait_raw_mouse_motion_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_raw_mouse_motion_events_for :: self.window.id :: method
+
+    fn wait_raw_key_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_raw_key_changed_events_for :: self.window.id :: method
 
     fn wait_scrolled_events(edit self) -> List[WindowEvent]:
         return self.app.wait_scrolled_events_for :: self.window.id :: method
@@ -2469,6 +2723,12 @@ impl VulkanPresentApp:
     fn wait_cursor_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         return self.app.wait_cursor_moved_events_for :: id :: method
 
+    fn wait_raw_mouse_motion_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_raw_mouse_motion_events_for :: id :: method
+
+    fn wait_raw_key_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_raw_key_changed_events_for :: id :: method
+
     fn wait_scrolled_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         return self.app.wait_scrolled_events_for :: id :: method
 
@@ -2477,6 +2737,12 @@ impl VulkanPresentApp:
 
     fn wait_timeout_cursor_data(edit self, timeout: F64) -> List[WindowCursorData]:
         return self.app.wait_timeout_cursor_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_raw_mouse_motion_data(edit self, timeout: F64) -> List[WindowRawMouseMotionData]:
+        return self.app.wait_timeout_raw_mouse_motion_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_raw_key_data(edit self, timeout: F64) -> List[WindowRawKeyData]:
+        return self.app.wait_timeout_raw_key_data_for :: self.window.id, timeout :: method
 
     fn wait_timeout_scroll_data(edit self, timeout: F64) -> List[WindowScrollData]:
         return self.app.wait_timeout_scroll_data_for :: self.window.id, timeout :: method
@@ -2499,6 +2765,12 @@ impl VulkanPresentApp:
     fn wait_timeout_cursor_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowCursorData]:
         return self.app.wait_timeout_cursor_data_for :: id, timeout :: method
 
+    fn wait_timeout_raw_mouse_motion_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowRawMouseMotionData]:
+        return self.app.wait_timeout_raw_mouse_motion_data_for :: id, timeout :: method
+
+    fn wait_timeout_raw_key_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowRawKeyData]:
+        return self.app.wait_timeout_raw_key_data_for :: id, timeout :: method
+
     fn wait_timeout_scroll_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowScrollData]:
         return self.app.wait_timeout_scroll_data_for :: id, timeout :: method
 
@@ -2517,8 +2789,8 @@ impl VulkanPresentApp:
     fn wait_timeout_dropped_paths_lists_for(edit self, id: WindowId, timeout: F64) -> List[List[Str]]:
         return self.app.wait_timeout_dropped_paths_lists_for :: id, timeout :: method
 
-    fn wait_timeout_refreshed_events(edit self, timeout: F64) -> List[WindowEvent]:
-        return self.app.wait_timeout_refreshed_events_for :: self.window.id, timeout :: method
+    fn wait_timeout_redraw_requested_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_redraw_requested_events_for :: self.window.id, timeout :: method
 
     fn wait_timeout_moved_events(edit self, timeout: F64) -> List[WindowEvent]:
         return self.app.wait_timeout_moved_events_for :: self.window.id, timeout :: method
@@ -2544,8 +2816,11 @@ impl VulkanPresentApp:
     fn wait_timeout_cursor_entered_events(edit self, timeout: F64) -> List[WindowEvent]:
         return self.app.wait_timeout_cursor_entered_events_for :: self.window.id, timeout :: method
 
-    fn wait_timeout_refreshed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
-        return self.app.wait_timeout_refreshed_events_for :: id, timeout :: method
+    fn wait_timeout_theme_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_theme_changed_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_redraw_requested_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_redraw_requested_events_for :: id, timeout :: method
 
     fn wait_timeout_moved_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
         return self.app.wait_timeout_moved_events_for :: id, timeout :: method
@@ -2571,6 +2846,9 @@ impl VulkanPresentApp:
     fn wait_timeout_cursor_entered_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
         return self.app.wait_timeout_cursor_entered_events_for :: id, timeout :: method
 
+    fn wait_timeout_theme_changed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_theme_changed_events_for :: id, timeout :: method
+
     fn wait_timeout_moved_data(edit self, timeout: F64) -> List[WindowMoveData]:
         return self.app.wait_timeout_moved_data_for :: self.window.id, timeout :: method
 
@@ -2594,6 +2872,9 @@ impl VulkanPresentApp:
 
     fn wait_timeout_cursor_entered_states(edit self, timeout: F64) -> List[Bool]:
         return self.app.wait_timeout_cursor_entered_states_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_themes(edit self, timeout: F64) -> List[Theme]:
+        return self.app.wait_timeout_themes_for :: self.window.id, timeout :: method
 
     fn wait_timeout_moved_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowMoveData]:
         return self.app.wait_timeout_moved_data_for :: id, timeout :: method
@@ -2619,6 +2900,9 @@ impl VulkanPresentApp:
     fn wait_timeout_cursor_entered_states_for(edit self, id: WindowId, timeout: F64) -> List[Bool]:
         return self.app.wait_timeout_cursor_entered_states_for :: id, timeout :: method
 
+    fn wait_timeout_themes_for(edit self, id: WindowId, timeout: F64) -> List[Theme]:
+        return self.app.wait_timeout_themes_for :: id, timeout :: method
+
     fn wait_timeout_key_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
         return self.app.wait_timeout_key_changed_events_for :: self.window.id, timeout :: method
 
@@ -2633,6 +2917,12 @@ impl VulkanPresentApp:
 
     fn wait_timeout_cursor_moved_events(edit self, timeout: F64) -> List[WindowEvent]:
         return self.app.wait_timeout_cursor_moved_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_raw_mouse_motion_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_raw_mouse_motion_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_raw_key_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_raw_key_changed_events_for :: self.window.id, timeout :: method
 
     fn wait_timeout_scrolled_events(edit self, timeout: F64) -> List[WindowEvent]:
         return self.app.wait_timeout_scrolled_events_for :: self.window.id, timeout :: method
@@ -2654,6 +2944,12 @@ impl VulkanPresentApp:
 
     fn wait_timeout_cursor_moved_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
         return self.app.wait_timeout_cursor_moved_events_for :: id, timeout :: method
+
+    fn wait_timeout_raw_mouse_motion_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_raw_mouse_motion_events_for :: id, timeout :: method
+
+    fn wait_timeout_raw_key_changed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_raw_key_changed_events_for :: id, timeout :: method
 
     fn wait_timeout_scrolled_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
         return self.app.wait_timeout_scrolled_events_for :: id, timeout :: method

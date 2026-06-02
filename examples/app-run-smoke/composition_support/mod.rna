@@ -1,0 +1,198 @@
+use std.{List, Option, Str}
+
+use runa_app_run.{AppEvent, WindowEvent, WindowEventKind, app_event_batch_from_events}
+
+fn text_matches(read actual: Str, read expected: Str) -> Bool:
+    select actual.find :: expected :: method:
+        when Option.Some(index) =>
+            select:
+                when index != 0 => return false
+                when actual.byte_count :: :: method != expected.byte_count :: :: method => return false
+                else => return true
+        when Option.None => return false
+
+pub fn check_composition_batch_helpers() -> I32:
+    let events = List[AppEvent] :: :: call
+
+    let started = WindowEvent.CompositionStarted :: :: call
+        id = 41
+    let updated = WindowEvent.CompositionUpdated :: :: call
+        id = 42
+        text = "preedit"
+        cursor = Option.Some :: 2 :: call
+    let committed = WindowEvent.CompositionCommitted :: :: call
+        id = 43
+        text = "committed"
+    let ended = WindowEvent.CompositionEnded :: :: call
+        id = 44
+
+    events.push :: (AppEvent.Window :: started :: call) :: method
+    events.push :: (AppEvent.Window :: updated :: call) :: method
+    events.push :: (AppEvent.Window :: committed :: call) :: method
+    events.push :: (AppEvent.Window :: ended :: call) :: method
+
+    let batch = app_event_batch_from_events :: events :: call
+
+    let started_events = batch.composition_started_events :: :: method
+    let updated_events = batch.composition_updated_events :: :: method
+    let committed_events = batch.composition_committed_events :: :: method
+    let ended_events = batch.composition_ended_events :: :: method
+    let data_values = batch.composition_data :: :: method
+    let commit_texts = batch.composition_commit_texts :: :: method
+    select:
+        when started_events.count :: :: method != 1 => return 3400
+        when updated_events.count :: :: method != 1 => return 3401
+        when committed_events.count :: :: method != 1 => return 3402
+        when ended_events.count :: :: method != 1 => return 3403
+        when data_values.count :: :: method != 1 => return 3404
+        when commit_texts.count :: :: method != 1 => return 3405
+        else => ()
+
+    select started_events.remove :: 0 :: method:
+        when WindowEvent.CompositionStarted(id = id) =>
+            select:
+                when id != 41 => return 3406
+                else => ()
+        when _ => return 3407
+
+    select updated_events.remove :: 0 :: method:
+        when WindowEvent.CompositionUpdated(id = id, text = text, cursor = cursor) =>
+            select:
+                when id != 42 => return 3408
+                when !text_matches :: text, "preedit" :: call => return 3409
+                else => ()
+            select cursor:
+                when Option.Some(index) =>
+                    select:
+                        when index != 2 => return 3410
+                        else => ()
+                when Option.None => return 3411
+        when _ => return 3412
+
+    select committed_events.remove :: 0 :: method:
+        when WindowEvent.CompositionCommitted(id = id, text = text) =>
+            select:
+                when id != 43 => return 3413
+                when !text_matches :: text, "committed" :: call => return 3414
+                else => ()
+        when _ => return 3415
+
+    select ended_events.remove :: 0 :: method:
+        when WindowEvent.CompositionEnded(id = id) =>
+            select:
+                when id != 44 => return 3416
+                else => ()
+        when _ => return 3417
+
+    let composition_data = data_values.remove :: 0 :: method
+    select:
+        when !text_matches :: composition_data.text, "preedit" :: call => return 3418
+        else => ()
+    select composition_data.cursor:
+        when Option.Some(index) =>
+            select:
+                when index != 2 => return 3419
+                else => ()
+        when Option.None => return 3420
+
+    let committed_text = commit_texts.remove :: 0 :: method
+    select:
+        when !text_matches :: committed_text, "committed" :: call => return 3421
+        else => ()
+
+    let pop_events = List[AppEvent] :: :: call
+    let pop_updated = WindowEvent.CompositionUpdated :: :: call
+        id = 45
+        text = "live"
+        cursor = Option.Some :: 3 :: call
+    let pop_committed = WindowEvent.CompositionCommitted :: :: call
+        id = 46
+        text = "done"
+    pop_events.push :: (AppEvent.Window :: pop_updated :: call) :: method
+    pop_events.push :: (AppEvent.Window :: pop_committed :: call) :: method
+    let pop_batch = app_event_batch_from_events :: pop_events :: call
+
+    select pop_batch.pop_composition_data :: :: method:
+        when Option.Some(data) =>
+            select:
+                when !text_matches :: data.text, "live" :: call => return 3422
+                else => ()
+            select data.cursor:
+                when Option.Some(index) =>
+                    select:
+                        when index != 3 => return 3423
+                        else => ()
+                when Option.None => return 3424
+        when Option.None => return 3425
+
+    select pop_batch.pop_composition_commit_text :: :: method:
+        when Option.Some(text) =>
+            select:
+                when !text_matches :: text, "done" :: call => return 3426
+                else => ()
+        when Option.None => return 3427
+
+    let filtered_events = List[AppEvent] :: :: call
+    let filtered_updated = WindowEvent.CompositionUpdated :: :: call
+        id = 47
+        text = "target"
+        cursor = Option.None
+    let filtered_committed = WindowEvent.CompositionCommitted :: :: call
+        id = 48
+        text = "target-commit"
+    filtered_events.push :: (AppEvent.Window :: filtered_updated :: call) :: method
+    filtered_events.push :: (AppEvent.Window :: filtered_committed :: call) :: method
+    let filtered_batch = app_event_batch_from_events :: filtered_events :: call
+
+    let filtered_data = filtered_batch.take_composition_data_for :: 47 :: method
+    let filtered_texts = filtered_batch.take_composition_commit_texts_for :: 48 :: method
+    select:
+        when filtered_data.count :: :: method != 1 => return 3428
+        when filtered_texts.count :: :: method != 1 => return 3429
+        when !filtered_batch.is_empty :: :: method => return 3430
+        else => ()
+
+    let filtered_value = filtered_data.remove :: 0 :: method
+    select:
+        when !text_matches :: filtered_value.text, "target" :: call => return 3431
+        else => ()
+    select filtered_value.cursor:
+        when Option.Some(_) => return 3432
+        when Option.None => ()
+
+    let filtered_text = filtered_texts.remove :: 0 :: method
+    select:
+        when !text_matches :: filtered_text, "target-commit" :: call => return 3433
+        else => ()
+
+    let direct_event = WindowEvent.CompositionUpdated :: :: call
+        id = 49
+        text = "direct"
+        cursor = Option.Some :: 1 :: call
+    select direct_event.kind :: :: method:
+        when WindowEventKind.CompositionUpdated => ()
+        when _ => return 3434
+    select direct_event.composition_data :: :: method:
+        when Option.Some(data) =>
+            select:
+                when !text_matches :: data.text, "direct" :: call => return 3435
+                else => ()
+            select data.cursor:
+                when Option.Some(index) =>
+                    select:
+                        when index != 1 => return 3436
+                        else => ()
+                when Option.None => return 3437
+        when Option.None => return 3438
+
+    let commit_event = WindowEvent.CompositionCommitted :: :: call
+        id = 50
+        text = "direct-commit"
+    select commit_event.take_composition_commit_text :: :: method:
+        when Option.Some(text) =>
+            select:
+                when !text_matches :: text, "direct-commit" :: call => return 3439
+                else => ()
+        when Option.None => return 3440
+
+    return 0

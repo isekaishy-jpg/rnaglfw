@@ -1,0 +1,69 @@
+use std.Option
+
+use runa_app.{Rect, WindowId, rect}
+use runa_app_vulkan.VulkanPresentApp
+
+fn rects_match(read left: Rect, read right: Rect) -> Bool:
+    select:
+        when left.x != right.x => return false
+        when left.y != right.y => return false
+        when left.width != right.width => return false
+        when left.height != right.height => return false
+        else => return true
+
+pub fn prove_window_ime_runtime(edit present_app: VulkanPresentApp, window_id: WindowId) -> I32:
+    let owned_window = present_app.window :: :: method
+    let initial_allowed = present_app.ime_allowed :: :: method
+    let initial_area = present_app.ime_cursor_area :: :: method
+
+    select:
+        when owned_window.id != window_id => return 3250
+        else => ()
+
+    present_app.set_ime_allowed :: false :: method
+    select:
+        when present_app.ime_allowed :: :: method => return 3251
+        when owned_window.ime_allowed :: :: method => return 3252
+        else => ()
+
+    owned_window.set_ime_allowed :: true :: method
+    select:
+        when !present_app.ime_allowed :: :: method => return 3253
+        when !owned_window.ime_allowed :: :: method => return 3254
+        else => ()
+
+    let first_area = rect :: 11, 13, 17, 19 :: call
+    present_app.apply_ime_cursor_area :: first_area :: method
+    select present_app.ime_cursor_area :: :: method:
+        when Option.Some(actual_area) =>
+            select:
+                when !rects_match :: actual_area, first_area :: call => return 3255
+                else => ()
+        when Option.None => return 3256
+    select owned_window.ime_cursor_area :: :: method:
+        when Option.Some(actual_area) =>
+            select:
+                when !rects_match :: actual_area, first_area :: call => return 3257
+                else => ()
+        when Option.None => return 3258
+
+    owned_window.set_ime_cursor_area :: 23, 29, 31, 37 :: method
+    let second_area = rect :: 23, 29, 31, 37 :: call
+    select present_app.ime_cursor_area :: :: method:
+        when Option.Some(actual_area) =>
+            select:
+                when !rects_match :: actual_area, second_area :: call => return 3259
+                else => ()
+        when Option.None => return 3260
+    select owned_window.ime_cursor_area :: :: method:
+        when Option.Some(actual_area) =>
+            select:
+                when !rects_match :: actual_area, second_area :: call => return 3261
+                else => ()
+        when Option.None => return 3262
+
+    select initial_area:
+        when Option.Some(area) => present_app.apply_ime_cursor_area :: area :: method
+        when Option.None => ()
+    present_app.set_ime_allowed :: initial_allowed :: method
+    return 0

@@ -1,7 +1,7 @@
 use std.{ByteBuffer, Result}
 
 use present.{VkExtent2D, VkSurfaceFormatKHR, VulkanPresentError}
-use present.VulkanPresentSnapshot
+use present.{VulkanPresentApp, VulkanPresentContext, VulkanPresentSnapshot}
 use runa_app.{RgbaColor, RgbaImage, rgba_blend_source_over, rgba_image}
 use surface_support.surface_image_shape_from_extent
 
@@ -426,6 +426,126 @@ impl VulkanPresentSnapshot:
         select surface_pixel_frame_from_extent :: self.surface_extent, VulkanPixelFormat.Rgba8, pixels :: call:
             when Result.Ok(frame) => return frame.to_rgba_image :: :: method
             when Result.Err(err) => return Result.Err :: err :: call
+
+impl VulkanPresentContext:
+    fn surface_pixel_format(read self) -> Result[VulkanPixelFormat, VulkanPresentError]:
+        return self.surface_format.surface_pixel_format :: :: method
+
+    fn surface_pixel_count(read self) -> Result[Index, VulkanPresentError]:
+        let raw_width = self.extent.width
+        let raw_height = self.extent.height
+        select surface_image_shape_from_extent :: self.extent :: call:
+            when Result.Ok(shape) =>
+                let Result.Ok(pixel_width) = raw_width as Maybe[CInt] else =>
+                    let error = VulkanPresentError.SurfaceExtentOutOfRange :: raw_width, raw_height :: call
+                    return Result.Err :: error :: call
+                let Result.Ok(pixel_height) = raw_height as Maybe[CInt] else =>
+                    let error = VulkanPresentError.SurfaceExtentOutOfRange :: raw_width, raw_height :: call
+                    return Result.Err :: error :: call
+                let Result.Ok(width_wide) = shape.width as Maybe[USize] else =>
+                    let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
+                    return Result.Err :: error :: call
+                let Result.Ok(height_wide) = shape.height as Maybe[USize] else =>
+                    let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
+                    return Result.Err :: error :: call
+                let pixel_count_wide: USize = width_wide * height_wide
+                let Result.Ok(pixel_count) = pixel_count_wide as Maybe[Index] else =>
+                    let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
+                    return Result.Err :: error :: call
+                return Result.Ok :: pixel_count :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn surface_tight_stride(read self) -> Result[Index, VulkanPresentError]:
+        select surface_image_shape_from_extent :: self.extent :: call:
+            when Result.Ok(shape) => return Result.Ok :: shape.tight_stride :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn surface_pixel_frame(read self, read fill: RgbaColor) -> Result[VulkanPixelFrame, VulkanPresentError]:
+        select self.surface_pixel_format :: :: method:
+            when Result.Ok(format) => return self.surface_pixel_frame_with_color :: format, fill :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn surface_pixel_frame_with_color(read self, format: VulkanPixelFormat, read fill: RgbaColor) -> Result[VulkanPixelFrame, VulkanPresentError]:
+        return surface_pixel_frame_with_color :: self.extent, format, fill :: call
+
+    fn surface_pixel_frame_from_surface_bytes(read self, take pixels: ByteBuffer) -> Result[VulkanPixelFrame, VulkanPresentError]:
+        select self.surface_pixel_format :: :: method:
+            when Result.Ok(format) => return surface_pixel_frame_from_extent :: self.extent, format, pixels :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn surface_pixel_frame_from_image(read self, read image: RgbaImage) -> Result[VulkanPixelFrame, VulkanPresentError]:
+        select image.width_index :: :: method:
+            when Result.Ok(image_width) =>
+                select image.height_index :: :: method:
+                    when Result.Ok(image_height) =>
+                        select surface_image_shape_from_extent :: self.extent :: call:
+                            when Result.Ok(shape) =>
+                                select:
+                                    when image_width != shape.width || image_height != shape.height =>
+                                        let error = VulkanPresentError.PixelFrameExtentMismatch :: image_width, image_height, self.extent.width, self.extent.height :: call
+                                        return Result.Err :: error :: call
+                                    else => ()
+                            when Result.Err(err) => return Result.Err :: err :: call
+                        select self.surface_pixel_format :: :: method:
+                            when Result.Ok(format) => return vulkan_pixel_frame_from_image :: image, format :: call
+                            when Result.Err(err) => return Result.Err :: err :: call
+                    when Result.Err(err) =>
+                        let error = VulkanPresentError.ImageAccess :: err :: call
+                        return Result.Err :: error :: call
+            when Result.Err(err) =>
+                let error = VulkanPresentError.ImageAccess :: err :: call
+                return Result.Err :: error :: call
+
+    fn surface_pixel_frame_from_pixels(read self, width: Index, height: Index, stride: Index, format: VulkanPixelFormat, take pixels: ByteBuffer) -> Result[VulkanPixelFrame, VulkanPresentError]:
+        select surface_image_shape_from_extent :: self.extent :: call:
+            when Result.Ok(shape) =>
+                select:
+                    when width != shape.width || height != shape.height =>
+                        let error = VulkanPresentError.PixelFrameExtentMismatch :: width, height, self.extent.width, self.extent.height :: call
+                        return Result.Err :: error :: call
+                    else => return vulkan_pixel_frame :: width, height, stride, format, pixels :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn surface_image(read self, read fill: RgbaColor) -> Result[RgbaImage, VulkanPresentError]:
+        select self.surface_pixel_frame_with_color :: VulkanPixelFormat.Rgba8, fill :: method:
+            when Result.Ok(frame) => return frame.to_rgba_image :: :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn surface_image_from_pixels(read self, take pixels: ByteBuffer) -> Result[RgbaImage, VulkanPresentError]:
+        select surface_pixel_frame_from_extent :: self.extent, VulkanPixelFormat.Rgba8, pixels :: call:
+            when Result.Ok(frame) => return frame.to_rgba_image :: :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+impl VulkanPresentApp:
+    fn surface_pixel_format(read self) -> Result[VulkanPixelFormat, VulkanPresentError]:
+        return self.context.surface_pixel_format :: :: method
+
+    fn surface_pixel_count(read self) -> Result[Index, VulkanPresentError]:
+        return self.context.surface_pixel_count :: :: method
+
+    fn surface_tight_stride(read self) -> Result[Index, VulkanPresentError]:
+        return self.context.surface_tight_stride :: :: method
+
+    fn surface_pixel_frame(read self, read fill: RgbaColor) -> Result[VulkanPixelFrame, VulkanPresentError]:
+        return self.context.surface_pixel_frame :: fill :: method
+
+    fn surface_image(read self, read fill: RgbaColor) -> Result[RgbaImage, VulkanPresentError]:
+        return self.context.surface_image :: fill :: method
+
+    fn surface_image_from_pixels(read self, take pixels: ByteBuffer) -> Result[RgbaImage, VulkanPresentError]:
+        return self.context.surface_image_from_pixels :: pixels :: method
+
+    fn surface_pixel_frame_from_surface_bytes(read self, take pixels: ByteBuffer) -> Result[VulkanPixelFrame, VulkanPresentError]:
+        return self.context.surface_pixel_frame_from_surface_bytes :: pixels :: method
+
+    fn surface_pixel_frame_from_image(read self, read image: RgbaImage) -> Result[VulkanPixelFrame, VulkanPresentError]:
+        return self.context.surface_pixel_frame_from_image :: image :: method
+
+    fn surface_pixel_frame_with_color(read self, format: VulkanPixelFormat, read fill: RgbaColor) -> Result[VulkanPixelFrame, VulkanPresentError]:
+        return self.context.surface_pixel_frame_with_color :: format, fill :: method
+
+    fn surface_pixel_frame_from_pixels(read self, width: Index, height: Index, stride: Index, format: VulkanPixelFormat, take pixels: ByteBuffer) -> Result[VulkanPixelFrame, VulkanPresentError]:
+        return self.context.surface_pixel_frame_from_pixels :: width, height, stride, format, pixels :: method
 
 impl VulkanPixelFrame:
     fn width(read self) -> Index:

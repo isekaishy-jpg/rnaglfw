@@ -1,0 +1,233 @@
+use std.{List, Option, Result}
+use event.{WindowEvent, WindowTouchData}
+use runtime.{App, AppError}
+use window.WindowId
+
+impl App:
+    fn next_touch_data(edit self) -> Option[WindowTouchData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_touch_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn next_touch_data_for(edit self, id: WindowId) -> Option[WindowTouchData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_touch_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn next_touch_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_touch_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_touch_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_touch_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn poll_next_touch_data(edit self) -> Result[Option[WindowTouchData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_touch_data :: :: method :: call
+
+    fn poll_next_touch_data_for(edit self, id: WindowId) -> Result[Option[WindowTouchData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_touch_data_for :: id :: method :: call
+
+    fn poll_next_touch_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_touch_event :: :: method :: call
+
+    fn poll_next_touch_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_touch_event_for :: id :: method :: call
+
+    fn wait_next_touch_data(edit self) -> Result[Option[WindowTouchData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_touch_data :: :: method :: call
+
+    fn wait_next_touch_data_for(edit self, id: WindowId) -> Result[Option[WindowTouchData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_touch_data_for :: id :: method :: call
+
+    fn wait_next_touch_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_touch_event :: :: method :: call
+
+    fn wait_next_touch_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_touch_event_for :: id :: method :: call
+
+    fn wait_timeout_next_touch_data(edit self, timeout: F64) -> Result[Option[WindowTouchData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_touch_data :: :: method :: call
+
+    fn wait_timeout_next_touch_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowTouchData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_touch_data_for :: id :: method :: call
+
+    fn wait_timeout_next_touch_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_touch_event :: :: method :: call
+
+    fn wait_timeout_next_touch_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_touch_event_for :: id :: method :: call
+
+    fn pending_touch_data(edit self) -> List[WindowTouchData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.touch_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_touch_data_for(edit self, id: WindowId) -> List[WindowTouchData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.touch_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_touch_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.touch_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_touch_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.touch_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_touch_data(edit self) -> List[WindowTouchData]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        let batch = self.take_event_batch :: :: method
+        let data = batch.take_touch_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_touch_data_for(edit self, id: WindowId) -> List[WindowTouchData]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        let batch = self.take_event_batch :: :: method
+        let data = batch.take_touch_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_touch_events(edit self) -> List[WindowEvent]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        let batch = self.take_event_batch :: :: method
+        let events = batch.take_touch_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_touch_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        let batch = self.take_event_batch :: :: method
+        let events = batch.take_touch_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_touch_data(edit self) -> List[WindowTouchData]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        let batch = self.take_event_batch :: :: method
+        let data = batch.take_touch_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_touch_data_for(edit self, id: WindowId) -> List[WindowTouchData]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        let batch = self.take_event_batch :: :: method
+        let data = batch.take_touch_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_touch_events(edit self) -> List[WindowEvent]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        let batch = self.take_event_batch :: :: method
+        let events = batch.take_touch_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_touch_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        let batch = self.take_event_batch :: :: method
+        let events = batch.take_touch_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_touch_data(edit self, timeout: F64) -> List[WindowTouchData]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        let batch = self.take_event_batch :: :: method
+        let data = batch.take_touch_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_touch_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowTouchData]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        let batch = self.take_event_batch :: :: method
+        let data = batch.take_touch_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_touch_events(edit self, timeout: F64) -> List[WindowEvent]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        let batch = self.take_event_batch :: :: method
+        let events = batch.take_touch_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_touch_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        let batch = self.take_event_batch :: :: method
+        let events = batch.take_touch_events_for :: id :: method
+        self.pending = batch.events
+        return events

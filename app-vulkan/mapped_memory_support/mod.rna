@@ -1,0 +1,63 @@
+use std.Result
+
+use present.{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, VK_SUCCESS}
+use present.{VkDeviceMemory, VkMappedMemoryRange, VulkanBuffer}
+use present.{VulkanPresentApp, VulkanPresentContext, VulkanPresentError}
+
+fn mapped_memory_range(memory: VkDeviceMemory, size: U64) -> VkMappedMemoryRange:
+    return VkMappedMemoryRange :: :: call
+        stype = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE
+        pnext = null
+        memory = memory
+        offset = 0U64
+        size = size
+
+impl VulkanPresentContext:
+    fn flush_mapped_memory(read self, memory: VkDeviceMemory, size: U64) -> Result[Unit, VulkanPresentError]:
+        let range = mapped_memory_range :: memory, size :: call
+        let range_ptr: *read VkMappedMemoryRange = #unsafe &raw read range
+        let flush_result = #unsafe self.flush_mapped_memory_ranges :: self.device, 1, range_ptr :: call
+        select:
+            when flush_result != VK_SUCCESS =>
+                let error = VulkanPresentError.MappedMemoryFlushFailed :: flush_result :: call
+                return Result.Err :: error :: call
+            else => return Result.Ok :: :: call
+
+    fn invalidate_mapped_memory(read self, memory: VkDeviceMemory, size: U64) -> Result[Unit, VulkanPresentError]:
+        let range = mapped_memory_range :: memory, size :: call
+        let range_ptr: *read VkMappedMemoryRange = #unsafe &raw read range
+        let invalidate_result = #unsafe self.invalidate_mapped_memory_ranges :: self.device, 1, range_ptr :: call
+        select:
+            when invalidate_result != VK_SUCCESS =>
+                let error = VulkanPresentError.MappedMemoryInvalidateFailed :: invalidate_result :: call
+                return Result.Err :: error :: call
+            else => return Result.Ok :: :: call
+
+    fn flush_buffer(read self, read buffer: VulkanBuffer) -> Result[Unit, VulkanPresentError]:
+        select:
+            when buffer.host_coherent :: :: method => return Result.Ok :: :: call
+            else =>
+                let memory = buffer.memory_handle :: :: method
+                let size = buffer.allocation_size :: :: method
+                return self.flush_mapped_memory :: memory, size :: method
+
+    fn invalidate_buffer(read self, read buffer: VulkanBuffer) -> Result[Unit, VulkanPresentError]:
+        select:
+            when buffer.host_coherent :: :: method => return Result.Ok :: :: call
+            else =>
+                let memory = buffer.memory_handle :: :: method
+                let size = buffer.allocation_size :: :: method
+                return self.invalidate_mapped_memory :: memory, size :: method
+
+impl VulkanPresentApp:
+    fn flush_mapped_memory(read self, memory: VkDeviceMemory, size: U64) -> Result[Unit, VulkanPresentError]:
+        return self.context.flush_mapped_memory :: memory, size :: method
+
+    fn invalidate_mapped_memory(read self, memory: VkDeviceMemory, size: U64) -> Result[Unit, VulkanPresentError]:
+        return self.context.invalidate_mapped_memory :: memory, size :: method
+
+    fn flush_buffer(read self, read buffer: VulkanBuffer) -> Result[Unit, VulkanPresentError]:
+        return self.context.flush_buffer :: buffer :: method
+
+    fn invalidate_buffer(read self, read buffer: VulkanBuffer) -> Result[Unit, VulkanPresentError]:
+        return self.context.invalidate_buffer :: buffer :: method

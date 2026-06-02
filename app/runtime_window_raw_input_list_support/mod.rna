@@ -1,0 +1,390 @@
+use std.List
+use event.{WindowEvent, WindowRawKeyData, WindowRawMouseButtonData, WindowRawMouseMotionData}
+use event.WindowRawMouseWheelData
+use runtime.App
+use window.WindowId
+
+impl App:
+    fn pending_raw_mouse_motion_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.raw_mouse_motion_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_raw_key_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.raw_key_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_raw_mouse_button_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.raw_mouse_button_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_raw_mouse_wheel_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.raw_mouse_wheel_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_raw_mouse_motion_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.raw_mouse_motion_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_raw_key_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.raw_key_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_raw_mouse_button_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.raw_mouse_button_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_raw_mouse_wheel_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.raw_mouse_wheel_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_raw_mouse_motion_data(edit self) -> List[WindowRawMouseMotionData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.raw_mouse_motion_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_raw_key_data(edit self) -> List[WindowRawKeyData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.raw_key_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_raw_mouse_button_data(edit self) -> List[WindowRawMouseButtonData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.raw_mouse_button_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_raw_mouse_wheel_data(edit self) -> List[WindowRawMouseWheelData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.raw_mouse_wheel_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_raw_mouse_motion_data_for(edit self, id: WindowId) -> List[WindowRawMouseMotionData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.raw_mouse_motion_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_raw_key_data_for(edit self, id: WindowId) -> List[WindowRawKeyData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.raw_key_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_raw_mouse_button_data_for(edit self, id: WindowId) -> List[WindowRawMouseButtonData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.raw_mouse_button_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_raw_mouse_wheel_data_for(edit self, id: WindowId) -> List[WindowRawMouseWheelData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.raw_mouse_wheel_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_raw_mouse_motion_data(edit self) -> List[WindowRawMouseMotionData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_raw_mouse_motion_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_raw_key_data(edit self) -> List[WindowRawKeyData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_raw_key_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_raw_mouse_button_data(edit self) -> List[WindowRawMouseButtonData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_raw_mouse_button_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_raw_mouse_wheel_data(edit self) -> List[WindowRawMouseWheelData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_raw_mouse_wheel_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_raw_mouse_motion_data_for(edit self, id: WindowId) -> List[WindowRawMouseMotionData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_raw_mouse_motion_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_raw_key_data_for(edit self, id: WindowId) -> List[WindowRawKeyData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_raw_key_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_raw_mouse_button_data_for(edit self, id: WindowId) -> List[WindowRawMouseButtonData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_raw_mouse_button_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_raw_mouse_wheel_data_for(edit self, id: WindowId) -> List[WindowRawMouseWheelData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_raw_mouse_wheel_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_raw_mouse_motion_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_raw_mouse_motion_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_raw_key_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_raw_key_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_raw_mouse_button_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_raw_mouse_button_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_raw_mouse_wheel_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_raw_mouse_wheel_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_raw_mouse_motion_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_raw_mouse_motion_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_raw_key_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_raw_key_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_raw_mouse_button_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_raw_mouse_button_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_raw_mouse_wheel_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_raw_mouse_wheel_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_raw_mouse_motion_data(edit self) -> List[WindowRawMouseMotionData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_raw_mouse_motion_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_raw_key_data(edit self) -> List[WindowRawKeyData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_raw_key_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_raw_mouse_button_data(edit self) -> List[WindowRawMouseButtonData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_raw_mouse_button_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_raw_mouse_wheel_data(edit self) -> List[WindowRawMouseWheelData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_raw_mouse_wheel_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_raw_mouse_motion_data_for(edit self, id: WindowId) -> List[WindowRawMouseMotionData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_raw_mouse_motion_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_raw_key_data_for(edit self, id: WindowId) -> List[WindowRawKeyData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_raw_key_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_raw_mouse_button_data_for(edit self, id: WindowId) -> List[WindowRawMouseButtonData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_raw_mouse_button_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_raw_mouse_wheel_data_for(edit self, id: WindowId) -> List[WindowRawMouseWheelData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_raw_mouse_wheel_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_raw_mouse_motion_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_raw_mouse_motion_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_raw_key_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_raw_key_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_raw_mouse_button_changed_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_raw_mouse_button_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_raw_mouse_wheel_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_raw_mouse_wheel_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_raw_mouse_motion_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_raw_mouse_motion_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_raw_key_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_raw_key_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_raw_mouse_button_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_raw_mouse_button_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_raw_mouse_wheel_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_raw_mouse_wheel_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_raw_mouse_motion_data(edit self, timeout: F64) -> List[WindowRawMouseMotionData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_raw_mouse_motion_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_raw_key_data(edit self, timeout: F64) -> List[WindowRawKeyData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_raw_key_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_raw_mouse_button_data(edit self, timeout: F64) -> List[WindowRawMouseButtonData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_raw_mouse_button_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_raw_mouse_wheel_data(edit self, timeout: F64) -> List[WindowRawMouseWheelData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_raw_mouse_wheel_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_raw_mouse_motion_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowRawMouseMotionData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_raw_mouse_motion_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_raw_key_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowRawKeyData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_raw_key_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_raw_mouse_button_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowRawMouseButtonData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_raw_mouse_button_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_raw_mouse_wheel_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowRawMouseWheelData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_raw_mouse_wheel_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_raw_mouse_motion_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_raw_mouse_motion_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_raw_key_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_raw_key_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_raw_mouse_button_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_raw_mouse_button_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_raw_mouse_wheel_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_raw_mouse_wheel_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_raw_mouse_motion_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_raw_mouse_motion_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_raw_key_changed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_raw_key_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_raw_mouse_button_changed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_raw_mouse_button_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_raw_mouse_wheel_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_raw_mouse_wheel_events_for :: id :: method
+        self.pending = batch.events
+        return events

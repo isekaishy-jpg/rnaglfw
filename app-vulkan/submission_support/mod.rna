@@ -1,0 +1,188 @@
+use std.{Option, Result}
+
+use command_support.finish_recording_command_resources_sync
+use present.{VK_STRUCTURE_TYPE_SUBMIT_INFO, VK_SUCCESS, VkCommandBuffer, VkSubmitInfo, VulkanCommandResources, VulkanFenceResource, VulkanPresentApp, VulkanPresentContext, VulkanPresentError, VulkanSemaphoreResource}
+
+fn submit_info_for_command_resources(read resources: VulkanCommandResources, read wait: Option[VulkanSemaphoreResource], wait_stage_mask: CUInt, read signal: Option[VulkanSemaphoreResource]) -> VkSubmitInfo:
+    let wait_count: CUInt = 0
+    let wait_semaphores: [U64; 1] = [0U64]
+    let wait_stage_masks: [CUInt; 1] = [wait_stage_mask]
+    let wait_semaphore_ptr: *read U64 = null
+    let wait_stage_mask_ptr: *read CUInt = null
+    select wait:
+        when Option.Some(resource) =>
+            wait_count = 1
+            wait_semaphores[0] = resource.semaphore_handle :: :: method
+            wait_semaphore_ptr = #unsafe &raw read wait_semaphores[0]
+            wait_stage_mask_ptr = #unsafe &raw read wait_stage_masks[0]
+        when Option.None => ()
+    let signal_count: CUInt = 0
+    let signal_semaphores: [U64; 1] = [0U64]
+    let signal_semaphore_ptr: *read U64 = null
+    select signal:
+        when Option.Some(resource) =>
+            signal_count = 1
+            signal_semaphores[0] = resource.semaphore_handle :: :: method
+            signal_semaphore_ptr = #unsafe &raw read signal_semaphores[0]
+        when Option.None => ()
+    let command_buffers: [VkCommandBuffer; 1] = [resources.command_buffer_handle :: :: method]
+    let command_buffer_ptr: *read VkCommandBuffer = #unsafe &raw read command_buffers[0]
+    let submit_info = VkSubmitInfo :: :: call
+        stype = VK_STRUCTURE_TYPE_SUBMIT_INFO
+        pnext = null
+        wait_semaphore_count = wait_count
+        wait_semaphores = wait_semaphore_ptr
+        wait_dst_stage_mask = wait_stage_mask_ptr
+        command_buffer_count = 1
+        command_buffers = command_buffer_ptr
+        signal_semaphore_count = signal_count
+        signal_semaphores = signal_semaphore_ptr
+    return submit_info
+
+impl VulkanPresentContext:
+    fn finish_recording_command_resources(read self, take resources: VulkanCommandResources) -> Result[Unit, VulkanPresentError]:
+        return finish_recording_command_resources_sync :: self, resources :: call
+
+    fn finish_recording_command_resources_async(read self, take resources: VulkanCommandResources, read wait: Option[VulkanSemaphoreResource], wait_stage_mask: CUInt, read signal: Option[VulkanSemaphoreResource]) -> Result[Unit, VulkanPresentError]:
+        select self.end_command_resources :: resources :: method:
+            when Result.Ok(_) =>
+                select self.submit_command_resources_async :: resources, wait, wait_stage_mask, signal :: method:
+                    when Result.Ok(_) =>
+                        self.destroy_command_resources :: resources :: method
+                        return Result.Ok :: :: call
+                    when Result.Err(err) =>
+                        self.destroy_command_resources :: resources :: method
+                        return Result.Err :: err :: call
+            when Result.Err(err) =>
+                self.destroy_command_resources :: resources :: method
+                return Result.Err :: err :: call
+
+    fn submit_command_resources(read self, read resources: VulkanCommandResources) -> Result[Unit, VulkanPresentError]:
+        let no_wait: Option[VulkanSemaphoreResource] = Option.None
+        let no_signal: Option[VulkanSemaphoreResource] = Option.None
+        let submit_info = submit_info_for_command_resources :: resources, no_wait, 0, no_signal :: call
+        let submit_info_ptr: *read VkSubmitInfo = #unsafe &raw read submit_info
+        let submit_result = #unsafe self.queue_submit :: self.queue, 1, submit_info_ptr, 0U64 :: call
+        select:
+            when submit_result != VK_SUCCESS =>
+                let error = VulkanPresentError.SubmitFailed :: submit_result :: call
+                return Result.Err :: error :: call
+            else => ()
+        return self.wait_queue_idle :: :: method
+
+    fn submit_command_resources_async(read self, read resources: VulkanCommandResources, read wait: Option[VulkanSemaphoreResource], wait_stage_mask: CUInt, read signal: Option[VulkanSemaphoreResource]) -> Result[Unit, VulkanPresentError]:
+        let submit_info = submit_info_for_command_resources :: resources, wait, wait_stage_mask, signal :: call
+        let submit_info_ptr: *read VkSubmitInfo = #unsafe &raw read submit_info
+        let submit_result = #unsafe self.queue_submit :: self.queue, 1, submit_info_ptr, 0U64 :: call
+        select:
+            when submit_result != VK_SUCCESS =>
+                let error = VulkanPresentError.SubmitFailed :: submit_result :: call
+                return Result.Err :: error :: call
+            else => return Result.Ok :: :: call
+
+    fn wait_queue_idle(read self) -> Result[Unit, VulkanPresentError]:
+        let wait_result = #unsafe self.queue_wait_idle :: self.queue :: call
+        select:
+            when wait_result != VK_SUCCESS =>
+                let error = VulkanPresentError.QueueWaitIdleFailed :: wait_result :: call
+                return Result.Err :: error :: call
+            else => return Result.Ok :: :: call
+
+    fn wait_device_idle(read self) -> Result[Unit, VulkanPresentError]:
+        let wait_result = #unsafe self.device_wait_idle :: self.device :: call
+        select:
+            when wait_result != VK_SUCCESS =>
+                let error = VulkanPresentError.DeviceWaitIdleFailed :: wait_result :: call
+                return Result.Err :: error :: call
+            else => return Result.Ok :: :: call
+
+    fn submit_command_resources_with_fence(read self, read resources: VulkanCommandResources, read fence: VulkanFenceResource) -> Result[Unit, VulkanPresentError]:
+        select self.reset_fence :: fence :: method:
+            when Result.Ok(_) => ()
+            when Result.Err(err) => return Result.Err :: err :: call
+        let no_wait: Option[VulkanSemaphoreResource] = Option.None
+        let no_signal: Option[VulkanSemaphoreResource] = Option.None
+        let submit_info = submit_info_for_command_resources :: resources, no_wait, 0, no_signal :: call
+        let submit_info_ptr: *read VkSubmitInfo = #unsafe &raw read submit_info
+        let fence_handle = fence.fence_handle :: :: method
+        let submit_result = #unsafe self.queue_submit :: self.queue, 1, submit_info_ptr, fence_handle :: call
+        select:
+            when submit_result != VK_SUCCESS =>
+                let error = VulkanPresentError.SubmitFailed :: submit_result :: call
+                return Result.Err :: error :: call
+            else => return Result.Ok :: :: call
+
+    fn submit_command_resources_async_with_fence(read self, read resources: VulkanCommandResources, read wait: Option[VulkanSemaphoreResource], wait_stage_mask: CUInt, read signal: Option[VulkanSemaphoreResource], read fence: VulkanFenceResource) -> Result[Unit, VulkanPresentError]:
+        select self.reset_fence :: fence :: method:
+            when Result.Ok(_) => ()
+            when Result.Err(err) => return Result.Err :: err :: call
+        let submit_info = submit_info_for_command_resources :: resources, wait, wait_stage_mask, signal :: call
+        let submit_info_ptr: *read VkSubmitInfo = #unsafe &raw read submit_info
+        let fence_handle = fence.fence_handle :: :: method
+        let submit_result = #unsafe self.queue_submit :: self.queue, 1, submit_info_ptr, fence_handle :: call
+        select:
+            when submit_result != VK_SUCCESS =>
+                let error = VulkanPresentError.SubmitFailed :: submit_result :: call
+                return Result.Err :: error :: call
+            else => return Result.Ok :: :: call
+
+    fn finish_recording_command_resources_with_fence(read self, take resources: VulkanCommandResources, read fence: VulkanFenceResource) -> Result[Unit, VulkanPresentError]:
+        select self.end_command_resources :: resources :: method:
+            when Result.Ok(_) =>
+                select self.submit_command_resources_with_fence :: resources, fence :: method:
+                    when Result.Ok(_) =>
+                        self.destroy_command_resources :: resources :: method
+                        return Result.Ok :: :: call
+                    when Result.Err(err) =>
+                        self.destroy_command_resources :: resources :: method
+                        return Result.Err :: err :: call
+            when Result.Err(err) =>
+                self.destroy_command_resources :: resources :: method
+                return Result.Err :: err :: call
+
+    fn finish_recording_command_resources_async_with_fence(read self, take resources: VulkanCommandResources, read wait: Option[VulkanSemaphoreResource], wait_stage_mask: CUInt, read signal: Option[VulkanSemaphoreResource], read fence: VulkanFenceResource) -> Result[Unit, VulkanPresentError]:
+        select self.end_command_resources :: resources :: method:
+            when Result.Ok(_) =>
+                select self.submit_command_resources_async_with_fence :: resources, wait, wait_stage_mask, signal, fence :: method:
+                    when Result.Ok(_) =>
+                        self.destroy_command_resources :: resources :: method
+                        return Result.Ok :: :: call
+                    when Result.Err(err) =>
+                        self.destroy_command_resources :: resources :: method
+                        return Result.Err :: err :: call
+            when Result.Err(err) =>
+                self.destroy_command_resources :: resources :: method
+                return Result.Err :: err :: call
+
+impl VulkanPresentApp:
+    fn finish_recording_command_resources(read self, take resources: VulkanCommandResources) -> Result[Unit, VulkanPresentError]:
+        return self.context.finish_recording_command_resources :: resources :: method
+
+    fn finish_recording_command_resources_async(read self, take resources: VulkanCommandResources, read wait: Option[VulkanSemaphoreResource], wait_stage_mask: CUInt, read signal: Option[VulkanSemaphoreResource]) -> Result[Unit, VulkanPresentError]:
+        return self.context.finish_recording_command_resources_async :: resources, wait, wait_stage_mask, signal :: method
+
+    fn submit_command_resources(read self, read resources: VulkanCommandResources) -> Result[Unit, VulkanPresentError]:
+        return self.context.submit_command_resources :: resources :: method
+
+    fn submit_command_resources_async(read self, read resources: VulkanCommandResources, read wait: Option[VulkanSemaphoreResource], wait_stage_mask: CUInt, read signal: Option[VulkanSemaphoreResource]) -> Result[Unit, VulkanPresentError]:
+        return self.context.submit_command_resources_async :: resources, wait, wait_stage_mask, signal :: method
+
+    fn wait_queue_idle(read self) -> Result[Unit, VulkanPresentError]:
+        return self.context.wait_queue_idle :: :: method
+
+    fn wait_device_idle(read self) -> Result[Unit, VulkanPresentError]:
+        return self.context.wait_device_idle :: :: method
+
+    fn submit_command_resources_with_fence(read self, read resources: VulkanCommandResources, read fence: VulkanFenceResource) -> Result[Unit, VulkanPresentError]:
+        return self.context.submit_command_resources_with_fence :: resources, fence :: method
+
+    fn submit_command_resources_async_with_fence(read self, read resources: VulkanCommandResources, read wait: Option[VulkanSemaphoreResource], wait_stage_mask: CUInt, read signal: Option[VulkanSemaphoreResource], read fence: VulkanFenceResource) -> Result[Unit, VulkanPresentError]:
+        return self.context.submit_command_resources_async_with_fence :: resources, wait, wait_stage_mask, signal, fence :: method
+
+    fn finish_recording_command_resources_with_fence(read self, take resources: VulkanCommandResources, read fence: VulkanFenceResource) -> Result[Unit, VulkanPresentError]:
+        return self.context.finish_recording_command_resources_with_fence :: resources, fence :: method
+
+    fn finish_recording_command_resources_async_with_fence(read self, take resources: VulkanCommandResources, read wait: Option[VulkanSemaphoreResource], wait_stage_mask: CUInt, read signal: Option[VulkanSemaphoreResource], read fence: VulkanFenceResource) -> Result[Unit, VulkanPresentError]:
+        return self.context.finish_recording_command_resources_async_with_fence :: resources, wait, wait_stage_mask, signal, fence :: method
+
+

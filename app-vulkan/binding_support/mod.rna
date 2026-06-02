@@ -93,5 +93,8 @@ impl VulkanPresentContext:
         return snapshot
 
 impl VulkanPresentApp:
+    fn present_snapshot(read self) -> VulkanPresentSnapshot:
+        return self.context.present_snapshot :: self.window.id :: method
+
     fn bindings(read self) -> VulkanPresentBindings:
         return self.context.bindings :: :: method

@@ -1,0 +1,197 @@
+use std.{List, Option, Result}
+use runa_app.{AppError, WindowEvent, WindowId}
+use runa_app.{WindowRawMouseButtonData, WindowRawMouseWheelData}
+use present.VulkanPresentApp
+
+impl VulkanPresentApp:
+    fn next_raw_mouse_button_data(edit self) -> Option[WindowRawMouseButtonData]:
+        return self.app.next_raw_mouse_button_data_for :: self.window.id :: method
+
+    fn next_raw_mouse_wheel_data(edit self) -> Option[WindowRawMouseWheelData]:
+        return self.app.next_raw_mouse_wheel_data_for :: self.window.id :: method
+
+    fn next_raw_mouse_button_data_for(edit self, id: WindowId) -> Option[WindowRawMouseButtonData]:
+        return self.app.next_raw_mouse_button_data_for :: id :: method
+
+    fn next_raw_mouse_wheel_data_for(edit self, id: WindowId) -> Option[WindowRawMouseWheelData]:
+        return self.app.next_raw_mouse_wheel_data_for :: id :: method
+
+    fn next_raw_mouse_button_changed_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_raw_mouse_button_changed_event_for :: self.window.id :: method
+
+    fn next_raw_mouse_wheel_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_raw_mouse_wheel_event_for :: self.window.id :: method
+
+    fn next_raw_mouse_button_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_raw_mouse_button_changed_event_for :: id :: method
+
+    fn next_raw_mouse_wheel_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_raw_mouse_wheel_event_for :: id :: method
+
+    fn poll_next_raw_mouse_button_data(edit self) -> Result[Option[WindowRawMouseButtonData], AppError]:
+        return self.app.poll_next_raw_mouse_button_data_for :: self.window.id :: method
+
+    fn poll_next_raw_mouse_wheel_data(edit self) -> Result[Option[WindowRawMouseWheelData], AppError]:
+        return self.app.poll_next_raw_mouse_wheel_data_for :: self.window.id :: method
+
+    fn poll_next_raw_mouse_button_data_for(edit self, id: WindowId) -> Result[Option[WindowRawMouseButtonData], AppError]:
+        return self.app.poll_next_raw_mouse_button_data_for :: id :: method
+
+    fn poll_next_raw_mouse_wheel_data_for(edit self, id: WindowId) -> Result[Option[WindowRawMouseWheelData], AppError]:
+        return self.app.poll_next_raw_mouse_wheel_data_for :: id :: method
+
+    fn poll_next_raw_mouse_button_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_raw_mouse_button_changed_event_for :: self.window.id :: method
+
+    fn poll_next_raw_mouse_wheel_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_raw_mouse_wheel_event_for :: self.window.id :: method
+
+    fn poll_next_raw_mouse_button_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_raw_mouse_button_changed_event_for :: id :: method
+
+    fn poll_next_raw_mouse_wheel_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_raw_mouse_wheel_event_for :: id :: method
+
+    fn wait_next_raw_mouse_button_data(edit self) -> Result[Option[WindowRawMouseButtonData], AppError]:
+        return self.app.wait_next_raw_mouse_button_data_for :: self.window.id :: method
+
+    fn wait_next_raw_mouse_wheel_data(edit self) -> Result[Option[WindowRawMouseWheelData], AppError]:
+        return self.app.wait_next_raw_mouse_wheel_data_for :: self.window.id :: method
+
+    fn wait_next_raw_mouse_button_data_for(edit self, id: WindowId) -> Result[Option[WindowRawMouseButtonData], AppError]:
+        return self.app.wait_next_raw_mouse_button_data_for :: id :: method
+
+    fn wait_next_raw_mouse_wheel_data_for(edit self, id: WindowId) -> Result[Option[WindowRawMouseWheelData], AppError]:
+        return self.app.wait_next_raw_mouse_wheel_data_for :: id :: method
+
+    fn wait_next_raw_mouse_button_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_raw_mouse_button_changed_event_for :: self.window.id :: method
+
+    fn wait_next_raw_mouse_wheel_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_raw_mouse_wheel_event_for :: self.window.id :: method
+
+    fn wait_next_raw_mouse_button_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_raw_mouse_button_changed_event_for :: id :: method
+
+    fn wait_next_raw_mouse_wheel_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_raw_mouse_wheel_event_for :: id :: method
+
+    fn wait_timeout_next_raw_mouse_button_data(edit self, timeout: F64) -> Result[Option[WindowRawMouseButtonData], AppError]:
+        return self.app.wait_timeout_next_raw_mouse_button_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_raw_mouse_wheel_data(edit self, timeout: F64) -> Result[Option[WindowRawMouseWheelData], AppError]:
+        return self.app.wait_timeout_next_raw_mouse_wheel_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_raw_mouse_button_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowRawMouseButtonData], AppError]:
+        return self.app.wait_timeout_next_raw_mouse_button_data_for :: id, timeout :: method
+
+    fn wait_timeout_next_raw_mouse_wheel_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowRawMouseWheelData], AppError]:
+        return self.app.wait_timeout_next_raw_mouse_wheel_data_for :: id, timeout :: method
+
+    fn wait_timeout_next_raw_mouse_button_changed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_raw_mouse_button_changed_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_raw_mouse_wheel_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_raw_mouse_wheel_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_raw_mouse_button_changed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_raw_mouse_button_changed_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_raw_mouse_wheel_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_raw_mouse_wheel_event_for :: id, timeout :: method
+
+    fn pending_raw_mouse_button_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_raw_mouse_button_changed_events_for :: self.window.id :: method
+
+    fn pending_raw_mouse_wheel_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_raw_mouse_wheel_events_for :: self.window.id :: method
+
+    fn pending_raw_mouse_button_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_raw_mouse_button_changed_events_for :: id :: method
+
+    fn pending_raw_mouse_wheel_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_raw_mouse_wheel_events_for :: id :: method
+
+    fn pending_raw_mouse_button_data(edit self) -> List[WindowRawMouseButtonData]:
+        return self.app.pending_raw_mouse_button_data_for :: self.window.id :: method
+
+    fn pending_raw_mouse_wheel_data(edit self) -> List[WindowRawMouseWheelData]:
+        return self.app.pending_raw_mouse_wheel_data_for :: self.window.id :: method
+
+    fn pending_raw_mouse_button_data_for(edit self, id: WindowId) -> List[WindowRawMouseButtonData]:
+        return self.app.pending_raw_mouse_button_data_for :: id :: method
+
+    fn pending_raw_mouse_wheel_data_for(edit self, id: WindowId) -> List[WindowRawMouseWheelData]:
+        return self.app.pending_raw_mouse_wheel_data_for :: id :: method
+
+    fn poll_raw_mouse_button_data(edit self) -> List[WindowRawMouseButtonData]:
+        return self.app.poll_raw_mouse_button_data_for :: self.window.id :: method
+
+    fn poll_raw_mouse_wheel_data(edit self) -> List[WindowRawMouseWheelData]:
+        return self.app.poll_raw_mouse_wheel_data_for :: self.window.id :: method
+
+    fn poll_raw_mouse_button_data_for(edit self, id: WindowId) -> List[WindowRawMouseButtonData]:
+        return self.app.poll_raw_mouse_button_data_for :: id :: method
+
+    fn poll_raw_mouse_wheel_data_for(edit self, id: WindowId) -> List[WindowRawMouseWheelData]:
+        return self.app.poll_raw_mouse_wheel_data_for :: id :: method
+
+    fn poll_raw_mouse_button_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_raw_mouse_button_changed_events_for :: self.window.id :: method
+
+    fn poll_raw_mouse_wheel_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_raw_mouse_wheel_events_for :: self.window.id :: method
+
+    fn poll_raw_mouse_button_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_raw_mouse_button_changed_events_for :: id :: method
+
+    fn poll_raw_mouse_wheel_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_raw_mouse_wheel_events_for :: id :: method
+
+    fn wait_raw_mouse_button_data(edit self) -> List[WindowRawMouseButtonData]:
+        return self.app.wait_raw_mouse_button_data_for :: self.window.id :: method
+
+    fn wait_raw_mouse_wheel_data(edit self) -> List[WindowRawMouseWheelData]:
+        return self.app.wait_raw_mouse_wheel_data_for :: self.window.id :: method
+
+    fn wait_raw_mouse_button_data_for(edit self, id: WindowId) -> List[WindowRawMouseButtonData]:
+        return self.app.wait_raw_mouse_button_data_for :: id :: method
+
+    fn wait_raw_mouse_wheel_data_for(edit self, id: WindowId) -> List[WindowRawMouseWheelData]:
+        return self.app.wait_raw_mouse_wheel_data_for :: id :: method
+
+    fn wait_raw_mouse_button_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_raw_mouse_button_changed_events_for :: self.window.id :: method
+
+    fn wait_raw_mouse_wheel_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_raw_mouse_wheel_events_for :: self.window.id :: method
+
+    fn wait_raw_mouse_button_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_raw_mouse_button_changed_events_for :: id :: method
+
+    fn wait_raw_mouse_wheel_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_raw_mouse_wheel_events_for :: id :: method
+
+    fn wait_timeout_raw_mouse_button_data(edit self, timeout: F64) -> List[WindowRawMouseButtonData]:
+        return self.app.wait_timeout_raw_mouse_button_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_raw_mouse_wheel_data(edit self, timeout: F64) -> List[WindowRawMouseWheelData]:
+        return self.app.wait_timeout_raw_mouse_wheel_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_raw_mouse_button_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowRawMouseButtonData]:
+        return self.app.wait_timeout_raw_mouse_button_data_for :: id, timeout :: method
+
+    fn wait_timeout_raw_mouse_wheel_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowRawMouseWheelData]:
+        return self.app.wait_timeout_raw_mouse_wheel_data_for :: id, timeout :: method
+
+    fn wait_timeout_raw_mouse_button_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_raw_mouse_button_changed_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_raw_mouse_wheel_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_raw_mouse_wheel_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_raw_mouse_button_changed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_raw_mouse_button_changed_events_for :: id, timeout :: method
+
+    fn wait_timeout_raw_mouse_wheel_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_raw_mouse_wheel_events_for :: id, timeout :: method

@@ -1,0 +1,34 @@
+use std.{Option, Result}
+
+use runa_app.WindowId
+use runa_app_vulkan.VulkanPresentApp
+
+pub fn prove_window_redraw_runtime(edit present_app: VulkanPresentApp, window_id: WindowId) -> I32:
+    present_app.poll_redraw_requested_events_for :: window_id :: method
+    present_app.request_redraw :: :: method
+    present_app.request_redraw :: :: method
+    let redraw_events = present_app.poll_redraw_requested_events_for :: window_id :: method
+    select:
+        when redraw_events.count :: :: method != 1 => return 3200
+        when redraw_events[0].window_id :: :: method != window_id => return 3201
+        else => ()
+
+    let owned_window = present_app.window :: :: method
+    owned_window.request_redraw :: :: method
+    select present_app.wait_next_redraw_requested_event_for :: window_id :: method:
+        when Result.Ok(Option.Some(event)) =>
+            select:
+                when event.window_id :: :: method != window_id => return 3202
+                else => ()
+        when Result.Ok(Option.None) => return 3203
+        when Result.Err(_) => return 3204
+
+    present_app.request_redraw :: :: method
+    select present_app.wait_timeout_next_redraw_requested_event_for :: window_id, 0.0 :: method:
+        when Result.Ok(Option.Some(event)) =>
+            select:
+                when event.window_id :: :: method != window_id => return 3205
+                else => ()
+        when Result.Ok(Option.None) => return 3206
+        when Result.Err(_) => return 3207
+    return 0

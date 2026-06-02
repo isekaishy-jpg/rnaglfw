@@ -1,0 +1,292 @@
+use std.{List, Option, Result, Str}
+use runa_app.{AppError, WindowCompositionData, WindowEvent, WindowId}
+use present.VulkanPresentApp
+
+impl VulkanPresentApp:
+    fn next_composition_data(edit self) -> Option[WindowCompositionData]:
+        return self.app.next_composition_data_for :: self.window.id :: method
+
+    fn next_composition_commit_text(edit self) -> Option[Str]:
+        return self.app.next_composition_commit_text_for :: self.window.id :: method
+
+    fn next_composition_data_for(edit self, id: WindowId) -> Option[WindowCompositionData]:
+        return self.app.next_composition_data_for :: id :: method
+
+    fn next_composition_commit_text_for(edit self, id: WindowId) -> Option[Str]:
+        return self.app.next_composition_commit_text_for :: id :: method
+
+    fn next_composition_started_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_composition_started_event_for :: self.window.id :: method
+
+    fn next_composition_updated_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_composition_updated_event_for :: self.window.id :: method
+
+    fn next_composition_committed_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_composition_committed_event_for :: self.window.id :: method
+
+    fn next_composition_ended_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_composition_ended_event_for :: self.window.id :: method
+
+    fn next_composition_started_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_composition_started_event_for :: id :: method
+
+    fn next_composition_updated_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_composition_updated_event_for :: id :: method
+
+    fn next_composition_committed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_composition_committed_event_for :: id :: method
+
+    fn next_composition_ended_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_composition_ended_event_for :: id :: method
+
+    fn poll_next_composition_data(edit self) -> Result[Option[WindowCompositionData], AppError]:
+        return self.app.poll_next_composition_data_for :: self.window.id :: method
+
+    fn poll_next_composition_commit_text(edit self) -> Result[Option[Str], AppError]:
+        return self.app.poll_next_composition_commit_text_for :: self.window.id :: method
+
+    fn poll_next_composition_data_for(edit self, id: WindowId) -> Result[Option[WindowCompositionData], AppError]:
+        return self.app.poll_next_composition_data_for :: id :: method
+
+    fn poll_next_composition_commit_text_for(edit self, id: WindowId) -> Result[Option[Str], AppError]:
+        return self.app.poll_next_composition_commit_text_for :: id :: method
+
+    fn poll_next_composition_started_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_composition_started_event_for :: self.window.id :: method
+
+    fn poll_next_composition_updated_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_composition_updated_event_for :: self.window.id :: method
+
+    fn poll_next_composition_committed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_composition_committed_event_for :: self.window.id :: method
+
+    fn poll_next_composition_ended_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_composition_ended_event_for :: self.window.id :: method
+
+    fn poll_next_composition_started_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_composition_started_event_for :: id :: method
+
+    fn poll_next_composition_updated_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_composition_updated_event_for :: id :: method
+
+    fn poll_next_composition_committed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_composition_committed_event_for :: id :: method
+
+    fn poll_next_composition_ended_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_composition_ended_event_for :: id :: method
+
+    fn wait_next_composition_data(edit self) -> Result[Option[WindowCompositionData], AppError]:
+        return self.app.wait_next_composition_data_for :: self.window.id :: method
+
+    fn wait_next_composition_commit_text(edit self) -> Result[Option[Str], AppError]:
+        return self.app.wait_next_composition_commit_text_for :: self.window.id :: method
+
+    fn wait_next_composition_data_for(edit self, id: WindowId) -> Result[Option[WindowCompositionData], AppError]:
+        return self.app.wait_next_composition_data_for :: id :: method
+
+    fn wait_next_composition_commit_text_for(edit self, id: WindowId) -> Result[Option[Str], AppError]:
+        return self.app.wait_next_composition_commit_text_for :: id :: method
+
+    fn wait_next_composition_started_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_composition_started_event_for :: self.window.id :: method
+
+    fn wait_next_composition_updated_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_composition_updated_event_for :: self.window.id :: method
+
+    fn wait_next_composition_committed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_composition_committed_event_for :: self.window.id :: method
+
+    fn wait_next_composition_ended_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_composition_ended_event_for :: self.window.id :: method
+
+    fn wait_next_composition_started_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_composition_started_event_for :: id :: method
+
+    fn wait_next_composition_updated_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_composition_updated_event_for :: id :: method
+
+    fn wait_next_composition_committed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_composition_committed_event_for :: id :: method
+
+    fn wait_next_composition_ended_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_composition_ended_event_for :: id :: method
+
+    fn wait_timeout_next_composition_data(edit self, timeout: F64) -> Result[Option[WindowCompositionData], AppError]:
+        return self.app.wait_timeout_next_composition_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_composition_commit_text(edit self, timeout: F64) -> Result[Option[Str], AppError]:
+        return self.app.wait_timeout_next_composition_commit_text_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_composition_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowCompositionData], AppError]:
+        return self.app.wait_timeout_next_composition_data_for :: id, timeout :: method
+
+    fn wait_timeout_next_composition_commit_text_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Str], AppError]:
+        return self.app.wait_timeout_next_composition_commit_text_for :: id, timeout :: method
+
+    fn wait_timeout_next_composition_started_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_composition_started_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_composition_updated_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_composition_updated_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_composition_committed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_composition_committed_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_composition_ended_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_composition_ended_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_composition_started_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_composition_started_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_composition_updated_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_composition_updated_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_composition_committed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_composition_committed_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_composition_ended_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_composition_ended_event_for :: id, timeout :: method
+
+    fn pending_composition_started_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_composition_started_events_for :: self.window.id :: method
+
+    fn pending_composition_updated_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_composition_updated_events_for :: self.window.id :: method
+
+    fn pending_composition_committed_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_composition_committed_events_for :: self.window.id :: method
+
+    fn pending_composition_ended_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_composition_ended_events_for :: self.window.id :: method
+
+    fn pending_composition_started_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_composition_started_events_for :: id :: method
+
+    fn pending_composition_updated_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_composition_updated_events_for :: id :: method
+
+    fn pending_composition_committed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_composition_committed_events_for :: id :: method
+
+    fn pending_composition_ended_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_composition_ended_events_for :: id :: method
+
+    fn pending_composition_data(edit self) -> List[WindowCompositionData]:
+        return self.app.pending_composition_data_for :: self.window.id :: method
+
+    fn pending_composition_commit_texts(edit self) -> List[Str]:
+        return self.app.pending_composition_commit_texts_for :: self.window.id :: method
+
+    fn pending_composition_data_for(edit self, id: WindowId) -> List[WindowCompositionData]:
+        return self.app.pending_composition_data_for :: id :: method
+
+    fn pending_composition_commit_texts_for(edit self, id: WindowId) -> List[Str]:
+        return self.app.pending_composition_commit_texts_for :: id :: method
+
+    fn poll_composition_started_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_composition_started_events_for :: self.window.id :: method
+
+    fn poll_composition_updated_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_composition_updated_events_for :: self.window.id :: method
+
+    fn poll_composition_committed_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_composition_committed_events_for :: self.window.id :: method
+
+    fn poll_composition_ended_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_composition_ended_events_for :: self.window.id :: method
+
+    fn poll_composition_started_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_composition_started_events_for :: id :: method
+
+    fn poll_composition_updated_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_composition_updated_events_for :: id :: method
+
+    fn poll_composition_committed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_composition_committed_events_for :: id :: method
+
+    fn poll_composition_ended_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_composition_ended_events_for :: id :: method
+
+    fn poll_composition_data(edit self) -> List[WindowCompositionData]:
+        return self.app.poll_composition_data_for :: self.window.id :: method
+
+    fn poll_composition_commit_texts(edit self) -> List[Str]:
+        return self.app.poll_composition_commit_texts_for :: self.window.id :: method
+
+    fn poll_composition_data_for(edit self, id: WindowId) -> List[WindowCompositionData]:
+        return self.app.poll_composition_data_for :: id :: method
+
+    fn poll_composition_commit_texts_for(edit self, id: WindowId) -> List[Str]:
+        return self.app.poll_composition_commit_texts_for :: id :: method
+
+    fn wait_composition_started_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_composition_started_events_for :: self.window.id :: method
+
+    fn wait_composition_updated_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_composition_updated_events_for :: self.window.id :: method
+
+    fn wait_composition_committed_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_composition_committed_events_for :: self.window.id :: method
+
+    fn wait_composition_ended_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_composition_ended_events_for :: self.window.id :: method
+
+    fn wait_composition_started_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_composition_started_events_for :: id :: method
+
+    fn wait_composition_updated_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_composition_updated_events_for :: id :: method
+
+    fn wait_composition_committed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_composition_committed_events_for :: id :: method
+
+    fn wait_composition_ended_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_composition_ended_events_for :: id :: method
+
+    fn wait_composition_data(edit self) -> List[WindowCompositionData]:
+        return self.app.wait_composition_data_for :: self.window.id :: method
+
+    fn wait_composition_commit_texts(edit self) -> List[Str]:
+        return self.app.wait_composition_commit_texts_for :: self.window.id :: method
+
+    fn wait_composition_data_for(edit self, id: WindowId) -> List[WindowCompositionData]:
+        return self.app.wait_composition_data_for :: id :: method
+
+    fn wait_composition_commit_texts_for(edit self, id: WindowId) -> List[Str]:
+        return self.app.wait_composition_commit_texts_for :: id :: method
+
+    fn wait_timeout_composition_started_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_composition_started_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_composition_updated_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_composition_updated_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_composition_committed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_composition_committed_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_composition_ended_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_composition_ended_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_composition_started_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_composition_started_events_for :: id, timeout :: method
+
+    fn wait_timeout_composition_updated_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_composition_updated_events_for :: id, timeout :: method
+
+    fn wait_timeout_composition_committed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_composition_committed_events_for :: id, timeout :: method
+
+    fn wait_timeout_composition_ended_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_composition_ended_events_for :: id, timeout :: method
+
+    fn wait_timeout_composition_data(edit self, timeout: F64) -> List[WindowCompositionData]:
+        return self.app.wait_timeout_composition_data_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_composition_commit_texts(edit self, timeout: F64) -> List[Str]:
+        return self.app.wait_timeout_composition_commit_texts_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_composition_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowCompositionData]:
+        return self.app.wait_timeout_composition_data_for :: id, timeout :: method
+
+    fn wait_timeout_composition_commit_texts_for(edit self, id: WindowId, timeout: F64) -> List[Str]:
+        return self.app.wait_timeout_composition_commit_texts_for :: id, timeout :: method

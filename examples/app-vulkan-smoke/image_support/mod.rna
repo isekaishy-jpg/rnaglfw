@@ -1,7 +1,23 @@
-use std.Result
+use std.{ByteBuffer, Result}
 
 use runa_app.rgba_color
 use runa_app_vulkan.{VulkanPresentApp, vulkan_pixel_format_code}
+
+fn byte_buffers_equal(read left: ByteBuffer, read right: ByteBuffer) -> Bool:
+    let left_count = left.byte_count :: :: method
+    let right_count = right.byte_count :: :: method
+    select:
+        when left_count != right_count => return false
+        else => ()
+    let Result.Ok(scan_limit) = left_count as Maybe[USize] else => return false
+    let scan: USize = 0USize
+    repeat while scan < scan_limit:
+        let Result.Ok(slot) = scan as Maybe[Index] else => return false
+        select:
+            when left[slot] != right[slot] => return false
+            else => ()
+        scan = scan + 1USize
+    return true
 
 pub fn check_vulkan_transfer_destination_image_helpers(edit present_app: VulkanPresentApp) -> I32:
     let Result.Ok(requirements) = present_app.surface_transfer_destination_image_requirements :: :: method else => return 1
@@ -92,9 +108,11 @@ pub fn check_vulkan_transfer_destination_image_helpers(edit present_app: VulkanP
                 when Result.Err(_) => return 28
             let fill = rgba_color :: 51, 102, 153, 255 :: call
             let Result.Ok(rgba_image) = present_app.surface_image :: fill :: method else => return 29
-            let Result.Ok(surface_pixels) = rgba_image.copy_pixels :: :: method else => return 30
-            let expected_surface_byte_count = surface_pixels.byte_count :: :: method
-            select present_app.surface_transfer_source_buffer :: surface_pixels :: method:
+            let Result.Ok(surface_frame_upload) = present_app.surface_pixel_frame :: fill :: method else => return 30
+            let Result.Ok(surface_pixels_upload) = surface_frame_upload.copy_pixels :: :: method else => return 31
+            let Result.Ok(surface_pixels_expected) = surface_frame_upload.copy_pixels :: :: method else => return 32
+            let expected_surface_byte_count = surface_pixels_expected.byte_count :: :: method
+            select present_app.surface_transfer_source_buffer :: surface_pixels_upload :: method:
                 when Result.Ok(upload) =>
                     select present_app.surface_transfer_destination_image :: :: method:
                         when Result.Ok(image) =>
@@ -121,6 +139,10 @@ pub fn check_vulkan_transfer_destination_image_helpers(edit present_app: VulkanP
                                                     present_app.destroy_transfer_source_buffer :: upload :: method
                                                     present_app.destroy_surface_transfer_destination_image :: image :: method
                                                     return 60
+                                                when !byte_buffers_equal :: surface_pixels_expected, roundtrip_bytes :: call =>
+                                                    present_app.destroy_transfer_source_buffer :: upload :: method
+                                                    present_app.destroy_surface_transfer_destination_image :: image :: method
+                                                    return 600
                                                 else => ()
                                         when Result.Err(_) =>
                                             present_app.destroy_transfer_source_buffer :: upload :: method
@@ -199,7 +221,7 @@ pub fn check_vulkan_transfer_destination_image_helpers(edit present_app: VulkanP
                                             present_app.destroy_transfer_source_buffer :: upload :: method
                                             present_app.destroy_surface_transfer_destination_image :: image :: method
                                             return 35
-                                    let Result.Ok(surface_pixels_third) = rgba_image.copy_pixels :: :: method else =>
+                                    let Result.Ok(surface_pixels_third) = surface_frame_upload.copy_pixels :: :: method else =>
                                         present_app.destroy_surface_transfer_destination_image :: image :: method
                                         return 36
                                     select present_app.surface_transfer_source_buffer :: surface_pixels_third :: method:
@@ -241,7 +263,7 @@ pub fn check_vulkan_transfer_destination_image_helpers(edit present_app: VulkanP
                             present_app.destroy_transfer_source_buffer :: upload :: method
                             return 43
                 when Result.Err(_) => return 44
-            let Result.Ok(surface_pixels_again) = rgba_image.copy_pixels :: :: method else => return 45
+            let Result.Ok(surface_pixels_again) = surface_frame_upload.copy_pixels :: :: method else => return 45
             select present_app.surface_transfer_destination_image_from_pixels :: surface_pixels_again :: method:
                 when Result.Ok(image) =>
                     select:
@@ -299,5 +321,125 @@ pub fn check_vulkan_transfer_destination_image_helpers(edit present_app: VulkanP
                             present_app.destroy_surface_transfer_destination_image :: image :: method
                             return 58
                 when Result.Err(_) => return 59
+            let fill_b = rgba_color :: 22, 144, 201, 255 :: call
+            let Result.Ok(surface_frame_b) = present_app.surface_pixel_frame :: fill_b :: method else => return 75
+            let Result.Ok(surface_pixels_b_upload) = surface_frame_b.copy_pixels :: :: method else => return 76
+            select present_app.surface_transfer_source_buffer :: surface_pixels_b_upload :: method:
+                when Result.Ok(upload) =>
+                    select present_app.surface_transfer_destination_image_from_transfer_source_buffer :: upload :: method:
+                        when Result.Ok(image) =>
+                            select:
+                                when !image.valid :: :: method =>
+                                    present_app.destroy_surface_transfer_destination_image :: image :: method
+                                    present_app.destroy_transfer_source_buffer :: upload :: method
+                                    return 77
+                                when !image.transfer_destination_ready :: :: method =>
+                                    present_app.destroy_surface_transfer_destination_image :: image :: method
+                                    present_app.destroy_transfer_source_buffer :: upload :: method
+                                    return 78
+                                else => ()
+                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                            present_app.destroy_transfer_source_buffer :: upload :: method
+                        when Result.Err(_) =>
+                            present_app.destroy_transfer_source_buffer :: upload :: method
+                            return 79
+                when Result.Err(_) => return 80
+            let Result.Ok(surface_pixels_b_write) = surface_frame_b.copy_pixels :: :: method else => return 104
+            select present_app.surface_transfer_destination_image :: :: method:
+                when Result.Ok(image) =>
+                    select present_app.write_surface_transfer_destination_image :: image, surface_pixels_b_write :: method:
+                        when Result.Ok(_) =>
+                            select:
+                                when !image.transfer_destination_ready :: :: method =>
+                                    present_app.destroy_surface_transfer_destination_image :: image :: method
+                                    return 81
+                                else => ()
+                        when Result.Err(_) =>
+                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                            return 82
+                    select present_app.surface_transfer_destination_image_image :: image :: method:
+                        when Result.Ok(roundtrip_image) =>
+                            select roundtrip_image.pixel :: 0, 0 :: method:
+                                when Result.Ok(roundtrip_color) =>
+                                    select:
+                                        when roundtrip_color.red != fill_b.red =>
+                                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                                            return 83
+                                        when roundtrip_color.green != fill_b.green =>
+                                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                                            return 84
+                                        when roundtrip_color.blue != fill_b.blue =>
+                                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                                            return 85
+                                        when roundtrip_color.alpha != fill_b.alpha =>
+                                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                                            return 86
+                                        else => ()
+                                when Result.Err(_) =>
+                                    present_app.destroy_surface_transfer_destination_image :: image :: method
+                                    return 87
+                        when Result.Err(_) =>
+                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                            return 88
+                    select present_app.write_surface_transfer_destination_image_from_pixel_frame :: image, surface_frame :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) =>
+                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                            return 89
+                    select present_app.surface_transfer_destination_image_image :: image :: method:
+                        when Result.Ok(roundtrip_image) =>
+                            select roundtrip_image.pixel :: 0, 0 :: method:
+                                when Result.Ok(roundtrip_color) =>
+                                    select:
+                                        when roundtrip_color.red != fill.red =>
+                                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                                            return 90
+                                        when roundtrip_color.green != fill.green =>
+                                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                                            return 91
+                                        when roundtrip_color.blue != fill.blue =>
+                                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                                            return 92
+                                        when roundtrip_color.alpha != fill.alpha =>
+                                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                                            return 93
+                                        else => ()
+                                when Result.Err(_) =>
+                                    present_app.destroy_surface_transfer_destination_image :: image :: method
+                                    return 94
+                        when Result.Err(_) =>
+                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                            return 95
+                    select present_app.write_surface_transfer_destination_image_from_image :: image, rgba_image :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) =>
+                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                            return 96
+                    select present_app.surface_transfer_destination_image_image :: image :: method:
+                        when Result.Ok(roundtrip_image) =>
+                            select roundtrip_image.pixel :: 0, 0 :: method:
+                                when Result.Ok(roundtrip_color) =>
+                                    select:
+                                        when roundtrip_color.red != fill.red =>
+                                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                                            return 97
+                                        when roundtrip_color.green != fill.green =>
+                                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                                            return 98
+                                        when roundtrip_color.blue != fill.blue =>
+                                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                                            return 99
+                                        when roundtrip_color.alpha != fill.alpha =>
+                                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                                            return 100
+                                        else => ()
+                                when Result.Err(_) =>
+                                    present_app.destroy_surface_transfer_destination_image :: image :: method
+                                    return 101
+                        when Result.Err(_) =>
+                            present_app.destroy_surface_transfer_destination_image :: image :: method
+                            return 102
+                    present_app.destroy_surface_transfer_destination_image :: image :: method
+                when Result.Err(_) => return 103
             return 0
         when Result.Err(_) => return 74

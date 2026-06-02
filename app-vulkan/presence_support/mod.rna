@@ -1,6 +1,17 @@
+use std.{List, Option}
 use present.VulkanPresentApp
+use runa_app.{Monitor, MonitorId, MonitorSnapshot}
 
 impl VulkanPresentApp:
+    fn monitor_index(read self, id: MonitorId) -> Option[Index]:
+        return self.app.monitor_index :: id :: method
+
+    fn has_monitor(read self, id: MonitorId) -> Bool:
+        return self.app.has_monitor :: id :: method
+
+    fn primary_monitor_index(read self) -> Option[Index]:
+        return self.app.primary_monitor_index :: :: method
+
     fn has_monitors(read self) -> Bool:
         return self.app.has_monitors :: :: method
 
@@ -12,3 +23,15 @@ impl VulkanPresentApp:
 
     fn has_primary_monitor(read self) -> Bool:
         return self.app.has_primary_monitor :: :: method
+
+    fn monitor_count(read self) -> Index:
+        return self.app.monitor_count :: :: method
+
+    fn monitor_ids(read self) -> List[MonitorId]:
+        return self.app.monitor_ids :: :: method
+
+    fn monitors_snapshot(read self) -> List[Monitor]:
+        return self.app.monitors_snapshot :: :: method
+
+    fn monitor_snapshots(read self) -> List[MonitorSnapshot]:
+        return self.app.monitor_snapshots :: :: method

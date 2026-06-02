@@ -1,21 +1,19 @@
-use input.{InputAction, KeyCode, Modifiers, MouseButton, RawKeyCode, ScanCode}
+use input.{InputAction, KeyCode, Modifiers, MouseButton, RawKeyCode, ScanCode, TouchPhase}
 use input.{input_action_from_raw, input_action_raw, key_from_raw, key_raw}
-use input.{modifiers_from_raw, mouse_button_from_raw, mouse_button_raw}
+use input.{modifiers_from_raw, modifiers_raw, mouse_button_from_raw, mouse_button_raw}
+use input.{touch_phase_from_raw, touch_phase_raw}
 use std.{List, Option, Result, Str}
-use window.WindowId
-
+use window.{Theme, WindowId, theme_from_raw, theme_raw}
 pub type MonitorId = USize
 pub type JoystickId = CInt
 pub type UserEventId = USize
-
 pub struct AppEventBatch:
     pub(package) events: List[AppEvent]
-
 pub enum WindowEventKind:
     Created
     Destroyed
     CloseRequested
-    Refreshed
+    RedrawRequested
     Moved
     Resized
     FramebufferResized
@@ -24,52 +22,77 @@ pub enum WindowEventKind:
     Iconified
     Maximized
     CursorEntered
+    ThemeChanged
     CursorMoved
+    RawMouseMotion
+    RawMouseButtonChanged
+    RawMouseWheel
+    RawKeyChanged
+    Touch
+    ModifiersChanged
     Scrolled
     KeyChanged
     Character
     CharacterMods
+    CompositionStarted
+    CompositionUpdated
+    CompositionCommitted
+    CompositionEnded
     MouseButtonChanged
+    HoveredFile
+    HoveredFileCancelled
     DroppedPaths
-
 pub struct WindowMoveData:
     pub x: CInt
     pub y: CInt
-
 pub struct WindowSizeData:
     pub width: CInt
     pub height: CInt
-
 pub struct WindowScaleData:
     pub x: F32
     pub y: F32
-
 pub struct WindowCursorData:
     pub x: F64
     pub y: F64
-
+pub struct WindowRawMouseMotionData:
+    pub delta_x: CInt
+    pub delta_y: CInt
+pub struct WindowRawMouseButtonData:
+    pub button: MouseButton
+    pub action: InputAction
+pub struct WindowRawMouseWheelData:
+    pub delta_x: CInt
+    pub delta_y: CInt
+pub struct WindowTouchData:
+    pub touch_id: USize
+    pub phase: TouchPhase
+    pub x: F64
+    pub y: F64
+pub struct WindowRawKeyData:
+    pub raw_key: RawKeyCode
+    pub scancode: ScanCode
+    pub action: InputAction
+    pub extended: Bool
 pub struct WindowScrollData:
     pub x: F64
     pub y: F64
-
 pub struct WindowKeyData:
     pub key: KeyCode
     pub scancode: ScanCode
     pub action: InputAction
     pub mods: Modifiers
-
 pub struct WindowCharacterData:
     pub codepoint: CUInt
-
 pub struct WindowCharacterModsData:
     pub codepoint: CUInt
     pub mods: Modifiers
-
+pub struct WindowCompositionData:
+    pub text: Str
+    pub cursor: Option[Index]
 pub struct WindowMouseButtonData:
     pub button: MouseButton
     pub action: InputAction
     pub mods: Modifiers
-
 pub enum WindowEvent:
     Created:
         pub id: WindowId
@@ -77,7 +100,7 @@ pub enum WindowEvent:
         pub id: WindowId
     CloseRequested:
         pub id: WindowId
-    Refreshed:
+    RedrawRequested:
         pub id: WindowId
     Moved:
         pub id: WindowId
@@ -107,10 +130,40 @@ pub enum WindowEvent:
     CursorEntered:
         pub id: WindowId
         pub entered: Bool
+    ThemeChanged:
+        pub id: WindowId
+        pub theme: Theme
     CursorMoved:
         pub id: WindowId
         pub x: F64
         pub y: F64
+    RawMouseMotion:
+        pub id: WindowId
+        pub delta_x: CInt
+        pub delta_y: CInt
+    RawMouseButtonChanged:
+        pub id: WindowId
+        pub button: MouseButton
+        pub action: InputAction
+    RawMouseWheel:
+        pub id: WindowId
+        pub delta_x: CInt
+        pub delta_y: CInt
+    RawKeyChanged:
+        pub id: WindowId
+        pub raw_key: RawKeyCode
+        pub scancode: ScanCode
+        pub action: InputAction
+        pub extended: Bool
+    Touch:
+        pub id: WindowId
+        pub touch_id: USize
+        pub phase: TouchPhase
+        pub x: F64
+        pub y: F64
+    ModifiersChanged:
+        pub id: WindowId
+        pub mods: Modifiers
     Scrolled:
         pub id: WindowId
         pub x: F64
@@ -128,43 +181,52 @@ pub enum WindowEvent:
         pub id: WindowId
         pub codepoint: CUInt
         pub mods: Modifiers
+    CompositionStarted:
+        pub id: WindowId
+    CompositionUpdated:
+        pub id: WindowId
+        pub text: Str
+        pub cursor: Option[Index]
+    CompositionCommitted:
+        pub id: WindowId
+        pub text: Str
+    CompositionEnded:
+        pub id: WindowId
     MouseButtonChanged:
         pub id: WindowId
         pub button: MouseButton
         pub action: InputAction
         pub mods: Modifiers
+    HoveredFile:
+        pub id: WindowId
+        pub path: Str
+    HoveredFileCancelled:
+        pub id: WindowId
     DroppedPaths:
         pub id: WindowId
         pub paths: List[Str]
-
 pub enum MonitorEventKind:
     Connected
     Disconnected
-
 pub enum MonitorEvent:
     Connected:
         pub id: MonitorId
     Disconnected:
         pub id: MonitorId
-
 pub enum JoystickEventKind:
     Connected
     Disconnected
-
 pub enum JoystickEvent:
     Connected:
         pub id: JoystickId
         pub gamepad: Bool
     Disconnected:
         pub id: JoystickId
-
 pub enum UserEventKind:
     Signaled
-
 pub enum UserEvent:
     Signaled:
         pub id: UserEventId
-
 pub enum AppEventKind:
     Window
     Monitor
@@ -235,31 +297,7 @@ fn copy_user_event(read event: UserEvent) -> UserEvent:
                 id = id
 
 fn copy_modifiers(read mods: Modifiers) -> Modifiers:
-    let shift_mask: CInt = 0x0001
-    let control_mask: CInt = 0x0002
-    let alt_mask: CInt = 0x0004
-    let super_mask: CInt = 0x0008
-    let caps_lock_mask: CInt = 0x0010
-    let num_lock_mask: CInt = 0x0020
-    let raw: CInt = 0
-    select:
-        when mods.shift :: :: method => raw = raw | shift_mask
-        else => ()
-    select:
-        when mods.control :: :: method => raw = raw | control_mask
-        else => ()
-    select:
-        when mods.alt :: :: method => raw = raw | alt_mask
-        else => ()
-    select:
-        when mods.super_key :: :: method => raw = raw | super_mask
-        else => ()
-    select:
-        when mods.caps_lock :: :: method => raw = raw | caps_lock_mask
-        else => ()
-    select:
-        when mods.num_lock :: :: method => raw = raw | num_lock_mask
-        else => ()
+    let raw = modifiers_raw :: mods :: call
     return modifiers_from_raw :: raw :: call
 
 fn build_cursor_moved_window_event(id: WindowId, x: F64, y: F64) -> WindowEvent:
@@ -274,6 +312,12 @@ fn build_scrolled_window_event(id: WindowId, x: F64, y: F64) -> WindowEvent:
         x = x
         y = y
 
+fn build_modifiers_changed_window_event(id: WindowId, read mods: Modifiers) -> WindowEvent:
+    let copied_mods = copy_modifiers :: mods :: call
+    return WindowEvent.ModifiersChanged :: :: call
+        id = id
+        mods = copied_mods
+
 fn build_key_changed_window_event(id: WindowId, raw_key: RawKeyCode, scancode: ScanCode, raw_action: CInt, read mods: Modifiers) -> WindowEvent:
     let copied_mods = copy_modifiers :: mods :: call
     return WindowEvent.KeyChanged :: :: call
@@ -282,6 +326,14 @@ fn build_key_changed_window_event(id: WindowId, raw_key: RawKeyCode, scancode: S
         scancode = scancode
         action = input_action_from_raw :: raw_action :: call
         mods = copied_mods
+
+fn build_raw_key_changed_window_event(id: WindowId, raw_key: RawKeyCode, scancode: ScanCode, raw_action: CInt, extended: Bool) -> WindowEvent:
+    return WindowEvent.RawKeyChanged :: :: call
+        id = id
+        raw_key = raw_key
+        scancode = scancode
+        action = input_action_from_raw :: raw_action :: call
+        extended = extended
 
 fn build_character_window_event(id: WindowId, codepoint: CUInt) -> WindowEvent:
     return WindowEvent.Character :: :: call
@@ -321,6 +373,7 @@ fn copy_window_scroll_data(read event: WindowEvent) -> Option[WindowScrollData]:
             return Option.Some :: data :: call
         when _ => return Option.None
 
+
 fn copy_window_character_data(read event: WindowEvent) -> Option[WindowCharacterData]:
     select event:
         when WindowEvent.Character(id = _, codepoint = codepoint) =>
@@ -335,7 +388,7 @@ impl WindowEvent:
             when WindowEvent.Created(id = _) => return WindowEventKind.Created
             when WindowEvent.Destroyed(id = _) => return WindowEventKind.Destroyed
             when WindowEvent.CloseRequested(id = _) => return WindowEventKind.CloseRequested
-            when WindowEvent.Refreshed(id = _) => return WindowEventKind.Refreshed
+            when WindowEvent.RedrawRequested(id = _) => return WindowEventKind.RedrawRequested
             when WindowEvent.Moved(id = _, x = _, y = _) => return WindowEventKind.Moved
             when WindowEvent.Resized(id = _, width = _, height = _) => return WindowEventKind.Resized
             when WindowEvent.FramebufferResized(id = _, width = _, height = _) => return WindowEventKind.FramebufferResized
@@ -344,12 +397,25 @@ impl WindowEvent:
             when WindowEvent.Iconified(id = _, iconified = _) => return WindowEventKind.Iconified
             when WindowEvent.Maximized(id = _, maximized = _) => return WindowEventKind.Maximized
             when WindowEvent.CursorEntered(id = _, entered = _) => return WindowEventKind.CursorEntered
+            when WindowEvent.ThemeChanged(id = _, theme = _) => return WindowEventKind.ThemeChanged
             when WindowEvent.CursorMoved(id = _, x = _, y = _) => return WindowEventKind.CursorMoved
+            when WindowEvent.RawMouseMotion(id = _, delta_x = _, delta_y = _) => return WindowEventKind.RawMouseMotion
+            when WindowEvent.RawMouseButtonChanged(id = _, button = _, action = _) => return WindowEventKind.RawMouseButtonChanged
+            when WindowEvent.RawMouseWheel(id = _, delta_x = _, delta_y = _) => return WindowEventKind.RawMouseWheel
+            when WindowEvent.RawKeyChanged(id = _, raw_key = _, scancode = _, action = _, extended = _) => return WindowEventKind.RawKeyChanged
+            when WindowEvent.Touch(id = _, touch_id = _, phase = _, x = _, y = _) => return WindowEventKind.Touch
+            when WindowEvent.ModifiersChanged(id = _, mods = _) => return WindowEventKind.ModifiersChanged
             when WindowEvent.Scrolled(id = _, x = _, y = _) => return WindowEventKind.Scrolled
             when WindowEvent.KeyChanged(id = _, key = _, scancode = _, action = _, mods = _) => return WindowEventKind.KeyChanged
             when WindowEvent.Character(id = _, codepoint = _) => return WindowEventKind.Character
             when WindowEvent.CharacterMods(id = _, codepoint = _, mods = _) => return WindowEventKind.CharacterMods
+            when WindowEvent.CompositionStarted(id = _) => return WindowEventKind.CompositionStarted
+            when WindowEvent.CompositionUpdated(id = _, text = _, cursor = _) => return WindowEventKind.CompositionUpdated
+            when WindowEvent.CompositionCommitted(id = _, text = _) => return WindowEventKind.CompositionCommitted
+            when WindowEvent.CompositionEnded(id = _) => return WindowEventKind.CompositionEnded
             when WindowEvent.MouseButtonChanged(id = _, button = _, action = _, mods = _) => return WindowEventKind.MouseButtonChanged
+            when WindowEvent.HoveredFile(id = _, path = _) => return WindowEventKind.HoveredFile
+            when WindowEvent.HoveredFileCancelled(id = _) => return WindowEventKind.HoveredFileCancelled
             when WindowEvent.DroppedPaths(id = _, paths = _) => return WindowEventKind.DroppedPaths
 
     fn window_id(read self) -> WindowId:
@@ -357,7 +423,7 @@ impl WindowEvent:
             when WindowEvent.Created(id = id) => return id
             when WindowEvent.Destroyed(id = id) => return id
             when WindowEvent.CloseRequested(id = id) => return id
-            when WindowEvent.Refreshed(id = id) => return id
+            when WindowEvent.RedrawRequested(id = id) => return id
             when WindowEvent.Moved(id = id, x = _, y = _) => return id
             when WindowEvent.Resized(id = id, width = _, height = _) => return id
             when WindowEvent.FramebufferResized(id = id, width = _, height = _) => return id
@@ -366,12 +432,25 @@ impl WindowEvent:
             when WindowEvent.Iconified(id = id, iconified = _) => return id
             when WindowEvent.Maximized(id = id, maximized = _) => return id
             when WindowEvent.CursorEntered(id = id, entered = _) => return id
+            when WindowEvent.ThemeChanged(id = id, theme = _) => return id
             when WindowEvent.CursorMoved(id = id, x = _, y = _) => return id
+            when WindowEvent.RawMouseMotion(id = id, delta_x = _, delta_y = _) => return id
+            when WindowEvent.RawMouseButtonChanged(id = id, button = _, action = _) => return id
+            when WindowEvent.RawMouseWheel(id = id, delta_x = _, delta_y = _) => return id
+            when WindowEvent.RawKeyChanged(id = id, raw_key = _, scancode = _, action = _, extended = _) => return id
+            when WindowEvent.Touch(id = id, touch_id = _, phase = _, x = _, y = _) => return id
+            when WindowEvent.ModifiersChanged(id = id, mods = _) => return id
             when WindowEvent.Scrolled(id = id, x = _, y = _) => return id
             when WindowEvent.KeyChanged(id = id, key = _, scancode = _, action = _, mods = _) => return id
             when WindowEvent.Character(id = id, codepoint = _) => return id
             when WindowEvent.CharacterMods(id = id, codepoint = _, mods = _) => return id
+            when WindowEvent.CompositionStarted(id = id) => return id
+            when WindowEvent.CompositionUpdated(id = id, text = _, cursor = _) => return id
+            when WindowEvent.CompositionCommitted(id = id, text = _) => return id
+            when WindowEvent.CompositionEnded(id = id) => return id
             when WindowEvent.MouseButtonChanged(id = id, button = _, action = _, mods = _) => return id
+            when WindowEvent.HoveredFile(id = id, path = _) => return id
+            when WindowEvent.HoveredFileCancelled(id = id) => return id
             when WindowEvent.DroppedPaths(id = id, paths = _) => return id
 
     fn moved_data(read self) -> Option[WindowMoveData]:
@@ -430,6 +509,14 @@ impl WindowEvent:
             when WindowEvent.CursorEntered(id = _, entered = entered) => return Option.Some :: entered :: call
             else => return Option.None
 
+    fn theme(take self) -> Option[Theme]:
+        select self:
+            when WindowEvent.ThemeChanged(id = _, theme = theme) =>
+                let raw = theme_raw :: theme :: call
+                let copied = theme_from_raw :: raw :: call
+                return Option.Some :: copied :: call
+            else => return Option.None
+
     fn cursor_data(read self) -> Option[WindowCursorData]:
         select self:
             when WindowEvent.CursorMoved(id = _, x = x, y = y) =>
@@ -437,6 +524,64 @@ impl WindowEvent:
                     x = x
                     y = y
                 return Option.Some :: data :: call
+            else => return Option.None
+
+    fn raw_mouse_motion_data(read self) -> Option[WindowRawMouseMotionData]:
+        select self:
+            when WindowEvent.RawMouseMotion(id = _, delta_x = delta_x, delta_y = delta_y) =>
+                let data = WindowRawMouseMotionData :: :: call
+                    delta_x = delta_x
+                    delta_y = delta_y
+                return Option.Some :: data :: call
+            else => return Option.None
+
+    fn raw_mouse_button_data(take self) -> Option[WindowRawMouseButtonData]:
+        select self:
+            when WindowEvent.RawMouseButtonChanged(id = _, button = button, action = action) =>
+                let data = WindowRawMouseButtonData :: :: call
+                    button = button
+                    action = action
+                return Option.Some :: data :: call
+            else => return Option.None
+
+    fn raw_mouse_wheel_data(read self) -> Option[WindowRawMouseWheelData]:
+        select self:
+            when WindowEvent.RawMouseWheel(id = _, delta_x = delta_x, delta_y = delta_y) =>
+                let data = WindowRawMouseWheelData :: :: call
+                    delta_x = delta_x
+                    delta_y = delta_y
+                return Option.Some :: data :: call
+            else => return Option.None
+
+    fn raw_key_data(take self) -> Option[WindowRawKeyData]:
+        select self:
+            when WindowEvent.RawKeyChanged(id = _, raw_key = raw_key, scancode = scancode, action = action, extended = extended) =>
+                let data = WindowRawKeyData :: :: call
+                    raw_key = raw_key
+                    scancode = scancode
+                    action = action
+                    extended = extended
+                return Option.Some :: data :: call
+            else => return Option.None
+
+    fn touch_data(take self) -> Option[WindowTouchData]:
+        select self:
+            when WindowEvent.Touch(id = _, touch_id = touch_id, phase = phase, x = x, y = y) =>
+                let raw_phase = touch_phase_raw :: phase :: call
+                let copied_phase = touch_phase_from_raw :: raw_phase :: call
+                let data = WindowTouchData :: :: call
+                    touch_id = touch_id
+                    phase = copied_phase
+                    x = x
+                    y = y
+                return Option.Some :: data :: call
+            else => return Option.None
+
+    fn modifiers_state(read self) -> Option[Modifiers]:
+        select self:
+            when WindowEvent.ModifiersChanged(id = _, mods = mods) =>
+                let copied = copy_modifiers :: mods :: call
+                return Option.Some :: copied :: call
             else => return Option.None
 
     fn scroll_data(read self) -> Option[WindowScrollData]:
@@ -476,6 +621,20 @@ impl WindowEvent:
                 return Option.Some :: data :: call
             else => return Option.None
 
+    fn composition_data(take self) -> Option[WindowCompositionData]:
+        select self:
+            when WindowEvent.CompositionUpdated(id = _, text = text, cursor = cursor) =>
+                let data = WindowCompositionData :: :: call
+                    text = text
+                    cursor = cursor
+                return Option.Some :: data :: call
+            else => return Option.None
+
+    fn take_composition_commit_text(take self) -> Option[Str]:
+        select self:
+            when WindowEvent.CompositionCommitted(id = _, text = text) => return Option.Some :: text :: call
+            else => return Option.None
+
     fn mouse_button_data(take self) -> Option[WindowMouseButtonData]:
         select self:
             when WindowEvent.MouseButtonChanged(id = _, button = button, action = action, mods = mods) =>
@@ -484,6 +643,11 @@ impl WindowEvent:
                     action = action
                     mods = mods
                 return Option.Some :: data :: call
+            else => return Option.None
+
+    fn take_hovered_file_path(take self) -> Option[Str]:
+        select self:
+            when WindowEvent.HoveredFile(id = _, path = path) => return Option.Some :: path :: call
             else => return Option.None
 
     fn dropped_path_count(take self) -> Option[Index]:
@@ -673,6 +837,36 @@ impl AppEvent:
             when AppEvent.Window(window_event) => return window_event.cursor_data :: :: method
             else => return Option.None
 
+    fn raw_mouse_motion_data(take self) -> Option[WindowRawMouseMotionData]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.raw_mouse_motion_data :: :: method
+            else => return Option.None
+
+    fn raw_mouse_button_data(take self) -> Option[WindowRawMouseButtonData]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.raw_mouse_button_data :: :: method
+            else => return Option.None
+
+    fn raw_mouse_wheel_data(take self) -> Option[WindowRawMouseWheelData]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.raw_mouse_wheel_data :: :: method
+            else => return Option.None
+
+    fn raw_key_data(take self) -> Option[WindowRawKeyData]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.raw_key_data :: :: method
+            else => return Option.None
+
+    fn touch_data(take self) -> Option[WindowTouchData]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.touch_data :: :: method
+            else => return Option.None
+
+    fn modifiers_state(take self) -> Option[Modifiers]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.modifiers_state :: :: method
+            else => return Option.None
+
     fn scroll_data(take self) -> Option[WindowScrollData]:
         select self:
             when AppEvent.Window(window_event) => return window_event.scroll_data :: :: method
@@ -693,9 +887,24 @@ impl AppEvent:
             when AppEvent.Window(window_event) => return window_event.character_mods_data :: :: method
             else => return Option.None
 
+    fn composition_data(take self) -> Option[WindowCompositionData]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.composition_data :: :: method
+            else => return Option.None
+
+    fn take_composition_commit_text(take self) -> Option[Str]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.take_composition_commit_text :: :: method
+            else => return Option.None
+
     fn mouse_button_data(take self) -> Option[WindowMouseButtonData]:
         select self:
             when AppEvent.Window(window_event) => return window_event.mouse_button_data :: :: method
+            else => return Option.None
+
+    fn take_hovered_file_path(take self) -> Option[Str]:
+        select self:
+            when AppEvent.Window(window_event) => return window_event.take_hovered_file_path :: :: method
             else => return Option.None
 
     fn dropped_path_count(take self) -> Option[Index]:

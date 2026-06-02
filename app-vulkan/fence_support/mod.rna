@@ -1,0 +1,109 @@
+use std.Result
+
+use present.{VK_FENCE_CREATE_SIGNALED_BIT, VK_NOT_READY, VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, VK_SUCCESS, VK_TIMEOUT, VK_TIMEOUT_FOREVER, VK_TRUE, VkFence, VkFenceCreateInfo, VulkanFenceResource, VulkanPresentApp, VulkanPresentContext, VulkanPresentError}
+
+fn fence_resource_with_flags(read context: VulkanPresentContext, flags: CUInt) -> Result[VulkanFenceResource, VulkanPresentError]:
+    let fence: VkFence = 0U64
+    let fence_info = VkFenceCreateInfo :: :: call
+        stype = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO
+        pnext = null
+        flags = flags
+    let fence_ptr: *edit VkFence = #unsafe &raw edit fence
+    let fence_info_ptr: *read VkFenceCreateInfo = #unsafe &raw read fence_info
+    let fence_result = #unsafe context.create_fence :: context.device, fence_info_ptr, null, fence_ptr :: call
+    select:
+        when fence_result != VK_SUCCESS =>
+            let error = VulkanPresentError.FenceCreateFailed :: fence_result :: call
+            return Result.Err :: error :: call
+        when fence == 0U64 =>
+            let error = VulkanPresentError.FenceCreateFailed :: fence_result :: call
+            return Result.Err :: error :: call
+        else => ()
+    let resource = VulkanFenceResource :: :: call
+        fence = fence
+    return Result.Ok :: resource :: call
+
+impl VulkanFenceResource:
+    fn fence_handle(read self) -> VkFence:
+        return self.fence
+
+    fn valid(read self) -> Bool:
+        return self.fence != 0U64
+
+impl VulkanPresentContext:
+    fn fence_resource(read self) -> Result[VulkanFenceResource, VulkanPresentError]:
+        return fence_resource_with_flags :: self, 0 :: call
+
+    fn signaled_fence_resource(read self) -> Result[VulkanFenceResource, VulkanPresentError]:
+        return fence_resource_with_flags :: self, VK_FENCE_CREATE_SIGNALED_BIT :: call
+
+    fn destroy_fence_resource(read self, take fence: VulkanFenceResource) -> Unit:
+        select:
+            when fence.fence != 0U64 => #unsafe self.destroy_fence :: self.device, fence.fence, null :: call
+            else => ()
+        return
+
+    fn reset_fence(read self, read fence: VulkanFenceResource) -> Result[Unit, VulkanPresentError]:
+        let fence_count: CUInt = 1
+        let fences: [VkFence; 1] = [fence.fence]
+        let fences_ptr: *read VkFence = #unsafe &raw read fences[0]
+        let reset_result = #unsafe self.reset_fences :: self.device, fence_count, fences_ptr :: call
+        select:
+            when reset_result != VK_SUCCESS =>
+                let error = VulkanPresentError.FenceResetFailed :: reset_result :: call
+                return Result.Err :: error :: call
+            else => return Result.Ok :: :: call
+
+    fn fence_signaled(read self, read fence: VulkanFenceResource) -> Result[Bool, VulkanPresentError]:
+        let status_result = #unsafe self.get_fence_status :: self.device, fence.fence :: call
+        select:
+            when status_result == VK_SUCCESS => return Result.Ok :: true :: call
+            when status_result == VK_NOT_READY => return Result.Ok :: false :: call
+            else =>
+                let error = VulkanPresentError.FenceStatusFailed :: status_result :: call
+                return Result.Err :: error :: call
+
+    fn wait_fence(read self, read fence: VulkanFenceResource, timeout_nanos: U64) -> Result[Bool, VulkanPresentError]:
+        let fence_count: CUInt = 1
+        let wait_all: CUInt = VK_TRUE
+        let fences: [VkFence; 1] = [fence.fence]
+        let fences_ptr: *read VkFence = #unsafe &raw read fences[0]
+        let wait_result = #unsafe self.wait_for_fences :: self.device, fence_count, fences_ptr, wait_all, timeout_nanos :: call
+        select:
+            when wait_result == VK_SUCCESS => return Result.Ok :: true :: call
+            when wait_result == VK_TIMEOUT => return Result.Ok :: false :: call
+            else =>
+                let error = VulkanPresentError.FenceWaitFailed :: wait_result :: call
+                return Result.Err :: error :: call
+
+    fn wait_fence_forever(read self, read fence: VulkanFenceResource) -> Result[Unit, VulkanPresentError]:
+        select self.wait_fence :: fence, VK_TIMEOUT_FOREVER :: method:
+            when Result.Ok(signaled) =>
+                select:
+                    when signaled => return Result.Ok :: :: call
+                    else =>
+                        let error = VulkanPresentError.FenceWaitFailed :: VK_TIMEOUT :: call
+                        return Result.Err :: error :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+impl VulkanPresentApp:
+    fn fence_resource(read self) -> Result[VulkanFenceResource, VulkanPresentError]:
+        return self.context.fence_resource :: :: method
+
+    fn signaled_fence_resource(read self) -> Result[VulkanFenceResource, VulkanPresentError]:
+        return self.context.signaled_fence_resource :: :: method
+
+    fn destroy_fence_resource(read self, take fence: VulkanFenceResource) -> Unit:
+        return self.context.destroy_fence_resource :: fence :: method
+
+    fn reset_fence(read self, read fence: VulkanFenceResource) -> Result[Unit, VulkanPresentError]:
+        return self.context.reset_fence :: fence :: method
+
+    fn fence_signaled(read self, read fence: VulkanFenceResource) -> Result[Bool, VulkanPresentError]:
+        return self.context.fence_signaled :: fence :: method
+
+    fn wait_fence(read self, read fence: VulkanFenceResource, timeout_nanos: U64) -> Result[Bool, VulkanPresentError]:
+        return self.context.wait_fence :: fence, timeout_nanos :: method
+
+    fn wait_fence_forever(read self, read fence: VulkanFenceResource) -> Result[Unit, VulkanPresentError]:
+        return self.context.wait_fence_forever :: fence :: method

@@ -1,0 +1,592 @@
+use std.{List, Option, Result, Str}
+
+use present.VulkanPresentApp
+use runa_app.{ClientApi, ContextCreationApi, CursorMode, CursorPos, FrameSize, GlfwCursor}
+use runa_app.GlfwImage
+use runa_app.{GlfwEglContext, GlfwEglSurface, GlfwOSMesaColorBuffer, GlfwOSMesaDepthBuffer, GlfwOsMesaContext, GlfwWglContext}
+use runa_app.{InputAction, KeyboardInputSnapshot, KeyCode, Monitor, MouseButton, MouseInputSnapshot}
+use runa_app.{OpenGlProfile, Point, Rect, RgbaColor, RgbaImage, Scale, ScanCode, Size, StandardCursor, Theme}
+use runa_app.{TextDecodeError, VideoMode, Win32HWnd, Window, WindowAspectRatio, WindowIconError}
+use runa_app.{WindowAppearanceError, WindowCornerPreference, WindowSystemBackdrop}
+use runa_app.{UserAttentionType, WindowButtons, WindowControlError, WindowResizeDirection}
+use runa_app.WindowLevel
+use runa_app.WindowThemeError
+use runa_app.{WindowId, WindowInputSnapshot, WindowModeError, WindowMonitorSpec, WindowPlacement, WindowSizeLimits}
+
+impl VulkanPresentApp:
+    fn window_id(read self) -> WindowId:
+        return self.window.id
+
+    fn window(read self) -> Window:
+        return self.window
+
+    fn title(read self) -> Result[Str, TextDecodeError]:
+        return self.window.title :: :: method
+
+    fn set_title(read self, title: Str) -> Result[Unit, TextDecodeError]:
+        return self.window.set_title :: title :: method
+
+    fn set_icon(read self, read image: GlfwImage) -> Unit:
+        self.window.set_icon :: image :: method
+        return
+
+    fn set_icon_image(read self, edit image: RgbaImage) -> Unit:
+        self.window.set_icon_image :: image :: method
+        return
+
+    fn set_icon_images(read self, edit images: List[RgbaImage]) -> Result[Unit, WindowIconError]:
+        return self.window.set_icon_images :: images :: method
+
+    fn clear_icon(read self) -> Unit:
+        self.window.clear_icon :: :: method
+        return
+
+    fn hwnd(read self) -> Win32HWnd:
+        return self.window.hwnd :: :: method
+
+    fn pos(read self) -> Point:
+        return self.window.pos :: :: method
+
+    fn inner_position(read self) -> Point:
+        return self.window.inner_position :: :: method
+
+    fn surface_position(read self) -> Point:
+        return self.window.surface_position :: :: method
+
+    fn set_pos(read self, x: CInt, y: CInt) -> Unit:
+        self.window.set_pos :: x, y :: method
+        return
+
+    fn set_outer_position(read self, x: CInt, y: CInt) -> Unit:
+        self.window.set_outer_position :: x, y :: method
+        return
+
+    fn window_monitor(read self) -> Monitor:
+        return self.window.monitor :: :: method
+
+    fn windowed_placement(read self) -> WindowPlacement:
+        return self.window.windowed_placement :: :: method
+
+    fn restore_windowed_placement(read self, read placement: WindowPlacement) -> Unit:
+        self.window.restore_windowed_placement :: placement :: method
+        return
+
+    fn close(read self) -> Unit:
+        self.window.close :: :: method
+        return
+
+    fn center_on(read self, read monitor: Monitor) -> Unit:
+        self.window.center_on :: monitor :: method
+        return
+
+    fn size(read self) -> Size:
+        return self.window.size :: :: method
+
+    fn inner_size(read self) -> Size:
+        return self.window.inner_size :: :: method
+
+    fn set_size(read self, width: CInt, height: CInt) -> Unit:
+        self.window.set_size :: width, height :: method
+        return
+
+    fn request_inner_size(read self, width: CInt, height: CInt) -> Option[Size]:
+        return self.window.request_inner_size :: width, height :: method
+
+    fn apply_inner_size(read self, read requested: Size) -> Option[Size]:
+        return self.window.apply_inner_size :: requested :: method
+
+    fn resize_increments(read self) -> Option[Size]:
+        return self.window.resize_increments :: :: method
+
+    fn set_resize_increments(read self, read increments: Option[Size]) -> Unit:
+        self.window.set_resize_increments :: increments :: method
+        return
+
+    fn apply_resize_increments(read self, read increments: Size) -> Unit:
+        self.window.apply_resize_increments :: increments :: method
+        return
+
+    fn clear_resize_increments(read self) -> Unit:
+        self.window.clear_resize_increments :: :: method
+        return
+
+    fn set_size_limits(read self, min_width: CInt, min_height: CInt, max_width: CInt, max_height: CInt) -> Unit:
+        self.window.set_size_limits :: min_width, min_height, max_width, max_height :: method
+        return
+
+    fn apply_size_limits(read self, read limits: WindowSizeLimits) -> Unit:
+        self.window.apply_size_limits :: limits :: method
+        return
+
+    fn clear_size_limits(read self) -> Unit:
+        self.window.clear_size_limits :: :: method
+        return
+
+    fn set_aspect_ratio(read self, numerator: CInt, denominator: CInt) -> Unit:
+        self.window.set_aspect_ratio :: numerator, denominator :: method
+        return
+
+    fn apply_aspect_ratio(read self, read ratio: WindowAspectRatio) -> Unit:
+        self.window.apply_aspect_ratio :: ratio :: method
+        return
+
+    fn clear_aspect_ratio(read self) -> Unit:
+        self.window.clear_aspect_ratio :: :: method
+        return
+
+    fn frame_size(read self) -> FrameSize:
+        return self.window.frame_size :: :: method
+
+    fn outer_position(read self) -> Point:
+        return self.window.outer_position :: :: method
+
+    fn outer_size(read self) -> Size:
+        return self.window.outer_size :: :: method
+
+    fn outer_placement(read self) -> WindowPlacement:
+        return self.window.outer_placement :: :: method
+
+    fn framebuffer_size(read self) -> Size:
+        return self.window.framebuffer_size :: :: method
+
+    fn surface_size(read self) -> Size:
+        return self.window.surface_size :: :: method
+
+    fn content_scale(read self) -> Scale:
+        return self.window.content_scale :: :: method
+
+    fn theme(read self) -> Option[Theme]:
+        return self.window.theme :: :: method
+
+    fn set_theme(read self, read theme: Option[Theme]) -> Result[Unit, WindowThemeError]:
+        return self.window.set_theme :: theme :: method
+
+    fn undecorated_shadow(read self) -> Bool:
+        return self.window.undecorated_shadow :: :: method
+
+    fn system_backdrop(read self) -> WindowSystemBackdrop:
+        return self.window.system_backdrop :: :: method
+
+    fn border_color(read self) -> Option[RgbaColor]:
+        return self.window.border_color :: :: method
+
+    fn title_background_color(read self) -> Option[RgbaColor]:
+        return self.window.title_background_color :: :: method
+
+    fn title_text_color(read self) -> Option[RgbaColor]:
+        return self.window.title_text_color :: :: method
+
+    fn corner_preference(read self) -> WindowCornerPreference:
+        return self.window.corner_preference :: :: method
+
+    fn window_level(read self) -> WindowLevel:
+        return self.window.window_level :: :: method
+
+    fn set_window_level(read self, read level: WindowLevel) -> Result[Unit, WindowControlError]:
+        return self.window.set_window_level :: level :: method
+
+    fn enabled_buttons(read self) -> Result[WindowButtons, WindowControlError]:
+        return self.window.enabled_buttons :: :: method
+
+    fn enabled(read self) -> Result[Bool, WindowControlError]:
+        return self.window.enabled :: :: method
+
+    fn skip_taskbar(read self) -> Result[Bool, WindowControlError]:
+        return self.window.skip_taskbar :: :: method
+
+    fn content_protected(read self) -> Result[Bool, WindowControlError]:
+        return self.window.content_protected :: :: method
+
+    fn ime_allowed(read self) -> Bool:
+        return self.window.ime_allowed :: :: method
+
+    fn set_ime_allowed(read self, allowed: Bool) -> Unit:
+        self.window.set_ime_allowed :: allowed :: method
+        return
+
+    fn ime_cursor_area(read self) -> Option[Rect]:
+        return self.window.ime_cursor_area :: :: method
+
+    fn set_ime_cursor_area(read self, x: CInt, y: CInt, width: CInt, height: CInt) -> Unit:
+        self.window.set_ime_cursor_area :: x, y, width, height :: method
+        return
+
+    fn apply_ime_cursor_area(read self, read area: Rect) -> Unit:
+        self.window.apply_ime_cursor_area :: area :: method
+        return
+
+    fn set_enabled_buttons(read self, read buttons: WindowButtons) -> Result[Unit, WindowControlError]:
+        return self.window.set_enabled_buttons :: buttons :: method
+
+    fn set_enabled(read self, enabled: Bool) -> Result[Unit, WindowControlError]:
+        return self.window.set_enabled :: enabled :: method
+
+    fn set_skip_taskbar(read self, skip: Bool) -> Result[Unit, WindowControlError]:
+        return self.window.set_skip_taskbar :: skip :: method
+
+    fn set_content_protected(read self, enabled: Bool) -> Result[Unit, WindowControlError]:
+        return self.window.set_content_protected :: enabled :: method
+
+    fn set_undecorated_shadow(read self, shadow: Bool) -> Result[Unit, WindowAppearanceError]:
+        return self.window.set_undecorated_shadow :: shadow :: method
+
+    fn set_system_backdrop(read self, read backdrop: WindowSystemBackdrop) -> Result[Unit, WindowAppearanceError]:
+        return self.window.set_system_backdrop :: backdrop :: method
+
+    fn set_border_color(read self, read color: Option[RgbaColor]) -> Result[Unit, WindowAppearanceError]:
+        return self.window.set_border_color :: color :: method
+
+    fn set_title_background_color(read self, read color: Option[RgbaColor]) -> Result[Unit, WindowAppearanceError]:
+        return self.window.set_title_background_color :: color :: method
+
+    fn set_title_text_color(read self, read color: Option[RgbaColor]) -> Result[Unit, WindowAppearanceError]:
+        return self.window.set_title_text_color :: color :: method
+
+    fn set_corner_preference(read self, read preference: WindowCornerPreference) -> Result[Unit, WindowAppearanceError]:
+        return self.window.set_corner_preference :: preference :: method
+
+    fn drag_window(read self) -> Result[Unit, WindowControlError]:
+        return self.window.drag_window :: :: method
+
+    fn drag_resize_window(read self, read direction: WindowResizeDirection) -> Result[Unit, WindowControlError]:
+        return self.window.drag_resize_window :: direction :: method
+
+    fn show_window_menu(read self, x: CInt, y: CInt) -> Result[Unit, WindowControlError]:
+        return self.window.show_window_menu :: x, y :: method
+
+    fn show_window_menu_at(read self, read position: Point) -> Result[Unit, WindowControlError]:
+        return self.window.show_window_menu_at :: position :: method
+
+    fn cursor_pos(read self) -> CursorPos:
+        return self.window.cursor_pos :: :: method
+
+    fn set_cursor_pos(read self, x: F64, y: F64) -> Unit:
+        self.window.set_cursor_pos :: x, y :: method
+        return
+
+    fn set_cursor(read self, read cursor: GlfwCursor) -> Unit:
+        self.window.set_cursor :: cursor :: method
+        return
+
+    fn set_cursor_image(read self, edit image: RgbaImage, xhot: CInt, yhot: CInt) -> Option[GlfwCursor]:
+        return self.window.set_cursor_image :: image, xhot, yhot :: method
+
+    fn set_standard_cursor(read self, cursor: StandardCursor) -> Option[GlfwCursor]:
+        return self.window.set_standard_cursor :: cursor :: method
+
+    fn use_default_cursor(read self) -> Unit:
+        self.window.use_default_cursor :: :: method
+        return
+
+    fn client_api(read self) -> ClientApi:
+        return self.window.client_api :: :: method
+
+    fn client_api_raw(read self) -> CInt:
+        return self.window.client_api_raw :: :: method
+
+    fn opengl_profile(read self) -> OpenGlProfile:
+        return self.window.opengl_profile :: :: method
+
+    fn opengl_profile_raw(read self) -> CInt:
+        return self.window.opengl_profile_raw :: :: method
+
+    fn context_creation_api(read self) -> ContextCreationApi:
+        return self.window.context_creation_api :: :: method
+
+    fn context_creation_api_raw(read self) -> CInt:
+        return self.window.context_creation_api_raw :: :: method
+
+    fn context_version_major(read self) -> CInt:
+        return self.window.context_version_major :: :: method
+
+    fn context_version_minor(read self) -> CInt:
+        return self.window.context_version_minor :: :: method
+
+    fn current_context(read self) -> Bool:
+        return self.window.current_context :: :: method
+
+    fn wgl_context(read self) -> GlfwWglContext:
+        return self.window.wgl_context :: :: method
+
+    fn egl_context(read self) -> GlfwEglContext:
+        return self.window.egl_context :: :: method
+
+    fn egl_surface(read self) -> GlfwEglSurface:
+        return self.window.egl_surface :: :: method
+
+    fn osmesa_context(read self) -> GlfwOsMesaContext:
+        return self.window.osmesa_context :: :: method
+
+    fn osmesa_color_buffer(read self) -> Option[GlfwOSMesaColorBuffer]:
+        return self.window.osmesa_color_buffer :: :: method
+
+    fn osmesa_depth_buffer(read self) -> Option[GlfwOSMesaDepthBuffer]:
+        return self.window.osmesa_depth_buffer :: :: method
+
+    fn opengl_forward_compat(read self) -> Bool:
+        return self.window.opengl_forward_compat :: :: method
+
+    fn opengl_debug_context(read self) -> Bool:
+        return self.window.opengl_debug_context :: :: method
+
+    fn context_no_error(read self) -> Bool:
+        return self.window.context_no_error :: :: method
+
+    fn srgb_capable(read self) -> Bool:
+        return self.window.srgb_capable :: :: method
+
+    fn doublebuffered(read self) -> Bool:
+        return self.window.doublebuffered :: :: method
+
+    fn opacity(read self) -> F32:
+        return self.window.opacity :: :: method
+
+    fn set_opacity(read self, opacity: F32) -> Unit:
+        self.window.set_opacity :: opacity :: method
+        return
+
+    fn visible(read self) -> Bool:
+        return self.window.visible :: :: method
+
+    fn set_visible(read self, value: Bool) -> Unit:
+        self.window.set_visible :: value :: method
+        return
+
+    fn show(read self) -> Unit:
+        self.window.show :: :: method
+        return
+
+    fn hide(read self) -> Unit:
+        self.window.hide :: :: method
+        return
+
+    fn focused(read self) -> Bool:
+        return self.window.focused :: :: method
+
+    fn has_focus(read self) -> Bool:
+        return self.window.has_focus :: :: method
+
+    fn focus(read self) -> Unit:
+        self.window.focus :: :: method
+        return
+
+    fn focus_window(read self) -> Unit:
+        self.window.focus_window :: :: method
+        return
+
+    fn hovered(read self) -> Bool:
+        return self.window.hovered :: :: method
+
+    fn floating(read self) -> Bool:
+        return self.window.floating :: :: method
+
+    fn set_floating(read self, value: Bool) -> Unit:
+        self.window.set_floating :: value :: method
+        return
+
+    fn iconified(read self) -> Bool:
+        return self.window.iconified :: :: method
+
+    fn minimized(read self) -> Bool:
+        return self.window.minimized :: :: method
+
+    fn set_minimized(read self, value: Bool) -> Unit:
+        self.window.set_minimized :: value :: method
+        return
+
+    fn iconify(read self) -> Unit:
+        self.window.iconify :: :: method
+        return
+
+    fn restore(read self) -> Unit:
+        self.window.restore :: :: method
+        return
+
+    fn maximized(read self) -> Bool:
+        return self.window.maximized :: :: method
+
+    fn set_maximized(read self, value: Bool) -> Unit:
+        self.window.set_maximized :: value :: method
+        return
+
+    fn maximize(read self) -> Unit:
+        self.window.maximize :: :: method
+        return
+
+    fn current_monitor(read self) -> Option[Monitor]:
+        return self.window.current_monitor :: :: method
+
+    fn fullscreen(read self) -> Bool:
+        return self.window.fullscreen :: :: method
+
+    fn set_monitor(read self, read spec: WindowMonitorSpec) -> Unit:
+        self.window.set_monitor :: spec :: method
+        return
+
+    fn enter_fullscreen_on(read self, read monitor: Monitor) -> Result[Unit, WindowModeError]:
+        return self.window.enter_fullscreen_on :: monitor :: method
+
+    fn enter_fullscreen_with_video_mode(read self, read monitor: Monitor, read mode: VideoMode) -> Result[Unit, WindowModeError]:
+        return self.window.enter_fullscreen_with_video_mode :: monitor, mode :: method
+
+    fn exit_fullscreen(read self, x: CInt, y: CInt, width: CInt, height: CInt) -> Unit:
+        self.window.exit_fullscreen :: x, y, width, height :: method
+        return
+
+    fn exit_fullscreen_with_refresh_rate(read self, x: CInt, y: CInt, width: CInt, height: CInt, refresh_rate: CInt) -> Unit:
+        self.window.exit_fullscreen_with_refresh_rate :: x, y, width, height, refresh_rate :: method
+        return
+
+    fn resizable(read self) -> Bool:
+        return self.window.resizable :: :: method
+
+    fn set_resizable(read self, value: Bool) -> Unit:
+        self.window.set_resizable :: value :: method
+        return
+
+    fn decorated(read self) -> Bool:
+        return self.window.decorated :: :: method
+
+    fn set_decorated(read self, value: Bool) -> Unit:
+        self.window.set_decorated :: value :: method
+        return
+
+    fn auto_iconify(read self) -> Bool:
+        return self.window.auto_iconify :: :: method
+
+    fn set_auto_iconify(read self, value: Bool) -> Unit:
+        self.window.set_auto_iconify :: value :: method
+        return
+
+    fn focus_on_show(read self) -> Bool:
+        return self.window.focus_on_show :: :: method
+
+    fn set_focus_on_show(read self, value: Bool) -> Unit:
+        self.window.set_focus_on_show :: value :: method
+        return
+
+    fn mouse_passthrough(read self) -> Bool:
+        return self.window.mouse_passthrough :: :: method
+
+    fn set_mouse_passthrough(read self, value: Bool) -> Unit:
+        self.window.set_mouse_passthrough :: value :: method
+        return
+
+    fn cursor_hittest(read self) -> Bool:
+        return self.window.cursor_hittest :: :: method
+
+    fn set_cursor_hittest(read self, enabled: Bool) -> Unit:
+        self.window.set_cursor_hittest :: enabled :: method
+        return
+
+    fn cursor_mode(read self) -> CursorMode:
+        return self.window.cursor_mode :: :: method
+
+    fn set_cursor_mode(read self, mode: CursorMode) -> Unit:
+        self.window.set_cursor_mode :: mode :: method
+        return
+
+    fn use_normal_cursor(read self) -> Unit:
+        self.window.use_normal_cursor :: :: method
+        return
+
+    fn hide_cursor(read self) -> Unit:
+        self.window.hide_cursor :: :: method
+        return
+
+    fn disable_cursor(read self) -> Unit:
+        self.window.disable_cursor :: :: method
+        return
+
+    fn capture_cursor(read self) -> Unit:
+        self.window.capture_cursor :: :: method
+        return
+
+    fn sticky_keys_enabled(read self) -> Bool:
+        return self.window.sticky_keys_enabled :: :: method
+
+    fn set_sticky_keys(read self, enabled: Bool) -> Unit:
+        self.window.set_sticky_keys :: enabled :: method
+        return
+
+    fn sticky_mouse_buttons_enabled(read self) -> Bool:
+        return self.window.sticky_mouse_buttons_enabled :: :: method
+
+    fn set_sticky_mouse_buttons(read self, enabled: Bool) -> Unit:
+        self.window.set_sticky_mouse_buttons :: enabled :: method
+        return
+
+    fn lock_key_mods_enabled(read self) -> Bool:
+        return self.window.lock_key_mods_enabled :: :: method
+
+    fn set_lock_key_mods(read self, enabled: Bool) -> Unit:
+        self.window.set_lock_key_mods :: enabled :: method
+        return
+
+    fn raw_mouse_motion_supported(read self) -> Bool:
+        return self.window.raw_mouse_motion_supported :: :: method
+
+    fn raw_mouse_motion_enabled(read self) -> Bool:
+        return self.window.raw_mouse_motion_enabled :: :: method
+
+    fn set_raw_mouse_motion(read self, enabled: Bool) -> Unit:
+        self.window.set_raw_mouse_motion :: enabled :: method
+        return
+
+    fn key_state(read self, key: KeyCode) -> InputAction:
+        return self.window.key_state :: key :: method
+
+    fn scancode(read self, key: KeyCode) -> ScanCode:
+        return self.window.scancode :: key :: method
+
+    fn key_pressed(read self, key: KeyCode) -> Bool:
+        return self.window.key_pressed :: key :: method
+
+    fn key_repeating(read self, key: KeyCode) -> Bool:
+        return self.window.key_repeating :: key :: method
+
+    fn key_down(read self, key: KeyCode) -> Bool:
+        return self.window.key_down :: key :: method
+
+    fn mouse_button_state(read self, button: MouseButton) -> InputAction:
+        return self.window.mouse_button_state :: button :: method
+
+    fn mouse_button_pressed(read self, button: MouseButton) -> Bool:
+        return self.window.mouse_button_pressed :: button :: method
+
+    fn mouse_button_down(read self, button: MouseButton) -> Bool:
+        return self.window.mouse_button_down :: button :: method
+
+    fn keyboard_snapshot(read self) -> KeyboardInputSnapshot:
+        return self.window.keyboard_snapshot :: :: method
+
+    fn mouse_snapshot(read self) -> MouseInputSnapshot:
+        return self.window.mouse_snapshot :: :: method
+
+    fn input_snapshot(read self) -> WindowInputSnapshot:
+        return self.window.input_snapshot :: :: method
+
+    fn should_close(read self) -> Bool:
+        return self.window.should_close :: :: method
+
+    fn set_should_close(read self, value: Bool) -> Unit:
+        self.window.set_should_close :: value :: method
+        return
+
+    fn request_close(read self) -> Unit:
+        self.window.close :: :: method
+        return
+
+    fn request_attention(read self) -> Unit:
+        self.window.request_attention :: :: method
+        return
+
+    fn request_user_attention(read self, read request: Option[UserAttentionType]) -> Result[Unit, WindowControlError]:
+        return self.window.request_user_attention :: request :: method
+
+    fn request_redraw(read self) -> Unit:
+        self.window.request_redraw :: :: method
+        return
+
+    fn close_requested(read self) -> Bool:
+        return self.window.should_close :: :: method

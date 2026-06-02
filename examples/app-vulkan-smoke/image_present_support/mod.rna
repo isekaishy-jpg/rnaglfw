@@ -1,0 +1,195 @@
+use std.{Option, Result}
+
+use runa_app.rgba_color
+use runa_app_vulkan.{VulkanPresentApp, VulkanPresentSnapshot, VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT}
+
+pub fn check_vulkan_image_present_helpers(edit present_app: VulkanPresentApp, read present_snapshot: VulkanPresentSnapshot) -> I32:
+    let expected_usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+    select:
+        when present_app.surface_vulkan_image_usage :: :: method != expected_usage => return 1
+        when present_snapshot.surface_vulkan_image_usage :: :: method != expected_usage => return 2
+        else => ()
+    let surface_width = present_app.surface_width :: :: method
+    let surface_height = present_app.surface_height :: :: method
+    let surface_format = present_snapshot.surface_format
+    select present_app.image_requirements :: surface_width, surface_height, surface_format.format, expected_usage :: method:
+        when Result.Ok(requirements) =>
+            select present_app.host_coherent_memory_type_index :: requirements.memory_type_bits :: method:
+                when Option.Some(_) =>
+                    select present_app.host_coherent_surface_vulkan_image_plan :: :: method:
+                        when Result.Ok(host_coherent_plan) =>
+                            select:
+                                when host_coherent_plan.width :: :: method != surface_width => return 3
+                                when host_coherent_plan.height :: :: method != surface_height => return 4
+                                when host_coherent_plan.format :: :: method != surface_format.format => return 5
+                                when host_coherent_plan.usage :: :: method != expected_usage => return 6
+                                when !host_coherent_plan.transfer_source_compatible :: :: method => return 7
+                                when !host_coherent_plan.transfer_destination_compatible :: :: method => return 8
+                                when !host_coherent_plan.host_coherent :: :: method => return 9
+                                when !present_app.surface_vulkan_image_plan_compatible :: host_coherent_plan :: method => return 10
+                                when !present_snapshot.surface_vulkan_image_plan_compatible :: host_coherent_plan :: method => return 11
+                                else => ()
+                        when Result.Err(_) => return 28
+                when Option.None =>
+                    select present_app.host_coherent_surface_vulkan_image_plan :: :: method:
+                        when Result.Ok(_) => return 61
+                        when Result.Err(_) => ()
+        when Result.Err(_) => return 62
+    select present_app.device_local_surface_vulkan_image_plan :: :: method:
+        when Result.Ok(device_plan) =>
+            let device_memory_type_index = device_plan.memory_type_index :: :: method
+            select present_app.surface_vulkan_image_plan :: device_memory_type_index :: method:
+                when Result.Ok(explicit_plan) =>
+                    select:
+                        when explicit_plan.width :: :: method != device_plan.width :: :: method => return 12
+                        when explicit_plan.height :: :: method != device_plan.height :: :: method => return 13
+                        when explicit_plan.format :: :: method != device_plan.format :: :: method => return 14
+                        when explicit_plan.usage :: :: method != device_plan.usage :: :: method => return 15
+                        when explicit_plan.memory_type_index :: :: method != device_plan.memory_type_index :: :: method => return 16
+                        when !present_app.surface_vulkan_image_plan_compatible :: explicit_plan :: method => return 17
+                        when !present_snapshot.surface_vulkan_image_plan_compatible :: explicit_plan :: method => return 18
+                        else => ()
+                    let explicit_memory_type_index = explicit_plan.memory_type_index :: :: method
+                    select present_app.surface_vulkan_image :: explicit_memory_type_index :: method:
+                        when Result.Ok(fresh_image) =>
+                            select:
+                                when !fresh_image.valid :: :: method =>
+                                    present_app.destroy_image :: fresh_image :: method
+                                    return 19
+                                when !present_app.surface_vulkan_image_present_compatible :: fresh_image :: method =>
+                                    present_app.destroy_image :: fresh_image :: method
+                                    return 20
+                                when !present_snapshot.surface_vulkan_image_present_compatible :: fresh_image :: method =>
+                                    present_app.destroy_image :: fresh_image :: method
+                                    return 21
+                                when present_app.surface_vulkan_image_present_ready :: fresh_image :: method =>
+                                    present_app.destroy_image :: fresh_image :: method
+                                    return 22
+                                when present_snapshot.surface_vulkan_image_present_ready :: fresh_image :: method =>
+                                    present_app.destroy_image :: fresh_image :: method
+                                    return 23
+                                else => ()
+                            select present_app.present_vulkan_image :: fresh_image :: method:
+                                when Result.Ok(_) =>
+                                    present_app.destroy_image :: fresh_image :: method
+                                    return 24
+                                when Result.Err(_) =>
+                                    present_app.destroy_image :: fresh_image :: method
+                                    ()
+                        when Result.Err(_) => return 25
+                when Result.Err(_) => return 26
+        when Result.Err(_) => return 27
+    let fill = rgba_color :: 41, 120, 222, 255 :: call
+    let fill_b = rgba_color :: 219, 91, 41, 255 :: call
+    let Result.Ok(surface_frame) = present_app.surface_pixel_frame :: fill :: method else => return 29
+    let Result.Ok(surface_pixels) = surface_frame.copy_pixels :: :: method else => return 30
+    select present_app.device_local_surface_vulkan_image_from_pixels :: surface_pixels :: method:
+        when Result.Ok(image) =>
+            select:
+                when !present_app.surface_vulkan_image_present_compatible :: image :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 31
+                when !present_snapshot.surface_vulkan_image_present_compatible :: image :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 32
+                when !present_app.surface_vulkan_image_present_ready :: image :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 33
+                when !present_snapshot.surface_vulkan_image_present_ready :: image :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 34
+                else => ()
+            select present_app.present_vulkan_image :: image :: method:
+                when Result.Ok(_) =>
+                    select:
+                        when !image.transfer_source_ready :: :: method =>
+                            present_app.destroy_image :: image :: method
+                            return 35
+                        when !present_app.surface_vulkan_image_present_ready :: image :: method =>
+                            present_app.destroy_image :: image :: method
+                            return 36
+                        when !present_snapshot.surface_vulkan_image_present_ready :: image :: method =>
+                            present_app.destroy_image :: image :: method
+                            return 37
+                        else => ()
+                    present_app.destroy_image :: image :: method
+                when Result.Err(_) =>
+                    present_app.destroy_image :: image :: method
+                    return 38
+        when Result.Err(_) => return 39
+    let Result.Ok(surface_frame_b) = present_app.surface_pixel_frame :: fill_b :: method else => return 40
+    select present_app.device_local_surface_vulkan_image_from_pixel_frame :: surface_frame_b :: method:
+        when Result.Ok(image) =>
+            select:
+                when !present_app.surface_vulkan_image_present_compatible :: image :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 41
+                when !present_snapshot.surface_vulkan_image_present_compatible :: image :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 42
+                when !present_app.surface_vulkan_image_present_ready :: image :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 43
+                when !present_snapshot.surface_vulkan_image_present_ready :: image :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 44
+                else => ()
+            select present_app.image_image :: image :: method:
+                when Result.Ok(roundtrip_image) =>
+                    select roundtrip_image.pixel :: 0, 0 :: method:
+                        when Result.Ok(roundtrip_color) =>
+                            select:
+                                when roundtrip_color.red != fill_b.red =>
+                                    present_app.destroy_image :: image :: method
+                                    return 45
+                                when roundtrip_color.green != fill_b.green =>
+                                    present_app.destroy_image :: image :: method
+                                    return 46
+                                when roundtrip_color.blue != fill_b.blue =>
+                                    present_app.destroy_image :: image :: method
+                                    return 47
+                                when roundtrip_color.alpha != fill_b.alpha =>
+                                    present_app.destroy_image :: image :: method
+                                    return 48
+                                else => ()
+                        when Result.Err(_) =>
+                            present_app.destroy_image :: image :: method
+                            return 49
+                when Result.Err(_) =>
+                    present_app.destroy_image :: image :: method
+                    return 50
+            present_app.destroy_image :: image :: method
+        when Result.Err(_) => return 51
+    let Result.Ok(source_image) = present_app.surface_image :: fill :: method else => return 52
+    select present_app.device_local_surface_vulkan_image_from_image :: source_image :: method:
+        when Result.Ok(image) =>
+            select:
+                when !present_app.surface_vulkan_image_present_compatible :: image :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 53
+                when !present_snapshot.surface_vulkan_image_present_compatible :: image :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 54
+                when !present_app.surface_vulkan_image_present_ready :: image :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 55
+                when !present_snapshot.surface_vulkan_image_present_ready :: image :: method =>
+                    present_app.destroy_image :: image :: method
+                    return 56
+                else => ()
+            select present_app.present_vulkan_image :: image :: method:
+                when Result.Ok(_) =>
+                    select:
+                        when !image.transfer_source_ready :: :: method =>
+                            present_app.destroy_image :: image :: method
+                            return 57
+                        when !present_snapshot.surface_vulkan_image_present_ready :: image :: method =>
+                            present_app.destroy_image :: image :: method
+                            return 58
+                        else => ()
+                    present_app.destroy_image :: image :: method
+                when Result.Err(_) =>
+                    present_app.destroy_image :: image :: method
+                    return 59
+        when Result.Err(_) => return 60
+    return 0

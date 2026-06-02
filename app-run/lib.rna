@@ -31,11 +31,12 @@ pub use runa_app.{GamepadAxis, GamepadButton, GamepadState, HatState, Joystick}
 pub use runa_app.{InputAction, JoystickEvent, JoystickId, KeyCode, Modifiers}
 pub use runa_app.JoystickEventKind
 pub use runa_app.{Platform, RuntimeErrorInfo, RuntimeErrorKind, VersionInfo}
-pub use runa_app.{RawKeyCode, ScanCode}
+pub use runa_app.{RawKeyCode, ScanCode, TouchPhase}
 pub use runa_app.{Monitor, MonitorEvent, MonitorEventKind, MonitorGammaRamp}
 pub use runa_app.{MonitorGammaRampError, MonitorId}
 pub use runa_app.{UserEvent, UserEventId, UserEventKind}
 pub use runa_app.{WindowCharacterData, WindowCharacterModsData, WindowCursorData}
+pub use runa_app.WindowTouchData
 pub use runa_app.{WindowEventKind, WindowKeyData, WindowMouseButtonData}
 pub use runa_app.{WindowMoveData, WindowScaleData, WindowScrollData, WindowSizeData}
 pub use runa_app.{MouseButton, RgbaColor, RgbaImage, RgbaImageError}

@@ -1,0 +1,100 @@
+use std.{List, Option, Result}
+use runa_app.{AppError, Modifiers, WindowEvent, WindowId}
+use present.VulkanPresentApp
+
+impl VulkanPresentApp:
+    fn next_modifiers_state(edit self) -> Option[Modifiers]:
+        return self.app.next_modifiers_state_for :: self.window.id :: method
+
+    fn next_modifiers_state_for(edit self, id: WindowId) -> Option[Modifiers]:
+        return self.app.next_modifiers_state_for :: id :: method
+
+    fn next_modifiers_changed_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_modifiers_changed_event_for :: self.window.id :: method
+
+    fn next_modifiers_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_modifiers_changed_event_for :: id :: method
+
+    fn poll_next_modifiers_state(edit self) -> Result[Option[Modifiers], AppError]:
+        return self.app.poll_next_modifiers_state_for :: self.window.id :: method
+
+    fn poll_next_modifiers_state_for(edit self, id: WindowId) -> Result[Option[Modifiers], AppError]:
+        return self.app.poll_next_modifiers_state_for :: id :: method
+
+    fn poll_next_modifiers_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_modifiers_changed_event_for :: self.window.id :: method
+
+    fn poll_next_modifiers_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_modifiers_changed_event_for :: id :: method
+
+    fn wait_next_modifiers_state(edit self) -> Result[Option[Modifiers], AppError]:
+        return self.app.wait_next_modifiers_state_for :: self.window.id :: method
+
+    fn wait_next_modifiers_state_for(edit self, id: WindowId) -> Result[Option[Modifiers], AppError]:
+        return self.app.wait_next_modifiers_state_for :: id :: method
+
+    fn wait_next_modifiers_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_modifiers_changed_event_for :: self.window.id :: method
+
+    fn wait_next_modifiers_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_modifiers_changed_event_for :: id :: method
+
+    fn wait_timeout_next_modifiers_state(edit self, timeout: F64) -> Result[Option[Modifiers], AppError]:
+        return self.app.wait_timeout_next_modifiers_state_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_modifiers_state_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Modifiers], AppError]:
+        return self.app.wait_timeout_next_modifiers_state_for :: id, timeout :: method
+
+    fn wait_timeout_next_modifiers_changed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_modifiers_changed_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_modifiers_changed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_modifiers_changed_event_for :: id, timeout :: method
+
+    fn pending_modifiers_states(edit self) -> List[Modifiers]:
+        return self.app.pending_modifiers_states_for :: self.window.id :: method
+
+    fn pending_modifiers_states_for(edit self, id: WindowId) -> List[Modifiers]:
+        return self.app.pending_modifiers_states_for :: id :: method
+
+    fn pending_modifiers_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_modifiers_changed_events_for :: self.window.id :: method
+
+    fn pending_modifiers_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_modifiers_changed_events_for :: id :: method
+
+    fn poll_modifiers_states(edit self) -> List[Modifiers]:
+        return self.app.poll_modifiers_states_for :: self.window.id :: method
+
+    fn poll_modifiers_states_for(edit self, id: WindowId) -> List[Modifiers]:
+        return self.app.poll_modifiers_states_for :: id :: method
+
+    fn poll_modifiers_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_modifiers_changed_events_for :: self.window.id :: method
+
+    fn poll_modifiers_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_modifiers_changed_events_for :: id :: method
+
+    fn wait_modifiers_states(edit self) -> List[Modifiers]:
+        return self.app.wait_modifiers_states_for :: self.window.id :: method
+
+    fn wait_modifiers_states_for(edit self, id: WindowId) -> List[Modifiers]:
+        return self.app.wait_modifiers_states_for :: id :: method
+
+    fn wait_modifiers_changed_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_modifiers_changed_events_for :: self.window.id :: method
+
+    fn wait_modifiers_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_modifiers_changed_events_for :: id :: method
+
+    fn wait_timeout_modifiers_states(edit self, timeout: F64) -> List[Modifiers]:
+        return self.app.wait_timeout_modifiers_states_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_modifiers_states_for(edit self, id: WindowId, timeout: F64) -> List[Modifiers]:
+        return self.app.wait_timeout_modifiers_states_for :: id, timeout :: method
+
+    fn wait_timeout_modifiers_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_modifiers_changed_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_modifiers_changed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_modifiers_changed_events_for :: id, timeout :: method

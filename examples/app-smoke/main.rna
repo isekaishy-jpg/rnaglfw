@@ -1164,9 +1164,9 @@ fn main() -> I32:
                 id = 5
             select user_signal.kind :: :: method:
                 when UserEventKind.Signaled => ()
-            let refreshed_event = WindowEvent.Refreshed :: :: call
+            let redraw_requested_event = WindowEvent.RedrawRequested :: :: call
                 id = 33
-            let wrapped_window_event = AppEvent.Window :: refreshed_event :: call
+            let wrapped_window_event = AppEvent.Window :: redraw_requested_event :: call
             select wrapped_window_event.take_window_event :: :: method:
                 when Option.Some(window_event) =>
                     select:
@@ -1222,13 +1222,13 @@ fn main() -> I32:
                 when Option.None =>
                     app.terminate :: :: method
                     return 167
-            let filtered_a = WindowEvent.Refreshed :: :: call
+            let filtered_a = WindowEvent.RedrawRequested :: :: call
                 id = 77
             let filtered_b = WindowEvent.Moved :: :: call
                 id = 77
                 x = 1
                 y = 2
-            let filtered_c = WindowEvent.Refreshed :: :: call
+            let filtered_c = WindowEvent.RedrawRequested :: :: call
                 id = 88
             let filtered_wrapped_a = AppEvent.Window :: filtered_a :: call
             let filtered_wrapped_b = AppEvent.Window :: filtered_b :: call

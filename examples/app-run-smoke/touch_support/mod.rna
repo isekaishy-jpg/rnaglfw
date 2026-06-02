@@ -1,0 +1,184 @@
+use std.{List, Option}
+use runa_app_run.{AppEvent, WindowEvent, WindowEventKind, app_event_batch_from_events}
+use runa_app_run.TouchPhase
+
+pub fn check_touch_batch_helpers() -> I32:
+    let direct_touch_event = WindowEvent.Touch :: :: call
+        id = 201
+        touch_id = 11
+        phase = TouchPhase.Started
+        x = 12.5
+        y = 14.5
+    select direct_touch_event.kind :: :: method:
+        when WindowEventKind.Touch => ()
+        when _ => return 3600
+    select direct_touch_event.touch_data :: :: method:
+        when Option.Some(data) =>
+            select data.phase:
+                when TouchPhase.Started =>
+                    select:
+                        when data.touch_id != 11 => return 3601
+                        when data.x != 12.5 => return 3602
+                        when data.y != 14.5 => return 3603
+                        else => ()
+                when _ => return 3604
+        when Option.None => return 3605
+
+    let wrapped_touch_event = WindowEvent.Touch :: :: call
+        id = 202
+        touch_id = 12
+        phase = TouchPhase.Moved
+        x = 20.0
+        y = 25.0
+    let wrapped_event = AppEvent.Window :: wrapped_touch_event :: call
+    select wrapped_event.touch_data :: :: method:
+        when Option.Some(data) =>
+            select data.phase:
+                when TouchPhase.Moved =>
+                    select:
+                        when data.touch_id != 12 => return 3606
+                        when data.x != 20.0 => return 3607
+                        when data.y != 25.0 => return 3608
+                        else => ()
+                when _ => return 3609
+        when Option.None => return 3610
+
+    let view_events = List[AppEvent] :: :: call
+    let view_touch_event = WindowEvent.Touch :: :: call
+        id = 203
+        touch_id = 13
+        phase = TouchPhase.Moved
+        x = 30.0
+        y = 31.0
+    let view_other_event = WindowEvent.CursorMoved :: :: call
+        id = 204
+        x = 1.0
+        y = 2.0
+    view_events.push :: (AppEvent.Window :: view_touch_event :: call) :: method
+    view_events.push :: (AppEvent.Window :: view_other_event :: call) :: method
+    let view_batch = app_event_batch_from_events :: view_events :: call
+    let touch_events = view_batch.touch_events :: :: method
+    let touch_data = view_batch.touch_data :: :: method
+    select:
+        when touch_events.count :: :: method != 1 => return 3611
+        when touch_data.count :: :: method != 1 => return 3612
+        else => ()
+    select touch_events.remove :: 0 :: method:
+        when WindowEvent.Touch(id = id, touch_id = touch_id, phase = phase, x = x, y = y) =>
+            select phase:
+                when TouchPhase.Moved =>
+                    select:
+                        when id != 203 => return 3613
+                        when touch_id != 13 => return 3614
+                        when x != 30.0 => return 3615
+                        when y != 31.0 => return 3616
+                        else => ()
+                when _ => return 3617
+        when _ => return 3618
+    let viewed_touch_data = touch_data.remove :: 0 :: method
+    select viewed_touch_data.phase:
+        when TouchPhase.Moved =>
+            select:
+                when viewed_touch_data.touch_id != 13 => return 3619
+                when viewed_touch_data.x != 30.0 => return 3620
+                when viewed_touch_data.y != 31.0 => return 3621
+                else => ()
+        when _ => return 3622
+    let remaining_windows = view_batch.take_windows :: :: method
+    select:
+        when remaining_windows.count :: :: method != 2 => return 3623
+        else => ()
+
+    let filtered_events = List[AppEvent] :: :: call
+    let filtered_touch_event_a = WindowEvent.Touch :: :: call
+        id = 211
+        touch_id = 21
+        phase = TouchPhase.Started
+        x = 40.0
+        y = 41.0
+    let filtered_touch_event_b = WindowEvent.Touch :: :: call
+        id = 212
+        touch_id = 22
+        phase = TouchPhase.Ended
+        x = 50.0
+        y = 51.0
+    filtered_events.push :: (AppEvent.Window :: filtered_touch_event_a :: call) :: method
+    filtered_events.push :: (AppEvent.Window :: filtered_touch_event_b :: call) :: method
+    let filtered_batch = app_event_batch_from_events :: filtered_events :: call
+    let filtered_touch_data = filtered_batch.take_touch_data_for :: 211 :: method
+    let filtered_touch_events = filtered_batch.take_touch_events_for :: 212 :: method
+    select:
+        when filtered_touch_data.count :: :: method != 1 => return 3624
+        when filtered_touch_events.count :: :: method != 1 => return 3625
+        else => ()
+    let filtered_value = filtered_touch_data.remove :: 0 :: method
+    select filtered_value.phase:
+        when TouchPhase.Started =>
+            select:
+                when filtered_value.touch_id != 21 => return 3626
+                when filtered_value.x != 40.0 => return 3627
+                when filtered_value.y != 41.0 => return 3628
+                else => ()
+        when _ => return 3629
+    select filtered_touch_events.remove :: 0 :: method:
+        when WindowEvent.Touch(id = id, touch_id = touch_id, phase = phase, x = x, y = y) =>
+            select phase:
+                when TouchPhase.Ended =>
+                    select:
+                        when id != 212 => return 3630
+                        when touch_id != 22 => return 3631
+                        when x != 50.0 => return 3632
+                        when y != 51.0 => return 3633
+                        else => ()
+                when _ => return 3634
+        when _ => return 3635
+    select:
+        when !filtered_batch.is_empty :: :: method => return 3636
+        else => ()
+
+    let pop_data_events = List[AppEvent] :: :: call
+    let pop_data_touch_event = WindowEvent.Touch :: :: call
+        id = 221
+        touch_id = 31
+        phase = TouchPhase.Cancelled
+        x = 60.0
+        y = 61.0
+    pop_data_events.push :: (AppEvent.Window :: pop_data_touch_event :: call) :: method
+    let pop_data_batch = app_event_batch_from_events :: pop_data_events :: call
+    select pop_data_batch.pop_touch_data :: :: method:
+        when Option.Some(data) =>
+            select data.phase:
+                when TouchPhase.Cancelled =>
+                    select:
+                        when data.touch_id != 31 => return 3637
+                        when data.x != 60.0 => return 3638
+                        when data.y != 61.0 => return 3639
+                        else => ()
+                when _ => return 3640
+        when Option.None => return 3641
+
+    let pop_event_events = List[AppEvent] :: :: call
+    let pop_event_touch_event = WindowEvent.Touch :: :: call
+        id = 222
+        touch_id = 32
+        phase = TouchPhase.Ended
+        x = 70.0
+        y = 71.0
+    pop_event_events.push :: (AppEvent.Window :: pop_event_touch_event :: call) :: method
+    let pop_event_batch = app_event_batch_from_events :: pop_event_events :: call
+    select pop_event_batch.pop_touch_event_for :: 222 :: method:
+        when Option.Some(event) =>
+            select event.touch_data :: :: method:
+                when Option.Some(data) =>
+                    select data.phase:
+                        when TouchPhase.Ended =>
+                            select:
+                                when data.touch_id != 32 => return 3642
+                                when data.x != 70.0 => return 3643
+                                when data.y != 71.0 => return 3644
+                                else => ()
+                        when _ => return 3645
+                when Option.None => return 3646
+        when Option.None => return 3647
+
+    return 0

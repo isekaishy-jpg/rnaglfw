@@ -1,0 +1,148 @@
+use std.{List, Option, Result, Str}
+use runa_app.{AppError, WindowEvent, WindowId}
+use present.VulkanPresentApp
+
+impl VulkanPresentApp:
+    fn next_hovered_file_path(edit self) -> Option[Str]:
+        return self.app.next_hovered_file_path_for :: self.window.id :: method
+
+    fn next_hovered_file_path_for(edit self, id: WindowId) -> Option[Str]:
+        return self.app.next_hovered_file_path_for :: id :: method
+
+    fn next_hovered_file_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_hovered_file_event_for :: self.window.id :: method
+
+    fn next_hovered_file_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_hovered_file_event_for :: id :: method
+
+    fn next_hovered_file_cancelled_event(edit self) -> Option[WindowEvent]:
+        return self.app.next_hovered_file_cancelled_event_for :: self.window.id :: method
+
+    fn next_hovered_file_cancelled_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        return self.app.next_hovered_file_cancelled_event_for :: id :: method
+
+    fn poll_next_hovered_file_path(edit self) -> Result[Option[Str], AppError]:
+        return self.app.poll_next_hovered_file_path_for :: self.window.id :: method
+
+    fn poll_next_hovered_file_path_for(edit self, id: WindowId) -> Result[Option[Str], AppError]:
+        return self.app.poll_next_hovered_file_path_for :: id :: method
+
+    fn poll_next_hovered_file_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_hovered_file_event_for :: self.window.id :: method
+
+    fn poll_next_hovered_file_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_hovered_file_event_for :: id :: method
+
+    fn poll_next_hovered_file_cancelled_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_hovered_file_cancelled_event_for :: self.window.id :: method
+
+    fn poll_next_hovered_file_cancelled_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.poll_next_hovered_file_cancelled_event_for :: id :: method
+
+    fn wait_next_hovered_file_path(edit self) -> Result[Option[Str], AppError]:
+        return self.app.wait_next_hovered_file_path_for :: self.window.id :: method
+
+    fn wait_next_hovered_file_path_for(edit self, id: WindowId) -> Result[Option[Str], AppError]:
+        return self.app.wait_next_hovered_file_path_for :: id :: method
+
+    fn wait_next_hovered_file_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_hovered_file_event_for :: self.window.id :: method
+
+    fn wait_next_hovered_file_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_hovered_file_event_for :: id :: method
+
+    fn wait_next_hovered_file_cancelled_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_hovered_file_cancelled_event_for :: self.window.id :: method
+
+    fn wait_next_hovered_file_cancelled_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_next_hovered_file_cancelled_event_for :: id :: method
+
+    fn wait_timeout_next_hovered_file_path(edit self, timeout: F64) -> Result[Option[Str], AppError]:
+        return self.app.wait_timeout_next_hovered_file_path_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_hovered_file_path_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Str], AppError]:
+        return self.app.wait_timeout_next_hovered_file_path_for :: id, timeout :: method
+
+    fn wait_timeout_next_hovered_file_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_hovered_file_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_hovered_file_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_hovered_file_event_for :: id, timeout :: method
+
+    fn wait_timeout_next_hovered_file_cancelled_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_hovered_file_cancelled_event_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_next_hovered_file_cancelled_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        return self.app.wait_timeout_next_hovered_file_cancelled_event_for :: id, timeout :: method
+
+    fn pending_hovered_file_paths(edit self) -> List[Str]:
+        return self.app.pending_hovered_file_paths_for :: self.window.id :: method
+
+    fn pending_hovered_file_paths_for(edit self, id: WindowId) -> List[Str]:
+        return self.app.pending_hovered_file_paths_for :: id :: method
+
+    fn pending_hovered_file_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_hovered_file_events_for :: self.window.id :: method
+
+    fn pending_hovered_file_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_hovered_file_events_for :: id :: method
+
+    fn pending_hovered_file_cancelled_events(edit self) -> List[WindowEvent]:
+        return self.app.pending_hovered_file_cancelled_events_for :: self.window.id :: method
+
+    fn pending_hovered_file_cancelled_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.pending_hovered_file_cancelled_events_for :: id :: method
+
+    fn poll_hovered_file_paths(edit self) -> List[Str]:
+        return self.app.poll_hovered_file_paths_for :: self.window.id :: method
+
+    fn poll_hovered_file_paths_for(edit self, id: WindowId) -> List[Str]:
+        return self.app.poll_hovered_file_paths_for :: id :: method
+
+    fn poll_hovered_file_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_hovered_file_events_for :: self.window.id :: method
+
+    fn poll_hovered_file_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_hovered_file_events_for :: id :: method
+
+    fn poll_hovered_file_cancelled_events(edit self) -> List[WindowEvent]:
+        return self.app.poll_hovered_file_cancelled_events_for :: self.window.id :: method
+
+    fn poll_hovered_file_cancelled_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.poll_hovered_file_cancelled_events_for :: id :: method
+
+    fn wait_hovered_file_paths(edit self) -> List[Str]:
+        return self.app.wait_hovered_file_paths_for :: self.window.id :: method
+
+    fn wait_hovered_file_paths_for(edit self, id: WindowId) -> List[Str]:
+        return self.app.wait_hovered_file_paths_for :: id :: method
+
+    fn wait_hovered_file_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_hovered_file_events_for :: self.window.id :: method
+
+    fn wait_hovered_file_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_hovered_file_events_for :: id :: method
+
+    fn wait_hovered_file_cancelled_events(edit self) -> List[WindowEvent]:
+        return self.app.wait_hovered_file_cancelled_events_for :: self.window.id :: method
+
+    fn wait_hovered_file_cancelled_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        return self.app.wait_hovered_file_cancelled_events_for :: id :: method
+
+    fn wait_timeout_hovered_file_paths(edit self, timeout: F64) -> List[Str]:
+        return self.app.wait_timeout_hovered_file_paths_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_hovered_file_paths_for(edit self, id: WindowId, timeout: F64) -> List[Str]:
+        return self.app.wait_timeout_hovered_file_paths_for :: id, timeout :: method
+
+    fn wait_timeout_hovered_file_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_hovered_file_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_hovered_file_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_hovered_file_events_for :: id, timeout :: method
+
+    fn wait_timeout_hovered_file_cancelled_events(edit self, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_hovered_file_cancelled_events_for :: self.window.id, timeout :: method
+
+    fn wait_timeout_hovered_file_cancelled_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        return self.app.wait_timeout_hovered_file_cancelled_events_for :: id, timeout :: method

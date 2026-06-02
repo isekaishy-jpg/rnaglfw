@@ -1,0 +1,273 @@
+use std.{List, Option, Result, Str}
+
+use present.VulkanPresentApp
+use runa_app.{AppError, Monitor, VideoMode, Window, WindowId, WindowModeError, WindowSnapshot, WindowSpec}
+
+impl VulkanPresentApp:
+    fn window_by_id(read self, id: WindowId) -> Result[Window, AppError]:
+        return self.app.window :: id :: method
+
+    fn window_snapshot(read self) -> Result[WindowSnapshot, AppError]:
+        return self.app.window_snapshot :: self.window.id :: method
+
+    fn window_snapshot_by_id(read self, id: WindowId) -> Result[WindowSnapshot, AppError]:
+        return self.app.window_snapshot :: id :: method
+
+    fn close_all_windows(read self) -> Unit:
+        self.app.close_all_windows :: :: method
+        return
+
+    fn is_live(read self) -> Bool:
+        return self.app.is_live :: :: method
+
+    fn has_windows(read self) -> Bool:
+        return self.app.has_windows :: :: method
+
+    fn window_count(read self) -> Index:
+        return self.app.window_count :: :: method
+
+    fn window_exists(read self, id: WindowId) -> Bool:
+        return self.app.window_exists :: id :: method
+
+    fn window_ids(read self) -> List[WindowId]:
+        return self.app.window_ids :: :: method
+
+    fn windows_snapshot(read self) -> List[Window]:
+        return self.app.windows_snapshot :: :: method
+
+    fn window_snapshots(read self) -> List[WindowSnapshot]:
+        return self.app.window_snapshots :: :: method
+
+    fn has_close_requested_windows(read self) -> Bool:
+        return self.app.has_close_requested_windows :: :: method
+
+    fn close_requested_window_count(read self) -> Index:
+        return self.app.close_requested_window_count :: :: method
+
+    fn close_requested_window_ids(read self) -> List[WindowId]:
+        return self.app.close_requested_window_ids :: :: method
+
+    fn window_close_requested(read self, id: WindowId) -> Bool:
+        return self.app.window_close_requested :: id :: method
+
+    fn close_requested_window(read self, id: WindowId) -> Option[Window]:
+        return self.app.close_requested_window :: id :: method
+
+    fn close_requested_window_snapshot(read self, id: WindowId) -> Option[WindowSnapshot]:
+        return self.app.close_requested_window_snapshot :: id :: method
+
+    fn close_requested_windows(read self) -> List[Window]:
+        return self.app.close_requested_windows :: :: method
+
+    fn close_requested_window_snapshots(read self) -> List[WindowSnapshot]:
+        return self.app.close_requested_window_snapshots :: :: method
+
+    fn window_index(read self, id: WindowId) -> Option[Index]:
+        return self.app.window_index :: id :: method
+
+    fn has_window(read self, id: WindowId) -> Bool:
+        return self.app.has_window :: id :: method
+
+    fn current_context_window_index(read self) -> Option[Index]:
+        return self.app.current_context_window_index :: :: method
+
+    fn current_context_window(read self) -> Result[Window, AppError]:
+        return self.app.current_context_window :: :: method
+
+    fn create_window(edit self, take spec: WindowSpec) -> Result[Window, AppError]:
+        return self.app.create_window :: spec :: method
+
+    fn create_centered_window_on(edit self, take spec: WindowSpec, read monitor: Monitor) -> Result[Window, AppError]:
+        return self.app.create_centered_window_on :: spec, monitor :: method
+
+    fn create_primary_centered_window(edit self, take spec: WindowSpec) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_window :: spec :: method
+
+    fn create_hidden_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_hidden_window :: title, width, height :: method
+
+    fn create_primary_centered_hidden_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_hidden_window :: title, width, height :: method
+
+    fn create_vulkan_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_vulkan_window :: title, width, height :: method
+
+    fn create_primary_centered_vulkan_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_vulkan_window :: title, width, height :: method
+
+    fn create_fullscreen_window(edit self, take title: Str, read monitor: Monitor) -> Result[Window, AppError]:
+        return self.app.create_fullscreen_window :: title, monitor :: method
+
+    fn create_fullscreen_window_with_video_mode(edit self, take title: Str, read monitor: Monitor, read mode: VideoMode) -> Result[Window, AppError]:
+        return self.app.create_fullscreen_window_with_video_mode :: title, monitor, mode :: method
+
+    fn create_fullscreen_window_matching_mode(edit self, take title: Str, read monitor: Monitor, width: CInt, height: CInt, refresh_rate: CInt) -> Result[Window, AppError]:
+        return self.app.create_fullscreen_window_matching_mode :: title, monitor, width, height, refresh_rate :: method
+
+    fn create_primary_fullscreen_window(edit self, take title: Str) -> Result[Window, AppError]:
+        return self.app.create_primary_fullscreen_window :: title :: method
+
+    fn create_primary_fullscreen_window_with_video_mode(edit self, take title: Str, read mode: VideoMode) -> Result[Window, AppError]:
+        return self.app.create_primary_fullscreen_window_with_video_mode :: title, mode :: method
+
+    fn create_primary_fullscreen_window_matching_mode(edit self, take title: Str, width: CInt, height: CInt, refresh_rate: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_fullscreen_window_matching_mode :: title, width, height, refresh_rate :: method
+
+    fn create_positioned_window(edit self, take title: Str, width: Index, height: Index, x: CInt, y: CInt) -> Result[Window, AppError]:
+        return self.app.create_positioned_window :: title, width, height, x, y :: method
+
+    fn create_fixed_size_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_fixed_size_window :: title, width, height :: method
+
+    fn create_primary_centered_fixed_size_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_fixed_size_window :: title, width, height :: method
+
+    fn create_unfocused_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_unfocused_window :: title, width, height :: method
+
+    fn create_primary_centered_unfocused_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_unfocused_window :: title, width, height :: method
+
+    fn create_undecorated_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_undecorated_window :: title, width, height :: method
+
+    fn create_primary_centered_undecorated_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_undecorated_window :: title, width, height :: method
+
+    fn create_floating_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_floating_window :: title, width, height :: method
+
+    fn create_primary_centered_floating_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_floating_window :: title, width, height :: method
+
+    fn create_maximized_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_maximized_window :: title, width, height :: method
+
+    fn create_primary_centered_maximized_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_maximized_window :: title, width, height :: method
+
+    fn create_transparent_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_transparent_window :: title, width, height :: method
+
+    fn create_primary_centered_transparent_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_transparent_window :: title, width, height :: method
+
+    fn create_mouse_passthrough_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_mouse_passthrough_window :: title, width, height :: method
+
+    fn create_primary_centered_mouse_passthrough_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_mouse_passthrough_window :: title, width, height :: method
+
+    fn create_win32_keyboard_menu_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_win32_keyboard_menu_window :: title, width, height :: method
+
+    fn create_primary_centered_win32_keyboard_menu_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_win32_keyboard_menu_window :: title, width, height :: method
+
+    fn create_win32_showdefault_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_win32_showdefault_window :: title, width, height :: method
+
+    fn create_primary_centered_win32_showdefault_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_win32_showdefault_window :: title, width, height :: method
+
+    fn create_no_api_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_no_api_window :: title, width, height :: method
+
+    fn create_primary_centered_no_api_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_no_api_window :: title, width, height :: method
+
+    fn create_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_opengl_window :: title, width, height, major, minor :: method
+
+    fn create_opengl_core_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_opengl_core_window :: title, width, height, major, minor :: method
+
+    fn create_opengl_compat_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_opengl_compat_window :: title, width, height, major, minor :: method
+
+    fn create_opengl_es_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_opengl_es_window :: title, width, height, major, minor :: method
+
+    fn create_egl_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_egl_opengl_window :: title, width, height, major, minor :: method
+
+    fn create_egl_opengl_es_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_egl_opengl_es_window :: title, width, height, major, minor :: method
+
+    fn create_osmesa_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_osmesa_opengl_window :: title, width, height, major, minor :: method
+
+    fn create_opengl_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_opengl_debug_window :: title, width, height, major, minor :: method
+
+    fn create_opengl_core_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_opengl_core_debug_window :: title, width, height, major, minor :: method
+
+    fn create_opengl_compat_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_opengl_compat_debug_window :: title, width, height, major, minor :: method
+
+    fn create_opengl_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_opengl_srgb_window :: title, width, height, major, minor :: method
+
+    fn create_opengl_core_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_opengl_core_srgb_window :: title, width, height, major, minor :: method
+
+    fn create_opengl_compat_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_opengl_compat_srgb_window :: title, width, height, major, minor :: method
+
+    fn create_opengl_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_opengl_debug_srgb_window :: title, width, height, major, minor :: method
+
+    fn create_opengl_core_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_opengl_core_debug_srgb_window :: title, width, height, major, minor :: method
+
+    fn create_opengl_compat_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_opengl_compat_debug_srgb_window :: title, width, height, major, minor :: method
+
+    fn create_primary_centered_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_opengl_window :: title, width, height, major, minor :: method
+
+    fn create_primary_centered_opengl_core_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_opengl_core_window :: title, width, height, major, minor :: method
+
+    fn create_primary_centered_opengl_compat_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_opengl_compat_window :: title, width, height, major, minor :: method
+
+    fn create_primary_centered_opengl_es_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_opengl_es_window :: title, width, height, major, minor :: method
+
+    fn create_primary_centered_egl_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_egl_opengl_window :: title, width, height, major, minor :: method
+
+    fn create_primary_centered_egl_opengl_es_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_egl_opengl_es_window :: title, width, height, major, minor :: method
+
+    fn create_primary_centered_osmesa_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_osmesa_opengl_window :: title, width, height, major, minor :: method
+
+    fn create_primary_centered_opengl_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_opengl_debug_window :: title, width, height, major, minor :: method
+
+    fn create_primary_centered_opengl_core_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_opengl_core_debug_window :: title, width, height, major, minor :: method
+
+    fn create_primary_centered_opengl_compat_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_opengl_compat_debug_window :: title, width, height, major, minor :: method
+
+    fn create_primary_centered_opengl_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_opengl_srgb_window :: title, width, height, major, minor :: method
+
+    fn create_primary_centered_opengl_core_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_opengl_core_srgb_window :: title, width, height, major, minor :: method
+
+    fn create_primary_centered_opengl_compat_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_opengl_compat_srgb_window :: title, width, height, major, minor :: method
+
+    fn create_primary_centered_opengl_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_opengl_debug_srgb_window :: title, width, height, major, minor :: method
+
+    fn create_primary_centered_opengl_core_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_opengl_core_debug_srgb_window :: title, width, height, major, minor :: method
+
+    fn create_primary_centered_opengl_compat_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
+        return self.app.create_primary_centered_opengl_compat_debug_srgb_window :: title, width, height, major, minor :: method

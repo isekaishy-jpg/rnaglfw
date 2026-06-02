@@ -1,0 +1,292 @@
+use std.{ByteBuffer, Result}
+
+use pixel_support.{VulkanPixelFormat, VulkanPixelFrame, vulkan_pixel_frame, vulkan_pixel_frame_from_image}
+use present.{VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_BUFFER_USAGE_TRANSFER_SRC_BIT}
+use present.{VkFormat, VulkanBuffer, VulkanImage, VulkanImagePlan, VulkanPresentApp, VulkanPresentContext, VulkanPresentError}
+use runa_app.{RgbaImage, rgba_image}
+
+struct VulkanImageShape:
+    width: Index
+    height: Index
+    tight_stride: Index
+
+fn image_transfer_buffer_usage_bits() -> CUInt:
+    return VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT
+
+fn vulkan_image_shape(read image: VulkanImage) -> Result[VulkanImageShape, VulkanPresentError]:
+    select image.pixel_format :: :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(err) => return Result.Err :: err :: call
+    let width_raw = image.width :: :: method
+    let height_raw = image.height :: :: method
+    let Result.Ok(width) = width_raw as Maybe[Index] else =>
+        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+        return Result.Err :: error :: call
+    let Result.Ok(height) = height_raw as Maybe[Index] else =>
+        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+        return Result.Err :: error :: call
+    let Result.Ok(width_wide) = width as Maybe[USize] else =>
+        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+        return Result.Err :: error :: call
+    let tight_stride_wide: USize = width_wide * 4USize
+    let Result.Ok(tight_stride) = tight_stride_wide as Maybe[Index] else =>
+        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+        return Result.Err :: error :: call
+    let shape = VulkanImageShape :: width, height, tight_stride :: call
+    return Result.Ok :: shape :: call
+
+fn image_source_matches_shape(read frame: VulkanPixelFrame, read image: VulkanImage) -> Result[Unit, VulkanPresentError]:
+    select vulkan_image_shape :: image :: call:
+        when Result.Ok(shape) =>
+            let frame_width = frame.width :: :: method
+            let frame_height = frame.height :: :: method
+            let image_width = image.width :: :: method
+            let image_height = image.height :: :: method
+            select:
+                when frame_width != shape.width =>
+                    let error = VulkanPresentError.PixelFrameExtentMismatch :: frame_width, frame_height, image_width, image_height :: call
+                    return Result.Err :: error :: call
+                when frame_height != shape.height =>
+                    let error = VulkanPresentError.PixelFrameExtentMismatch :: frame_width, frame_height, image_width, image_height :: call
+                    return Result.Err :: error :: call
+                else => return Result.Ok :: :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+impl VulkanPresentContext:
+    fn image_transfer_buffer_usage(read self) -> CUInt:
+        return image_transfer_buffer_usage_bits :: :: call
+
+    fn image_transfer_buffer(read self, read image: VulkanImage) -> Result[VulkanBuffer, VulkanPresentError]:
+        let usage = self.image_transfer_buffer_usage :: :: method
+        select image.transfer_byte_count :: :: method:
+            when Result.Ok(byte_count) => return self.host_coherent_buffer :: byte_count, usage :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn image_to_transfer_buffer(edit self, edit image: VulkanImage) -> Result[VulkanBuffer, VulkanPresentError]:
+        select self.image_transfer_buffer :: image :: method:
+            when Result.Ok(buffer) =>
+                select self.copy_image_to_buffer :: image, buffer :: method:
+                    when Result.Ok(_) => return Result.Ok :: buffer :: call
+                    when Result.Err(err) =>
+                        self.destroy_buffer_resource :: buffer :: method
+                        return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn image_bytes(edit self, edit image: VulkanImage) -> Result[ByteBuffer, VulkanPresentError]:
+        select self.image_to_transfer_buffer :: image :: method:
+            when Result.Ok(buffer) =>
+                select self.buffer_bytes :: buffer :: method:
+                    when Result.Ok(bytes) =>
+                        self.destroy_buffer_resource :: buffer :: method
+                        return Result.Ok :: bytes :: call
+                    when Result.Err(err) =>
+                        self.destroy_buffer_resource :: buffer :: method
+                        return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn image_pixel_frame(edit self, edit image: VulkanImage) -> Result[VulkanPixelFrame, VulkanPresentError]:
+        select image.pixel_format :: :: method:
+            when Result.Ok(pixel_format) =>
+                select self.image_bytes :: image :: method:
+                    when Result.Ok(pixels) =>
+                        select vulkan_image_shape :: image :: call:
+                            when Result.Ok(shape) => return vulkan_pixel_frame :: shape.width, shape.height, shape.tight_stride, pixel_format, pixels :: call
+                            when Result.Err(err) => return Result.Err :: err :: call
+                    when Result.Err(err) => return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn image_image(edit self, edit image: VulkanImage) -> Result[RgbaImage, VulkanPresentError]:
+        select self.image_pixel_frame :: image :: method:
+            when Result.Ok(frame) =>
+                select frame.converted_frame :: VulkanPixelFormat.Rgba8 :: method:
+                    when Result.Ok(rgba_frame) =>
+                        let width = rgba_frame.width :: :: method
+                        let height = rgba_frame.height :: :: method
+                        select rgba_frame.copy_pixels :: :: method:
+                            when Result.Ok(rgba_pixels) =>
+                                select rgba_image :: width, height, rgba_pixels :: call:
+                                    when Result.Ok(result_image) => return Result.Ok :: result_image :: call
+                                    when Result.Err(err) =>
+                                        let error = VulkanPresentError.ImageCreate :: err :: call
+                                        return Result.Err :: error :: call
+                            when Result.Err(err) => return Result.Err :: err :: call
+                    when Result.Err(err) => return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn write_image(edit self, edit image: VulkanImage, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+        select self.image_transfer_buffer :: image :: method:
+            when Result.Ok(buffer) =>
+                select self.write_buffer :: buffer, pixels :: method:
+                    when Result.Ok(_) =>
+                        select self.copy_buffer_to_image :: buffer, image :: method:
+                            when Result.Ok(_) =>
+                                self.destroy_buffer_resource :: buffer :: method
+                                return Result.Ok :: :: call
+                            when Result.Err(err) =>
+                                self.destroy_buffer_resource :: buffer :: method
+                                return Result.Err :: err :: call
+                    when Result.Err(err) =>
+                        self.destroy_buffer_resource :: buffer :: method
+                        return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn write_image_from_pixel_frame(edit self, edit image: VulkanImage, read frame: VulkanPixelFrame) -> Result[Unit, VulkanPresentError]:
+        select image_source_matches_shape :: frame, image :: call:
+            when Result.Ok(_) =>
+                select image.pixel_format :: :: method:
+                    when Result.Ok(pixel_format) =>
+                        select frame.converted_frame :: pixel_format :: method:
+                            when Result.Ok(converted_frame) =>
+                                select converted_frame.copy_pixels :: :: method:
+                                    when Result.Ok(pixels) => return self.write_image :: image, pixels :: method
+                                    when Result.Err(err) => return Result.Err :: err :: call
+                            when Result.Err(err) => return Result.Err :: err :: call
+                    when Result.Err(err) => return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn write_image_from_image(edit self, edit image: VulkanImage, read source: RgbaImage) -> Result[Unit, VulkanPresentError]:
+        select image.pixel_format :: :: method:
+            when Result.Ok(pixel_format) =>
+                select vulkan_pixel_frame_from_image :: source, pixel_format :: call:
+                    when Result.Ok(frame) => return self.write_image_from_pixel_frame :: image, frame :: method
+                    when Result.Err(err) => return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn image_from_plan_with_pixels(edit self, read plan: VulkanImagePlan, take pixels: ByteBuffer) -> Result[VulkanImage, VulkanPresentError]:
+        select self.image_from_plan :: plan :: method:
+            when Result.Ok(image) =>
+                select self.write_image :: image, pixels :: method:
+                    when Result.Ok(_) => return Result.Ok :: image :: call
+                    when Result.Err(err) =>
+                        self.destroy_image_resource :: image :: method
+                        return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn image_from_plan_with_pixel_frame(edit self, read plan: VulkanImagePlan, read frame: VulkanPixelFrame) -> Result[VulkanImage, VulkanPresentError]:
+        select self.image_from_plan :: plan :: method:
+            when Result.Ok(image) =>
+                select self.write_image_from_pixel_frame :: image, frame :: method:
+                    when Result.Ok(_) => return Result.Ok :: image :: call
+                    when Result.Err(err) =>
+                        self.destroy_image_resource :: image :: method
+                        return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn image_from_plan_with_image(edit self, read plan: VulkanImagePlan, read source: RgbaImage) -> Result[VulkanImage, VulkanPresentError]:
+        select self.image_from_plan :: plan :: method:
+            when Result.Ok(image) =>
+                select self.write_image_from_image :: image, source :: method:
+                    when Result.Ok(_) => return Result.Ok :: image :: call
+                    when Result.Err(err) =>
+                        self.destroy_image_resource :: image :: method
+                        return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn host_visible_image_from_pixels(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, take pixels: ByteBuffer) -> Result[VulkanImage, VulkanPresentError]:
+        select self.host_visible_image_plan :: width, height, format, usage :: method:
+            when Result.Ok(plan) => return self.image_from_plan_with_pixels :: plan, pixels :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn host_visible_image_from_pixel_frame(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, read frame: VulkanPixelFrame) -> Result[VulkanImage, VulkanPresentError]:
+        select self.host_visible_image_plan :: width, height, format, usage :: method:
+            when Result.Ok(plan) => return self.image_from_plan_with_pixel_frame :: plan, frame :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn host_visible_image_from_image(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, read source: RgbaImage) -> Result[VulkanImage, VulkanPresentError]:
+        select self.host_visible_image_plan :: width, height, format, usage :: method:
+            when Result.Ok(plan) => return self.image_from_plan_with_image :: plan, source :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn host_coherent_image_from_pixels(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, take pixels: ByteBuffer) -> Result[VulkanImage, VulkanPresentError]:
+        select self.host_coherent_image_plan :: width, height, format, usage :: method:
+            when Result.Ok(plan) => return self.image_from_plan_with_pixels :: plan, pixels :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn host_coherent_image_from_pixel_frame(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, read frame: VulkanPixelFrame) -> Result[VulkanImage, VulkanPresentError]:
+        select self.host_coherent_image_plan :: width, height, format, usage :: method:
+            when Result.Ok(plan) => return self.image_from_plan_with_pixel_frame :: plan, frame :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn host_coherent_image_from_image(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, read source: RgbaImage) -> Result[VulkanImage, VulkanPresentError]:
+        select self.host_coherent_image_plan :: width, height, format, usage :: method:
+            when Result.Ok(plan) => return self.image_from_plan_with_image :: plan, source :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn device_local_image_from_pixels(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, take pixels: ByteBuffer) -> Result[VulkanImage, VulkanPresentError]:
+        select self.device_local_image_plan :: width, height, format, usage :: method:
+            when Result.Ok(plan) => return self.image_from_plan_with_pixels :: plan, pixels :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn device_local_image_from_pixel_frame(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, read frame: VulkanPixelFrame) -> Result[VulkanImage, VulkanPresentError]:
+        select self.device_local_image_plan :: width, height, format, usage :: method:
+            when Result.Ok(plan) => return self.image_from_plan_with_pixel_frame :: plan, frame :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn device_local_image_from_image(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, read source: RgbaImage) -> Result[VulkanImage, VulkanPresentError]:
+        select self.device_local_image_plan :: width, height, format, usage :: method:
+            when Result.Ok(plan) => return self.image_from_plan_with_image :: plan, source :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+impl VulkanPresentApp:
+    fn image_transfer_buffer_usage(read self) -> CUInt:
+        return self.context.image_transfer_buffer_usage :: :: method
+
+    fn image_transfer_buffer(read self, read image: VulkanImage) -> Result[VulkanBuffer, VulkanPresentError]:
+        return self.context.image_transfer_buffer :: image :: method
+
+    fn image_to_transfer_buffer(edit self, edit image: VulkanImage) -> Result[VulkanBuffer, VulkanPresentError]:
+        return self.context.image_to_transfer_buffer :: image :: method
+
+    fn image_bytes(edit self, edit image: VulkanImage) -> Result[ByteBuffer, VulkanPresentError]:
+        return self.context.image_bytes :: image :: method
+
+    fn image_pixel_frame(edit self, edit image: VulkanImage) -> Result[VulkanPixelFrame, VulkanPresentError]:
+        return self.context.image_pixel_frame :: image :: method
+
+    fn image_image(edit self, edit image: VulkanImage) -> Result[RgbaImage, VulkanPresentError]:
+        return self.context.image_image :: image :: method
+
+    fn write_image(edit self, edit image: VulkanImage, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+        return self.context.write_image :: image, pixels :: method
+
+    fn write_image_from_pixel_frame(edit self, edit image: VulkanImage, read frame: VulkanPixelFrame) -> Result[Unit, VulkanPresentError]:
+        return self.context.write_image_from_pixel_frame :: image, frame :: method
+
+    fn write_image_from_image(edit self, edit image: VulkanImage, read source: RgbaImage) -> Result[Unit, VulkanPresentError]:
+        return self.context.write_image_from_image :: image, source :: method
+
+    fn image_from_plan_with_pixels(edit self, read plan: VulkanImagePlan, take pixels: ByteBuffer) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.image_from_plan_with_pixels :: plan, pixels :: method
+
+    fn image_from_plan_with_pixel_frame(edit self, read plan: VulkanImagePlan, read frame: VulkanPixelFrame) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.image_from_plan_with_pixel_frame :: plan, frame :: method
+
+    fn image_from_plan_with_image(edit self, read plan: VulkanImagePlan, read source: RgbaImage) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.image_from_plan_with_image :: plan, source :: method
+
+    fn host_visible_image_from_pixels(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, take pixels: ByteBuffer) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.host_visible_image_from_pixels :: width, height, format, usage, pixels :: method
+
+    fn host_visible_image_from_pixel_frame(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, read frame: VulkanPixelFrame) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.host_visible_image_from_pixel_frame :: width, height, format, usage, frame :: method
+
+    fn host_visible_image_from_image(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, read source: RgbaImage) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.host_visible_image_from_image :: width, height, format, usage, source :: method
+
+    fn host_coherent_image_from_pixels(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, take pixels: ByteBuffer) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.host_coherent_image_from_pixels :: width, height, format, usage, pixels :: method
+
+    fn host_coherent_image_from_pixel_frame(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, read frame: VulkanPixelFrame) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.host_coherent_image_from_pixel_frame :: width, height, format, usage, frame :: method
+
+    fn host_coherent_image_from_image(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, read source: RgbaImage) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.host_coherent_image_from_image :: width, height, format, usage, source :: method
+
+    fn device_local_image_from_pixels(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, take pixels: ByteBuffer) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.device_local_image_from_pixels :: width, height, format, usage, pixels :: method
+
+    fn device_local_image_from_pixel_frame(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, read frame: VulkanPixelFrame) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.device_local_image_from_pixel_frame :: width, height, format, usage, frame :: method
+
+    fn device_local_image_from_image(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, read source: RgbaImage) -> Result[VulkanImage, VulkanPresentError]:
+        return self.context.device_local_image_from_image :: width, height, format, usage, source :: method

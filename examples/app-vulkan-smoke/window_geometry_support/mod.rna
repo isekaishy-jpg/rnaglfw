@@ -1,0 +1,166 @@
+use std.{Option, Result}
+
+use runa_app.{Size, WindowId}
+use runa_app_vulkan.VulkanPresentApp
+
+pub fn prove_window_geometry_runtime(edit present_app: VulkanPresentApp, window_id: WindowId) -> I32:
+    let owned_window = present_app.window :: :: method
+    select:
+        when owned_window.id != window_id => return 3290
+        else => ()
+
+    let inner_position = present_app.inner_position :: :: method
+    let owned_inner_position = owned_window.inner_position :: :: method
+    let raw_position = present_app.pos :: :: method
+    select:
+        when inner_position.x != raw_position.x => return 3291
+        when inner_position.y != raw_position.y => return 3292
+        when owned_inner_position.x != inner_position.x => return 3293
+        when owned_inner_position.y != inner_position.y => return 3294
+        else => ()
+
+    let surface_position = present_app.surface_position :: :: method
+    let owned_surface_position = owned_window.surface_position :: :: method
+    let frame = present_app.frame_size :: :: method
+    select:
+        when surface_position.x != frame.left => return 3349
+        when surface_position.y != frame.top => return 3350
+        when owned_surface_position.x != surface_position.x => return 3351
+        when owned_surface_position.y != surface_position.y => return 3352
+        else => ()
+
+    let inner_size = present_app.inner_size :: :: method
+    let owned_inner_size = owned_window.inner_size :: :: method
+    let raw_size = present_app.size :: :: method
+    select:
+        when inner_size.width != raw_size.width => return 3295
+        when inner_size.height != raw_size.height => return 3296
+        when owned_inner_size.width != inner_size.width => return 3297
+        when owned_inner_size.height != inner_size.height => return 3298
+        else => ()
+
+    select present_app.request_inner_size :: inner_size.width, inner_size.height :: method:
+        when Option.Some(requested_size) =>
+            select:
+                when requested_size.width != inner_size.width => return 3321
+                when requested_size.height != inner_size.height => return 3322
+                else => ()
+        when Option.None => return 3323
+
+    select owned_window.apply_inner_size :: inner_size :: method:
+        when Option.Some(requested_size) =>
+            select:
+                when requested_size.width != inner_size.width => return 3324
+                when requested_size.height != inner_size.height => return 3325
+                else => ()
+        when Option.None => return 3326
+
+    let initial_resize_increments = present_app.resize_increments :: :: method
+    let increments = Size :: 25, 25 :: call
+    present_app.apply_resize_increments :: increments :: method
+    select present_app.resize_increments :: :: method:
+        when Option.Some(active_increments) =>
+            select:
+                when active_increments.width != 25 => return 3327
+                when active_increments.height != 25 => return 3328
+                else => ()
+        when Option.None => return 3329
+    select owned_window.resize_increments :: :: method:
+        when Option.Some(active_increments) =>
+            select:
+                when active_increments.width != 25 => return 3330
+                when active_increments.height != 25 => return 3331
+                else => ()
+        when Option.None => return 3332
+    owned_window.set_resize_increments :: initial_resize_increments :: method
+
+    let outer_position = present_app.outer_position :: :: method
+    let owned_outer_position = owned_window.outer_position :: :: method
+    select:
+        when outer_position.x + frame.left != inner_position.x => return 3299
+        when outer_position.y + frame.top != inner_position.y => return 3300
+        when owned_outer_position.x != outer_position.x => return 3301
+        when owned_outer_position.y != outer_position.y => return 3302
+        else => ()
+
+    let outer_size = present_app.outer_size :: :: method
+    let owned_outer_size = owned_window.outer_size :: :: method
+    let surface_size = present_app.surface_size :: :: method
+    let owned_surface_size = owned_window.surface_size :: :: method
+    let framebuffer_size = present_app.framebuffer_size :: :: method
+    let expected_width = inner_size.width + frame.left + frame.right
+    let expected_height = inner_size.height + frame.top + frame.bottom
+    select:
+        when outer_size.width != expected_width => return 3303
+        when outer_size.height != expected_height => return 3304
+        when owned_outer_size.width != outer_size.width => return 3305
+        when owned_outer_size.height != outer_size.height => return 3306
+        when surface_size.width != framebuffer_size.width => return 3353
+        when surface_size.height != framebuffer_size.height => return 3354
+        when owned_surface_size.width != surface_size.width => return 3355
+        when owned_surface_size.height != surface_size.height => return 3356
+        else => ()
+
+    let outer_placement = present_app.outer_placement :: :: method
+    select:
+        when outer_placement.pos.x != outer_position.x => return 3307
+        when outer_placement.pos.y != outer_position.y => return 3308
+        when outer_placement.size.width != outer_size.width => return 3309
+        when outer_placement.size.height != outer_size.height => return 3310
+        else => ()
+
+    select present_app.current_monitor :: :: method:
+        when Option.Some(present_monitor) =>
+            select owned_window.current_monitor :: :: method:
+                when Option.Some(owned_monitor) =>
+                    let present_pos = present_monitor.screen_pos :: :: method
+                    let owned_pos = owned_monitor.screen_pos :: :: method
+                    let present_work = present_monitor.work_rect :: :: method
+                    let owned_work = owned_monitor.work_rect :: :: method
+                    select:
+                        when !present_monitor.available :: :: method => return 3311
+                        when !owned_monitor.available :: :: method => return 3312
+                        when owned_pos.x != present_pos.x => return 3313
+                        when owned_pos.y != present_pos.y => return 3314
+                        when owned_work.x != present_work.x => return 3315
+                        when owned_work.y != present_work.y => return 3316
+                        when owned_work.width != present_work.width => return 3317
+                        when owned_work.height != present_work.height => return 3318
+                        else => ()
+                when Option.None => return 3319
+        when Option.None =>
+            select owned_window.current_monitor :: :: method:
+                when Option.Some(_) => return 3320
+                when Option.None => ()
+
+    let present_monitor_count = present_app.monitor_count :: :: method
+    let owned_available_monitors = owned_window.available_monitors :: :: method
+    select:
+        when present_monitor_count != owned_available_monitors.count :: :: method => return 3357
+        else => ()
+
+    select present_app.primary_monitor :: :: method:
+        when Result.Ok(present_primary) =>
+            select owned_window.primary_monitor :: :: method:
+                when Option.Some(owned_primary) =>
+                    let present_pos = present_primary.screen_pos :: :: method
+                    let owned_pos = owned_primary.screen_pos :: :: method
+                    let present_work = present_primary.work_rect :: :: method
+                    let owned_work = owned_primary.work_rect :: :: method
+                    select:
+                        when !present_primary.available :: :: method => return 3358
+                        when !owned_primary.available :: :: method => return 3359
+                        when owned_pos.x != present_pos.x => return 3360
+                        when owned_pos.y != present_pos.y => return 3361
+                        when owned_work.x != present_work.x => return 3362
+                        when owned_work.y != present_work.y => return 3363
+                        when owned_work.width != present_work.width => return 3364
+                        when owned_work.height != present_work.height => return 3365
+                        else => ()
+                when Option.None => return 3366
+        when Result.Err(_) =>
+            select owned_window.primary_monitor :: :: method:
+                when Option.Some(_) => return 3367
+                when Option.None => ()
+
+    return 0

@@ -2,7 +2,7 @@ use std.{List, Option}
 use event.{AppEvent, AppEventBatch, JoystickEvent, MonitorEvent, UserEvent, WindowEvent}
 use event.WindowEventKind
 use event.{WindowMoveData, WindowScaleData, WindowSizeData}
-use window.WindowId
+use window.{Theme, WindowId, theme_from_raw, theme_raw}
 
 fn push_window(edit events: List[AppEvent], event: WindowEvent) -> Unit:
     let wrapped = AppEvent.Window :: event :: call
@@ -24,8 +24,8 @@ fn push_user(edit events: List[AppEvent], event: UserEvent) -> Unit:
     events.push :: wrapped :: method
     return
 
-fn build_refreshed_window_event(id: WindowId) -> WindowEvent:
-    return WindowEvent.Refreshed :: :: call
+fn build_redraw_requested_window_event(id: WindowId) -> WindowEvent:
+    return WindowEvent.RedrawRequested :: :: call
         id = id
 
 fn build_moved_window_event(id: WindowId, x: CInt, y: CInt) -> WindowEvent:
@@ -72,8 +72,15 @@ fn build_cursor_entered_window_event(id: WindowId, entered: Bool) -> WindowEvent
         id = id
         entered = entered
 
+fn build_theme_changed_window_event(id: WindowId, read theme: Theme) -> WindowEvent:
+    let raw = theme_raw :: theme :: call
+    let copied = theme_from_raw :: raw :: call
+    return WindowEvent.ThemeChanged :: :: call
+        id = id
+        theme = copied
+
 impl AppEventBatch:
-    fn refreshed_events(edit self) -> List[WindowEvent]:
+    fn redraw_requested_events(edit self) -> List[WindowEvent]:
         let matched = List[WindowEvent] :: :: call
         let remaining = List[AppEvent] :: :: call
         repeat while !self.events.is_empty :: :: method:
@@ -81,8 +88,8 @@ impl AppEventBatch:
             select event:
                 when AppEvent.Window(window_event) =>
                     select window_event:
-                        when WindowEvent.Refreshed(id = id) =>
-                            let copied = build_refreshed_window_event :: id :: call
+                        when WindowEvent.RedrawRequested(id = id) =>
+                            let copied = build_redraw_requested_window_event :: id :: call
                             matched.push :: copied :: method
                             push_window :: remaining, window_event :: call
                         when _ => push_window :: remaining, window_event :: call
@@ -244,7 +251,7 @@ impl AppEventBatch:
         self.events = remaining
         return matched
 
-    fn refreshed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+    fn theme_changed_events(edit self) -> List[WindowEvent]:
         let matched = List[WindowEvent] :: :: call
         let remaining = List[AppEvent] :: :: call
         repeat while !self.events.is_empty :: :: method:
@@ -252,10 +259,30 @@ impl AppEventBatch:
             select event:
                 when AppEvent.Window(window_event) =>
                     select window_event:
-                        when WindowEvent.Refreshed(id = event_id) =>
+                        when WindowEvent.ThemeChanged(id = id, theme = theme) =>
+                            let copied = build_theme_changed_window_event :: id, theme :: call
+                            matched.push :: copied :: method
+                            let restored = build_theme_changed_window_event :: id, theme :: call
+                            push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn redraw_requested_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let matched = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.RedrawRequested(id = event_id) =>
                             select:
                                 when event_id == id =>
-                                    let copied = build_refreshed_window_event :: event_id :: call
+                                    let copied = build_redraw_requested_window_event :: event_id :: call
                                     matched.push :: copied :: method
                                 else => ()
                             push_window :: remaining, window_event :: call
@@ -442,7 +469,30 @@ impl AppEventBatch:
         self.events = remaining
         return matched
 
-    fn pop_refreshed_event(edit self) -> Option[WindowEvent]:
+    fn theme_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let matched = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.ThemeChanged(id = event_id, theme = theme) =>
+                            select:
+                                when event_id == id =>
+                                    let copied = build_theme_changed_window_event :: event_id, theme :: call
+                                    matched.push :: copied :: method
+                                else => ()
+                            let restored = build_theme_changed_window_event :: event_id, theme :: call
+                            push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn pop_redraw_requested_event(edit self) -> Option[WindowEvent]:
         let remaining = List[AppEvent] :: :: call
         let found: Option[WindowEvent] = Option.None
         repeat while !self.events.is_empty :: :: method:
@@ -452,7 +502,7 @@ impl AppEventBatch:
                     select found:
                         when Option.None =>
                             select window_event.kind :: :: method:
-                                when WindowEventKind.Refreshed => found = Option.Some :: window_event :: call
+                                when WindowEventKind.RedrawRequested => found = Option.Some :: window_event :: call
                                 else => push_window :: remaining, window_event :: call
                         when Option.Some(_) => push_window :: remaining, window_event :: call
                 when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
@@ -613,7 +663,27 @@ impl AppEventBatch:
         self.events = remaining
         return found
 
-    fn pop_refreshed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+    fn pop_theme_changed_event(edit self) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.ThemeChanged(id = id, theme = theme) =>
+                                    found = Option.Some :: build_theme_changed_window_event :: id, theme :: call :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return found
+
+    fn pop_redraw_requested_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
         let remaining = List[AppEvent] :: :: call
         let found: Option[WindowEvent] = Option.None
         repeat while !self.events.is_empty :: :: method:
@@ -623,7 +693,7 @@ impl AppEventBatch:
                     select found:
                         when Option.None =>
                             select window_event.kind :: :: method:
-                                when WindowEventKind.Refreshed =>
+                                when WindowEventKind.RedrawRequested =>
                                     select:
                                         when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
                                         else => push_window :: remaining, window_event :: call
@@ -811,6 +881,31 @@ impl AppEventBatch:
         self.events = remaining
         return found
 
+    fn pop_theme_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.ThemeChanged(id = event_id, theme = theme) =>
+                                    select:
+                                        when event_id == id =>
+                                            found = Option.Some :: build_theme_changed_window_event :: event_id, theme :: call :: call
+                                        else =>
+                                            let restored = build_theme_changed_window_event :: event_id, theme :: call
+                                            push_window :: remaining, restored :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return found
+
     fn moved_data(edit self) -> List[WindowMoveData]:
         let matched = List[WindowMoveData] :: :: call
         let remaining = List[AppEvent] :: :: call
@@ -941,6 +1036,27 @@ impl AppEventBatch:
                         when Option.Some(state) => matched.push :: state :: method
                         when Option.None => ()
                     push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn themes(edit self) -> List[Theme]:
+        let matched = List[Theme] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.ThemeChanged(id = id, theme = theme) =>
+                            let raw = theme_raw :: theme :: call
+                            let copied = theme_from_raw :: raw :: call
+                            matched.push :: copied :: method
+                            let restored = build_theme_changed_window_event :: id, theme :: call
+                            push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
                 when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
                 when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
                 when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
@@ -1107,6 +1223,30 @@ impl AppEventBatch:
         self.events = remaining
         return matched
 
+    fn themes_for(edit self, id: WindowId) -> List[Theme]:
+        let matched = List[Theme] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.ThemeChanged(id = event_id, theme = theme) =>
+                            select:
+                                when event_id == id =>
+                                    let raw = theme_raw :: theme :: call
+                                    let copied = theme_from_raw :: raw :: call
+                                    matched.push :: copied :: method
+                                else => ()
+                            let restored = build_theme_changed_window_event :: event_id, theme :: call
+                            push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
     fn pop_moved_data(edit self) -> Option[WindowMoveData]:
         let remaining = List[AppEvent] :: :: call
         let found: Option[WindowMoveData] = Option.None
@@ -1252,6 +1392,27 @@ impl AppEventBatch:
                             select window_event.cursor_enter_state :: :: method:
                                 when Option.Some(state) => found = Option.Some :: state :: call
                                 when Option.None => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return found
+
+    fn pop_theme(edit self) -> Option[Theme]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[Theme] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.ThemeChanged(id = _, theme = theme) =>
+                                    let raw = theme_raw :: theme :: call
+                                    found = Option.Some :: theme_from_raw :: raw :: call :: call
+                                when _ => push_window :: remaining, window_event :: call
                         when Option.Some(_) => push_window :: remaining, window_event :: call
                 when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
                 when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
@@ -1435,6 +1596,32 @@ impl AppEventBatch:
         self.events = remaining
         return found
 
+    fn pop_theme_for(edit self, id: WindowId) -> Option[Theme]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[Theme] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.ThemeChanged(id = event_id, theme = theme) =>
+                                    select:
+                                        when event_id == id =>
+                                            let raw = theme_raw :: theme :: call
+                                            found = Option.Some :: theme_from_raw :: raw :: call :: call
+                                        else =>
+                                            let restored = build_theme_changed_window_event :: event_id, theme :: call
+                                            push_window :: remaining, restored :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return found
+
     fn take_moved_data(edit self) -> List[WindowMoveData]:
         let events = self.take_moved_events :: :: method
         let matched = List[WindowMoveData] :: :: call
@@ -1512,6 +1699,16 @@ impl AppEventBatch:
             let event = events.remove :: 0 :: method
             select event.cursor_enter_state :: :: method:
                 when Option.Some(state) => matched.push :: state :: method
+                when Option.None => ()
+        return matched
+
+    fn take_themes(edit self) -> List[Theme]:
+        let events = self.take_theme_changed_events :: :: method
+        let matched = List[Theme] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.theme :: :: method:
+                when Option.Some(theme) => matched.push :: theme :: method
                 when Option.None => ()
         return matched
 
@@ -1595,7 +1792,17 @@ impl AppEventBatch:
                 when Option.None => ()
         return matched
 
-    fn take_refreshed_events(edit self) -> List[WindowEvent]:
+    fn take_themes_for(edit self, id: WindowId) -> List[Theme]:
+        let events = self.take_theme_changed_events_for :: id :: method
+        let matched = List[Theme] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.theme :: :: method:
+                when Option.Some(theme) => matched.push :: theme :: method
+                when Option.None => ()
+        return matched
+
+    fn take_redraw_requested_events(edit self) -> List[WindowEvent]:
         let events = List[WindowEvent] :: :: call
         let remaining = List[AppEvent] :: :: call
         repeat while !self.events.is_empty :: :: method:
@@ -1603,7 +1810,7 @@ impl AppEventBatch:
             select event:
                 when AppEvent.Window(window_event) =>
                     select window_event:
-                        when WindowEvent.Refreshed(id = _) => events.push :: window_event :: method
+                        when WindowEvent.RedrawRequested(id = _) => events.push :: window_event :: method
                         when _ => push_window :: remaining, window_event :: call
                 when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
                 when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
@@ -1739,7 +1946,7 @@ impl AppEventBatch:
         self.events = remaining
         return events
 
-    fn take_refreshed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+    fn take_theme_changed_events(edit self) -> List[WindowEvent]:
         let events = List[WindowEvent] :: :: call
         let remaining = List[AppEvent] :: :: call
         repeat while !self.events.is_empty :: :: method:
@@ -1747,7 +1954,25 @@ impl AppEventBatch:
             select event:
                 when AppEvent.Window(window_event) =>
                     select window_event:
-                        when WindowEvent.Refreshed(id = event_id) =>
+                        when WindowEvent.ThemeChanged(id = id, theme = theme) =>
+                            let copied = build_theme_changed_window_event :: id, theme :: call
+                            events.push :: copied :: method
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_redraw_requested_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.RedrawRequested(id = event_id) =>
                             select:
                                 when event_id == id => events.push :: window_event :: method
                                 else => push_window :: remaining, window_event :: call
@@ -1903,6 +2128,29 @@ impl AppEventBatch:
                             select:
                                 when event_id == id => events.push :: window_event :: method
                                 else => push_window :: remaining, window_event :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_theme_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.ThemeChanged(id = event_id, theme = theme) =>
+                            select:
+                                when event_id == id =>
+                                    let copied = build_theme_changed_window_event :: event_id, theme :: call
+                                    events.push :: copied :: method
+                                else =>
+                                    let restored = build_theme_changed_window_event :: event_id, theme :: call
+                                    push_window :: remaining, restored :: call
                         when _ => push_window :: remaining, window_event :: call
                 when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
                 when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call

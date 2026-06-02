@@ -132,6 +132,24 @@ impl VkSurfaceFormatKHR:
         return self.format == FORMAT_B8G8R8A8_SRGB && self.color_space == COLOR_SPACE_SRGB_NONLINEAR
 
 impl VulkanPresentSnapshot:
+    fn surface_capabilities(read self) -> VkSurfaceCapabilitiesKHR:
+        return self.surface_capabilities
+
+    fn chosen_surface_format(read self) -> VkSurfaceFormatKHR:
+        return self.surface_format
+
+    fn chosen_present_mode(read self) -> CInt:
+        return self.present_mode
+
+    fn swapchain_image_count(read self) -> CUInt:
+        return self.swapchain_image_count
+
+    fn surface_extent(read self) -> VkExtent2D:
+        return self.surface_extent
+
+    fn preferred_image_count(read self) -> CUInt:
+        return self.preferred_image_count
+
     fn surface_width(read self) -> CUInt:
         return self.surface_extent.width
 
@@ -149,14 +167,70 @@ impl VulkanPresentSnapshot:
             when Result.Err(err) => return Result.Err :: err :: call
 
 impl VulkanPresentContext:
+    fn surface_capabilities(read self) -> VkSurfaceCapabilitiesKHR:
+        return self.surface_capabilities
+
+    fn chosen_surface_format(read self) -> VkSurfaceFormatKHR:
+        return self.surface_format
+
+    fn chosen_present_mode(read self) -> CInt:
+        return self.present_mode
+
+    fn swapchain_image_count(read self) -> CUInt:
+        return self.swapchain_image_count
+
+    fn surface_extent(read self) -> VkExtent2D:
+        return self.extent
+
+    fn preferred_image_count(read self) -> CUInt:
+        return choose_image_count :: self.surface_capabilities :: call
+
+    fn surface_width(read self) -> CUInt:
+        return self.extent.width
+
+    fn surface_height(read self) -> CUInt:
+        return self.extent.height
+
     fn surface_layout(read self) -> Result[VulkanSurfaceLayout, VulkanPresentError]:
         select self.surface_pixel_format :: :: method:
             when Result.Ok(pixel_format) => return vulkan_surface_layout :: self.surface_extent :: :: method, pixel_format :: call
             when Result.Err(err) => return Result.Err :: err :: call
 
+    fn surface_rgba_byte_count(read self) -> Result[Index, VulkanPresentError]:
+        select surface_image_shape_from_extent :: self.extent :: call:
+            when Result.Ok(shape) => return Result.Ok :: shape.rgba_byte_count :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
 impl VulkanPresentApp:
+    fn surface_capabilities(read self) -> VkSurfaceCapabilitiesKHR:
+        return self.context.surface_capabilities :: :: method
+
+    fn chosen_surface_format(read self) -> VkSurfaceFormatKHR:
+        return self.context.chosen_surface_format :: :: method
+
+    fn chosen_present_mode(read self) -> CInt:
+        return self.context.chosen_present_mode :: :: method
+
+    fn swapchain_image_count(read self) -> CUInt:
+        return self.context.swapchain_image_count :: :: method
+
+    fn surface_extent(read self) -> VkExtent2D:
+        return self.context.surface_extent :: :: method
+
+    fn preferred_image_count(read self) -> CUInt:
+        return self.context.preferred_image_count :: :: method
+
+    fn surface_width(read self) -> CUInt:
+        return self.context.surface_width :: :: method
+
+    fn surface_height(read self) -> CUInt:
+        return self.context.surface_height :: :: method
+
     fn surface_layout(read self) -> Result[VulkanSurfaceLayout, VulkanPresentError]:
         return self.context.surface_layout :: :: method
+
+    fn surface_rgba_byte_count(read self) -> Result[Index, VulkanPresentError]:
+        return self.context.surface_rgba_byte_count :: :: method
 
 pub(package) fn choose_window_extent(read window: Window, read capabilities: VkSurfaceCapabilitiesKHR) -> Result[VkExtent2D, VulkanPresentError]:
     select:

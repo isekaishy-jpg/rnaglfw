@@ -1,0 +1,190 @@
+use std.{ByteBuffer, Result}
+
+use runa_app_vulkan.{VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VulkanPresentApp}
+
+fn sample_bytes() -> ByteBuffer:
+    let bytes = ByteBuffer :: :: call
+    bytes.push :: 13U8 :: method
+    bytes.push :: 57U8 :: method
+    bytes.push :: 91U8 :: method
+    bytes.push :: 135U8 :: method
+    return bytes
+
+fn byte_buffers_equal(read left: ByteBuffer, read right: ByteBuffer) -> Bool:
+    let left_count = left.byte_count :: :: method
+    let right_count = right.byte_count :: :: method
+    select:
+        when left_count != right_count => return false
+        else => ()
+    let Result.Ok(scan_limit) = left_count as Maybe[USize] else => return false
+    let scan: USize = 0USize
+    repeat while scan < scan_limit:
+        let Result.Ok(slot) = scan as Maybe[Index] else => return false
+        select:
+            when left[slot] != right[slot] => return false
+            else => ()
+        scan = scan + 1USize
+    return true
+
+pub fn check_vulkan_buffer_io_helpers(edit present_app: VulkanPresentApp) -> I32:
+    let transfer_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT
+    let sample = sample_bytes :: :: call
+    let byte_count = sample.byte_count :: :: method
+
+    select present_app.host_coherent_buffer_from_bytes :: byte_count, transfer_usage, sample_bytes :: :: call :: method:
+        when Result.Ok(coherent_buffer) =>
+            select:
+                when !coherent_buffer.valid :: :: method =>
+                    present_app.destroy_buffer :: coherent_buffer :: method
+                    return 1
+                when !coherent_buffer.host_visible :: :: method =>
+                    present_app.destroy_buffer :: coherent_buffer :: method
+                    return 2
+                when !coherent_buffer.host_coherent :: :: method =>
+                    present_app.destroy_buffer :: coherent_buffer :: method
+                    return 3
+                else => ()
+            select present_app.buffer_bytes :: coherent_buffer :: method:
+                when Result.Ok(roundtrip) =>
+                    select:
+                        when !byte_buffers_equal :: sample_bytes :: :: call, roundtrip :: call =>
+                            present_app.destroy_buffer :: coherent_buffer :: method
+                            return 4
+                        else => ()
+                when Result.Err(_) =>
+                    present_app.destroy_buffer :: coherent_buffer :: method
+                    return 5
+            present_app.destroy_buffer :: coherent_buffer :: method
+        when Result.Err(_) => return 6
+
+    select present_app.device_local_buffer_from_bytes :: byte_count, transfer_usage, sample_bytes :: :: call :: method:
+        when Result.Ok(device_buffer) =>
+            select:
+                when !device_buffer.valid :: :: method =>
+                    present_app.destroy_buffer :: device_buffer :: method
+                    return 7
+                when !device_buffer.device_local :: :: method =>
+                    present_app.destroy_buffer :: device_buffer :: method
+                    return 8
+                else => ()
+            select present_app.buffer_bytes :: device_buffer :: method:
+                when Result.Ok(roundtrip) =>
+                    select:
+                        when !byte_buffers_equal :: sample_bytes :: :: call, roundtrip :: call =>
+                            present_app.destroy_buffer :: device_buffer :: method
+                            return 9
+                        else => ()
+                when Result.Err(_) =>
+                    present_app.destroy_buffer :: device_buffer :: method
+                    return 10
+            select present_app.buffer_transfer_buffer :: device_buffer :: method:
+                when Result.Ok(transfer_buffer) =>
+                    select:
+                        when !transfer_buffer.valid :: :: method =>
+                            present_app.destroy_buffer :: transfer_buffer :: method
+                            present_app.destroy_buffer :: device_buffer :: method
+                            return 11
+                        when transfer_buffer.byte_count :: :: method != byte_count =>
+                            present_app.destroy_buffer :: transfer_buffer :: method
+                            present_app.destroy_buffer :: device_buffer :: method
+                            return 12
+                        when transfer_buffer.usage :: :: method != transfer_usage =>
+                            present_app.destroy_buffer :: transfer_buffer :: method
+                            present_app.destroy_buffer :: device_buffer :: method
+                            return 13
+                        else => ()
+                    present_app.destroy_buffer :: transfer_buffer :: method
+                when Result.Err(_) =>
+                    present_app.destroy_buffer :: device_buffer :: method
+                    return 14
+            present_app.destroy_buffer :: device_buffer :: method
+        when Result.Err(_) => return 15
+
+    select present_app.host_visible_buffer_from_bytes :: byte_count, VK_BUFFER_USAGE_TRANSFER_DST_BIT, sample_bytes :: :: call :: method:
+        when Result.Ok(host_visible_buffer) =>
+            select:
+                when !host_visible_buffer.valid :: :: method =>
+                    present_app.destroy_buffer :: host_visible_buffer :: method
+                    return 16
+                when !host_visible_buffer.host_visible :: :: method =>
+                    present_app.destroy_buffer :: host_visible_buffer :: method
+                    return 17
+                else => ()
+            select present_app.buffer_to_transfer_buffer :: host_visible_buffer :: method:
+                when Result.Ok(transfer_buffer) =>
+                    select present_app.buffer_bytes :: transfer_buffer :: method:
+                        when Result.Ok(roundtrip) =>
+                            select:
+                                when !byte_buffers_equal :: sample_bytes :: :: call, roundtrip :: call =>
+                                    present_app.destroy_buffer :: transfer_buffer :: method
+                                    present_app.destroy_buffer :: host_visible_buffer :: method
+                                    return 18
+                                else => ()
+                        when Result.Err(_) =>
+                            present_app.destroy_buffer :: transfer_buffer :: method
+                            present_app.destroy_buffer :: host_visible_buffer :: method
+                            return 19
+                    present_app.destroy_buffer :: transfer_buffer :: method
+                when Result.Err(_) =>
+                    present_app.destroy_buffer :: host_visible_buffer :: method
+                    return 20
+            present_app.destroy_buffer :: host_visible_buffer :: method
+        when Result.Err(_) => return 21
+
+    select present_app.host_coherent_buffer_plan :: byte_count, transfer_usage :: method:
+        when Result.Ok(coherent_plan) =>
+            select present_app.buffer_from_bytes :: byte_count, transfer_usage, coherent_plan.memory_type_index :: :: method, sample_bytes :: :: call :: method:
+                when Result.Ok(buffer_from_bytes) =>
+                    select present_app.buffer_bytes :: buffer_from_bytes :: method:
+                        when Result.Ok(roundtrip) =>
+                            select:
+                                when !byte_buffers_equal :: sample_bytes :: :: call, roundtrip :: call =>
+                                    present_app.destroy_buffer :: buffer_from_bytes :: method
+                                    return 22
+                                else => ()
+                        when Result.Err(_) =>
+                            present_app.destroy_buffer :: buffer_from_bytes :: method
+                            return 23
+                    present_app.destroy_buffer :: buffer_from_bytes :: method
+                when Result.Err(_) => return 24
+        when Result.Err(_) => return 25
+
+    select present_app.device_local_buffer_plan :: byte_count, transfer_usage :: method:
+        when Result.Ok(device_plan) =>
+            let device_memory_type_index = device_plan.memory_type_index :: :: method
+            select present_app.buffer_from_plan_with_bytes :: device_plan, sample_bytes :: :: call :: method:
+                when Result.Ok(buffer_from_plan) =>
+                    select present_app.buffer_bytes :: buffer_from_plan :: method:
+                        when Result.Ok(roundtrip) =>
+                            select:
+                                when !byte_buffers_equal :: sample_bytes :: :: call, roundtrip :: call =>
+                                    present_app.destroy_buffer :: buffer_from_plan :: method
+                                    return 26
+                                else => ()
+                        when Result.Err(_) =>
+                            present_app.destroy_buffer :: buffer_from_plan :: method
+                            return 27
+                    present_app.destroy_buffer :: buffer_from_plan :: method
+                when Result.Err(_) => return 28
+            select present_app.buffer_empty :: byte_count, transfer_usage, device_memory_type_index :: method:
+                when Result.Ok(empty_buffer) =>
+                    select present_app.write_buffer :: empty_buffer, sample_bytes :: :: call :: method:
+                        when Result.Ok(_) =>
+                            select present_app.buffer_bytes :: empty_buffer :: method:
+                                when Result.Ok(roundtrip) =>
+                                    select:
+                                        when !byte_buffers_equal :: sample_bytes :: :: call, roundtrip :: call =>
+                                            present_app.destroy_buffer :: empty_buffer :: method
+                                            return 29
+                                        else => ()
+                                when Result.Err(_) =>
+                                    present_app.destroy_buffer :: empty_buffer :: method
+                                    return 30
+                        when Result.Err(_) =>
+                            present_app.destroy_buffer :: empty_buffer :: method
+                            return 31
+                    present_app.destroy_buffer :: empty_buffer :: method
+                when Result.Err(_) => return 32
+        when Result.Err(_) => return 33
+
+    return 0

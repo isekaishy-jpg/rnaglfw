@@ -1,6 +1,8 @@
 use std.{List, Option, Result, Str}
 use event.{WindowCharacterData, WindowCharacterModsData, WindowCursorData, WindowEvent}
 use event.{WindowKeyData, WindowMouseButtonData, WindowScrollData}
+use event.{WindowRawKeyData, WindowRawMouseButtonData, WindowRawMouseMotionData}
+use event.WindowRawMouseWheelData
 use runtime.{App, AppError}
 use window.WindowId
 
@@ -8,6 +10,30 @@ impl App:
     fn next_cursor_data(edit self) -> Option[WindowCursorData]:
         let batch = self.take_event_batch :: :: method
         let data = batch.pop_cursor_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn next_raw_mouse_motion_data(edit self) -> Option[WindowRawMouseMotionData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_raw_mouse_motion_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn next_raw_mouse_button_data(edit self) -> Option[WindowRawMouseButtonData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_raw_mouse_button_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn next_raw_mouse_wheel_data(edit self) -> Option[WindowRawMouseWheelData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_raw_mouse_wheel_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn next_raw_key_data(edit self) -> Option[WindowRawKeyData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_raw_key_data :: :: method
         self.pending = batch.events
         return data
 
@@ -50,6 +76,30 @@ impl App:
     fn next_cursor_data_for(edit self, id: WindowId) -> Option[WindowCursorData]:
         let batch = self.take_event_batch :: :: method
         let data = batch.pop_cursor_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn next_raw_mouse_motion_data_for(edit self, id: WindowId) -> Option[WindowRawMouseMotionData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_raw_mouse_motion_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn next_raw_mouse_button_data_for(edit self, id: WindowId) -> Option[WindowRawMouseButtonData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_raw_mouse_button_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn next_raw_mouse_wheel_data_for(edit self, id: WindowId) -> Option[WindowRawMouseWheelData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_raw_mouse_wheel_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn next_raw_key_data_for(edit self, id: WindowId) -> Option[WindowRawKeyData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_raw_key_data_for :: id :: method
         self.pending = batch.events
         return data
 
@@ -119,6 +169,30 @@ impl App:
         self.pending = batch.events
         return event
 
+    fn next_raw_mouse_motion_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_raw_mouse_motion_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_raw_mouse_button_changed_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_raw_mouse_button_changed_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_raw_mouse_wheel_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_raw_mouse_wheel_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_raw_key_changed_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_raw_key_changed_event :: :: method
+        self.pending = batch.events
+        return event
+
     fn next_scrolled_event(edit self) -> Option[WindowEvent]:
         let batch = self.take_event_batch :: :: method
         let event = batch.pop_scrolled_event :: :: method
@@ -161,6 +235,30 @@ impl App:
         self.pending = batch.events
         return event
 
+    fn next_raw_mouse_motion_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_raw_mouse_motion_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_raw_mouse_button_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_raw_mouse_button_changed_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_raw_mouse_wheel_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_raw_mouse_wheel_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_raw_key_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_raw_key_changed_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
     fn next_scrolled_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
         let batch = self.take_event_batch :: :: method
         let event = batch.pop_scrolled_event_for :: id :: method
@@ -178,6 +276,30 @@ impl App:
             when self.has_pending_events :: :: method => ()
             else => self.pump_poll :: :: method
         return Result.Ok :: self.next_cursor_data :: :: method :: call
+
+    fn poll_next_raw_mouse_motion_data(edit self) -> Result[Option[WindowRawMouseMotionData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_raw_mouse_motion_data :: :: method :: call
+
+    fn poll_next_raw_mouse_button_data(edit self) -> Result[Option[WindowRawMouseButtonData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_raw_mouse_button_data :: :: method :: call
+
+    fn poll_next_raw_mouse_wheel_data(edit self) -> Result[Option[WindowRawMouseWheelData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_raw_mouse_wheel_data :: :: method :: call
+
+    fn poll_next_raw_key_data(edit self) -> Result[Option[WindowRawKeyData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_raw_key_data :: :: method :: call
 
     fn poll_next_scroll_data(edit self) -> Result[Option[WindowScrollData], AppError]:
         select:
@@ -220,6 +342,30 @@ impl App:
             when self.has_pending_events :: :: method => ()
             else => self.pump_poll :: :: method
         return Result.Ok :: self.next_cursor_data_for :: id :: method :: call
+
+    fn poll_next_raw_mouse_motion_data_for(edit self, id: WindowId) -> Result[Option[WindowRawMouseMotionData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_raw_mouse_motion_data_for :: id :: method :: call
+
+    fn poll_next_raw_mouse_button_data_for(edit self, id: WindowId) -> Result[Option[WindowRawMouseButtonData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_raw_mouse_button_data_for :: id :: method :: call
+
+    fn poll_next_raw_mouse_wheel_data_for(edit self, id: WindowId) -> Result[Option[WindowRawMouseWheelData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_raw_mouse_wheel_data_for :: id :: method :: call
+
+    fn poll_next_raw_key_data_for(edit self, id: WindowId) -> Result[Option[WindowRawKeyData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_raw_key_data_for :: id :: method :: call
 
     fn poll_next_scroll_data_for(edit self, id: WindowId) -> Result[Option[WindowScrollData], AppError]:
         select:
@@ -287,6 +433,30 @@ impl App:
             else => self.pump_poll :: :: method
         return Result.Ok :: self.next_cursor_moved_event :: :: method :: call
 
+    fn poll_next_raw_mouse_motion_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_raw_mouse_motion_event :: :: method :: call
+
+    fn poll_next_raw_mouse_button_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_raw_mouse_button_changed_event :: :: method :: call
+
+    fn poll_next_raw_mouse_wheel_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_raw_mouse_wheel_event :: :: method :: call
+
+    fn poll_next_raw_key_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_raw_key_changed_event :: :: method :: call
+
     fn poll_next_scrolled_event(edit self) -> Result[Option[WindowEvent], AppError]:
         select:
             when self.has_pending_events :: :: method => ()
@@ -329,6 +499,30 @@ impl App:
             else => self.pump_poll :: :: method
         return Result.Ok :: self.next_cursor_moved_event_for :: id :: method :: call
 
+    fn poll_next_raw_mouse_motion_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_raw_mouse_motion_event_for :: id :: method :: call
+
+    fn poll_next_raw_mouse_button_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_raw_mouse_button_changed_event_for :: id :: method :: call
+
+    fn poll_next_raw_mouse_wheel_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_raw_mouse_wheel_event_for :: id :: method :: call
+
+    fn poll_next_raw_key_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_raw_key_changed_event_for :: id :: method :: call
+
     fn poll_next_scrolled_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
         select:
             when self.has_pending_events :: :: method => ()
@@ -346,6 +540,30 @@ impl App:
             when self.has_pending_events :: :: method => ()
             else => self.pump_wait :: :: method
         return Result.Ok :: self.next_cursor_data :: :: method :: call
+
+    fn wait_next_raw_mouse_motion_data(edit self) -> Result[Option[WindowRawMouseMotionData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_raw_mouse_motion_data :: :: method :: call
+
+    fn wait_next_raw_mouse_button_data(edit self) -> Result[Option[WindowRawMouseButtonData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_raw_mouse_button_data :: :: method :: call
+
+    fn wait_next_raw_mouse_wheel_data(edit self) -> Result[Option[WindowRawMouseWheelData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_raw_mouse_wheel_data :: :: method :: call
+
+    fn wait_next_raw_key_data(edit self) -> Result[Option[WindowRawKeyData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_raw_key_data :: :: method :: call
 
     fn wait_next_scroll_data(edit self) -> Result[Option[WindowScrollData], AppError]:
         select:
@@ -388,6 +606,30 @@ impl App:
             when self.has_pending_events :: :: method => ()
             else => self.pump_wait :: :: method
         return Result.Ok :: self.next_cursor_data_for :: id :: method :: call
+
+    fn wait_next_raw_mouse_motion_data_for(edit self, id: WindowId) -> Result[Option[WindowRawMouseMotionData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_raw_mouse_motion_data_for :: id :: method :: call
+
+    fn wait_next_raw_mouse_button_data_for(edit self, id: WindowId) -> Result[Option[WindowRawMouseButtonData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_raw_mouse_button_data_for :: id :: method :: call
+
+    fn wait_next_raw_mouse_wheel_data_for(edit self, id: WindowId) -> Result[Option[WindowRawMouseWheelData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_raw_mouse_wheel_data_for :: id :: method :: call
+
+    fn wait_next_raw_key_data_for(edit self, id: WindowId) -> Result[Option[WindowRawKeyData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_raw_key_data_for :: id :: method :: call
 
     fn wait_next_scroll_data_for(edit self, id: WindowId) -> Result[Option[WindowScrollData], AppError]:
         select:
@@ -455,6 +697,30 @@ impl App:
             else => self.pump_wait :: :: method
         return Result.Ok :: self.next_cursor_moved_event :: :: method :: call
 
+    fn wait_next_raw_mouse_motion_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_raw_mouse_motion_event :: :: method :: call
+
+    fn wait_next_raw_mouse_button_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_raw_mouse_button_changed_event :: :: method :: call
+
+    fn wait_next_raw_mouse_wheel_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_raw_mouse_wheel_event :: :: method :: call
+
+    fn wait_next_raw_key_changed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_raw_key_changed_event :: :: method :: call
+
     fn wait_next_scrolled_event(edit self) -> Result[Option[WindowEvent], AppError]:
         select:
             when self.has_pending_events :: :: method => ()
@@ -497,6 +763,30 @@ impl App:
             else => self.pump_wait :: :: method
         return Result.Ok :: self.next_cursor_moved_event_for :: id :: method :: call
 
+    fn wait_next_raw_mouse_motion_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_raw_mouse_motion_event_for :: id :: method :: call
+
+    fn wait_next_raw_mouse_button_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_raw_mouse_button_changed_event_for :: id :: method :: call
+
+    fn wait_next_raw_mouse_wheel_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_raw_mouse_wheel_event_for :: id :: method :: call
+
+    fn wait_next_raw_key_changed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_raw_key_changed_event_for :: id :: method :: call
+
     fn wait_next_scrolled_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
         select:
             when self.has_pending_events :: :: method => ()
@@ -514,6 +804,30 @@ impl App:
             when self.has_pending_events :: :: method => ()
             else => self.pump_wait_timeout :: timeout :: method
         return Result.Ok :: self.next_cursor_data :: :: method :: call
+
+    fn wait_timeout_next_raw_mouse_motion_data(edit self, timeout: F64) -> Result[Option[WindowRawMouseMotionData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_raw_mouse_motion_data :: :: method :: call
+
+    fn wait_timeout_next_raw_mouse_button_data(edit self, timeout: F64) -> Result[Option[WindowRawMouseButtonData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_raw_mouse_button_data :: :: method :: call
+
+    fn wait_timeout_next_raw_mouse_wheel_data(edit self, timeout: F64) -> Result[Option[WindowRawMouseWheelData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_raw_mouse_wheel_data :: :: method :: call
+
+    fn wait_timeout_next_raw_key_data(edit self, timeout: F64) -> Result[Option[WindowRawKeyData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_raw_key_data :: :: method :: call
 
     fn wait_timeout_next_scroll_data(edit self, timeout: F64) -> Result[Option[WindowScrollData], AppError]:
         select:
@@ -556,6 +870,30 @@ impl App:
             when self.has_pending_events :: :: method => ()
             else => self.pump_wait_timeout :: timeout :: method
         return Result.Ok :: self.next_cursor_data_for :: id :: method :: call
+
+    fn wait_timeout_next_raw_mouse_motion_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowRawMouseMotionData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_raw_mouse_motion_data_for :: id :: method :: call
+
+    fn wait_timeout_next_raw_mouse_button_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowRawMouseButtonData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_raw_mouse_button_data_for :: id :: method :: call
+
+    fn wait_timeout_next_raw_mouse_wheel_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowRawMouseWheelData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_raw_mouse_wheel_data_for :: id :: method :: call
+
+    fn wait_timeout_next_raw_key_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowRawKeyData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_raw_key_data_for :: id :: method :: call
 
     fn wait_timeout_next_scroll_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowScrollData], AppError]:
         select:
@@ -623,6 +961,30 @@ impl App:
             else => self.pump_wait_timeout :: timeout :: method
         return Result.Ok :: self.next_cursor_moved_event :: :: method :: call
 
+    fn wait_timeout_next_raw_mouse_motion_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_raw_mouse_motion_event :: :: method :: call
+
+    fn wait_timeout_next_raw_mouse_button_changed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_raw_mouse_button_changed_event :: :: method :: call
+
+    fn wait_timeout_next_raw_mouse_wheel_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_raw_mouse_wheel_event :: :: method :: call
+
+    fn wait_timeout_next_raw_key_changed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_raw_key_changed_event :: :: method :: call
+
     fn wait_timeout_next_scrolled_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         select:
             when self.has_pending_events :: :: method => ()
@@ -664,6 +1026,30 @@ impl App:
             when self.has_pending_events :: :: method => ()
             else => self.pump_wait_timeout :: timeout :: method
         return Result.Ok :: self.next_cursor_moved_event_for :: id :: method :: call
+
+    fn wait_timeout_next_raw_mouse_motion_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_raw_mouse_motion_event_for :: id :: method :: call
+
+    fn wait_timeout_next_raw_mouse_button_changed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_raw_mouse_button_changed_event_for :: id :: method :: call
+
+    fn wait_timeout_next_raw_mouse_wheel_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_raw_mouse_wheel_event_for :: id :: method :: call
+
+    fn wait_timeout_next_raw_key_changed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_raw_key_changed_event_for :: id :: method :: call
 
     fn wait_timeout_next_scrolled_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         select:

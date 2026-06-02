@@ -4,8 +4,9 @@ use present.{VkBuffer, VkBufferCreateInfo, VkDeviceMemory, VkMemoryAllocateInfo,
 
 const ZERO_USIZE: USize = 0USize
 
-pub(package) fn copy_vulkan_buffer_bytes_from_memory(read context: VulkanPresentContext, memory: VkDeviceMemory, byte_count: Index) -> Result[ByteBuffer, VulkanPresentError]:
+pub(package) fn copy_vulkan_buffer_bytes_from_memory(read context: VulkanPresentContext, read buffer: VulkanBuffer) -> Result[ByteBuffer, VulkanPresentError]:
     let copied = ByteBuffer :: :: call
+    let byte_count = buffer.byte_count :: :: method
     copied.reserve :: byte_count :: method
     select:
         when byte_count == 0 => return Result.Ok :: copied :: call
@@ -15,6 +16,7 @@ pub(package) fn copy_vulkan_buffer_bytes_from_memory(read context: VulkanPresent
         return Result.Err :: error :: call
     let mapped_memory: *edit CVoid = null
     let mapped_memory_ptr: *edit *edit CVoid = #unsafe &raw edit mapped_memory
+    let memory = buffer.memory_handle :: :: method
     let map_result = #unsafe context.map_memory :: context.device, memory, 0U64, byte_count_u64, 0, mapped_memory_ptr :: call
     select:
         when map_result != 0 =>
@@ -24,6 +26,11 @@ pub(package) fn copy_vulkan_buffer_bytes_from_memory(read context: VulkanPresent
             let error = VulkanPresentError.BufferMemoryMapFailed :: map_result :: call
             return Result.Err :: error :: call
         else => ()
+    select context.invalidate_buffer :: buffer :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(err) =>
+            #unsafe context.unmap_memory :: context.device, memory :: call
+            return Result.Err :: err :: call
     let mapped_address = #unsafe raw_pointer_address_edit :: mapped_memory :: call
     let mapped_bytes = #unsafe raw_pointer_from_address_edit[U8] :: mapped_address :: call
     let Result.Ok(scan_limit) = byte_count as Maybe[USize] else =>
@@ -43,7 +50,8 @@ pub(package) fn copy_vulkan_buffer_bytes_from_memory(read context: VulkanPresent
     #unsafe context.unmap_memory :: context.device, memory :: call
     return Result.Ok :: copied :: call
 
-pub(package) fn write_vulkan_buffer_bytes_to_memory(read context: VulkanPresentContext, memory: VkDeviceMemory, required_byte_count: Index, take bytes: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+pub(package) fn write_vulkan_buffer_bytes_to_memory(read context: VulkanPresentContext, read buffer: VulkanBuffer, take bytes: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+    let required_byte_count = buffer.byte_count :: :: method
     let actual_byte_count = bytes.byte_count :: :: method
     select:
         when actual_byte_count != required_byte_count =>
@@ -56,6 +64,7 @@ pub(package) fn write_vulkan_buffer_bytes_to_memory(read context: VulkanPresentC
         return Result.Err :: error :: call
     let mapped_memory: *edit CVoid = null
     let mapped_memory_ptr: *edit *edit CVoid = #unsafe &raw edit mapped_memory
+    let memory = buffer.memory_handle :: :: method
     let map_result = #unsafe context.map_memory :: context.device, memory, 0U64, byte_count_u64, 0, mapped_memory_ptr :: call
     select:
         when map_result != 0 =>
@@ -83,6 +92,11 @@ pub(package) fn write_vulkan_buffer_bytes_to_memory(read context: VulkanPresentC
         let dest_slot = #unsafe mapped_bytes.offset :: offset :: method
         #unsafe dest_slot.store :: raw :: method
         scan = scan + 1USize
+    select context.flush_buffer :: buffer :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(err) =>
+            #unsafe context.unmap_memory :: context.device, memory :: call
+            return Result.Err :: err :: call
     #unsafe context.unmap_memory :: context.device, memory :: call
     return Result.Ok :: :: call
 
@@ -374,12 +388,6 @@ impl VulkanPresentContext:
             when Result.Ok(plan) => return self.buffer_from_plan :: plan :: method
             when Result.Err(err) => return Result.Err :: err :: call
 
-    fn buffer_bytes(read self, read buffer: VulkanBuffer) -> Result[ByteBuffer, VulkanPresentError]:
-        return copy_vulkan_buffer_bytes_from_memory :: self, buffer.memory, buffer.byte_count :: call
-
-    fn write_buffer(read self, read buffer: VulkanBuffer, take bytes: ByteBuffer) -> Result[Unit, VulkanPresentError]:
-        return write_vulkan_buffer_bytes_to_memory :: self, buffer.memory, buffer.byte_count, bytes :: call
-
     fn transfer_source_buffer_usage(read self) -> CUInt:
         return VK_BUFFER_USAGE_TRANSFER_SRC_BIT
 
@@ -425,12 +433,6 @@ impl VulkanPresentApp:
 
     fn device_local_buffer(read self, byte_count: Index, usage: CUInt) -> Result[VulkanBuffer, VulkanPresentError]:
         return self.context.device_local_buffer :: byte_count, usage :: method
-
-    fn buffer_bytes(read self, read buffer: VulkanBuffer) -> Result[ByteBuffer, VulkanPresentError]:
-        return self.context.buffer_bytes :: buffer :: method
-
-    fn write_buffer(read self, read buffer: VulkanBuffer, take bytes: ByteBuffer) -> Result[Unit, VulkanPresentError]:
-        return self.context.write_buffer :: buffer, bytes :: method
 
     fn transfer_source_buffer_usage(read self) -> CUInt:
         return self.context.transfer_source_buffer_usage :: :: method

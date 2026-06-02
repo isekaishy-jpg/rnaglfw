@@ -10,6 +10,9 @@ use joystick.{hat_state_from_raw, hat_state_raw, joystick_from_id}
 use mailbox.{WindowMailbox, allocate_window_mailbox, attach_callbacks}
 use mailbox.{clear_user_pointer, drain_window_mailbox, free_window_mailbox}
 use runtime_snapshot_support.{copy_monitor_snapshot, copy_window_snapshot}
+use runtime_window_appearance_support.{WindowAppearanceSettings, apply_window_appearance}
+use runtime_window_hook_support.{attach_window_platform_support, detach_window_platform_support}
+use win32_drag_drop_support.{initialize_drag_drop_runtime, uninitialize_drag_drop_runtime}
 use glfw.{GlfwCursorPos, GlfwMonitor, GlfwMonitorRaw, GlfwPoint, GlfwScale}
 use glfw.{GlfwSize, GlfwWindow, GlfwWindowRaw, glfw_create_window_raw}
 use glfw.glfw_default_window_hints
@@ -30,9 +33,11 @@ use system.runtime_version_string
 use window.{ClientApi, ContextCreationApi, CursorMode, CursorPos, FrameSize, Monitor}
 use window.{MonitorGammaRamp, OpenGlProfile, Point, Rect, Scale, Size, VideoMode}
 use window.{Window, WindowId, Win32HWnd}
+use window.WindowAppearanceError
 use window.WindowInputSnapshot
 use window.{client_api_raw, context_creation_api_raw}
 use window.opengl_profile_raw
+use window.{window_level_from_raw, window_level_raw}
 use window.{WindowModeError, WindowMonitorSpec, window_monitor_spec}
 use window.{WindowSpec, fixed_size_window_spec, fullscreen_window_spec}
 use window.fullscreen_window_spec_with_video_mode
@@ -60,13 +65,22 @@ pub enum AppError:
     VideoModeNotFound
     MailboxAllocFailed
     WindowCreateFailed
+    WindowLevelApplyFailed
+    WindowSkipTaskbarApplyFailed
+    WindowAppearanceApplyFailed(WindowAppearanceError)
+    WindowControlHookInstallFailed
+    ImeHookInstallFailed
+    RawInputHookInstallFailed
+    ThemeHookInstallFailed
+    TouchHookInstallFailed
+    DragDropRuntimeInitFailed
+    DragDropHookInstallFailed
     WindowNotFound
     TextDecode(TextDecodeError)
     NoCurrentContext
     CurrentContextWindowNotTracked
     MonitorNotFound
     PrimaryMonitorUnavailable
-
 pub enum AppClipboardError:
     WindowUnavailable
     TextDecode(TextDecodeError)
@@ -76,269 +90,19 @@ pub enum ControlFlow:
     WaitTimeout:
         seconds: F64
     Exit
-
 impl ControlFlow:
     fn exits(read self) -> Bool:
         select self:
             when ControlFlow.Exit => return true
             else => return false
-
-pub enum AnglePlatformType:
-    None
-    OpenGl
-    OpenGlEs
-    D3D9
-    D3D11
-    Vulkan
-    Metal
-    Unknown(CInt)
-
-pub enum WaylandLibdecorMode:
-    Prefer
-    Disable
-    Unknown(CInt)
-pub enum BoolOverride:
-    Default
-    Enabled
-    Disabled
-
-pub enum PlatformOverride:
-    Default
-    Selected(Platform)
-
-pub enum AnglePlatformTypeOverride:
-    Default
-    Selected(AnglePlatformType)
-
-pub enum WaylandLibdecorOverride:
-    Default
-    Selected(WaylandLibdecorMode)
-
-pub struct AppInitConfig:
-    pub joystick_hat_buttons: BoolOverride
-    pub platform: PlatformOverride
-    pub angle_platform_type: AnglePlatformTypeOverride
-    pub cocoa_chdir_resources: BoolOverride
-    pub cocoa_menubar: BoolOverride
-    pub x11_xcb_vulkan_surface: BoolOverride
-    pub wayland_libdecor: WaylandLibdecorOverride
-
-pub fn angle_platform_type_from_raw(raw: CInt) -> AnglePlatformType:
-    select:
-        when raw == 0x00037001 => return AnglePlatformType.None
-        when raw == 0x00037002 => return AnglePlatformType.OpenGl
-        when raw == 0x00037003 => return AnglePlatformType.OpenGlEs
-        when raw == 0x00037004 => return AnglePlatformType.D3D9
-        when raw == 0x00037005 => return AnglePlatformType.D3D11
-        when raw == 0x00037007 => return AnglePlatformType.Vulkan
-        when raw == 0x00037008 => return AnglePlatformType.Metal
-        else => return AnglePlatformType.Unknown :: raw :: call
-
-pub fn angle_platform_type_raw(read platform_type: AnglePlatformType) -> CInt:
-    select platform_type:
-        when AnglePlatformType.None => return 0x00037001
-        when AnglePlatformType.OpenGl => return 0x00037002
-        when AnglePlatformType.OpenGlEs => return 0x00037003
-        when AnglePlatformType.D3D9 => return 0x00037004
-        when AnglePlatformType.D3D11 => return 0x00037005
-        when AnglePlatformType.Vulkan => return 0x00037007
-        when AnglePlatformType.Metal => return 0x00037008
-        when AnglePlatformType.Unknown(raw) => return raw
-    return 0x00037001
-
-pub fn wayland_libdecor_mode_from_raw(raw: CInt) -> WaylandLibdecorMode:
-    select:
-        when raw == 0x00038001 => return WaylandLibdecorMode.Prefer
-        when raw == 0x00038002 => return WaylandLibdecorMode.Disable
-        else => return WaylandLibdecorMode.Unknown :: raw :: call
-
-pub fn wayland_libdecor_mode_raw(read mode: WaylandLibdecorMode) -> CInt:
-    select mode:
-        when WaylandLibdecorMode.Prefer => return 0x00038001
-        when WaylandLibdecorMode.Disable => return 0x00038002
-        when WaylandLibdecorMode.Unknown(raw) => return raw
-    return 0x00038001
-
-pub fn app_init_config() -> AppInitConfig:
-    let joystick_hat_buttons = BoolOverride.Default
-    let platform = PlatformOverride.Default
-    let angle_platform_type = AnglePlatformTypeOverride.Default
-    let cocoa_chdir_resources = BoolOverride.Default
-    let cocoa_menubar = BoolOverride.Default
-    let x11_xcb_vulkan_surface = BoolOverride.Default
-    let wayland_libdecor = WaylandLibdecorOverride.Default
-    return AppInitConfig :: :: call
-        joystick_hat_buttons = joystick_hat_buttons
-        platform = platform
-        angle_platform_type = angle_platform_type
-        cocoa_chdir_resources = cocoa_chdir_resources
-        cocoa_menubar = cocoa_menubar
-        x11_xcb_vulkan_surface = x11_xcb_vulkan_surface
-        wayland_libdecor = wayland_libdecor
-
-pub fn app_init_config_with_joystick_hat_buttons(take config: AppInitConfig, enabled: Bool) -> AppInitConfig:
-    config.set_joystick_hat_buttons :: enabled :: method
-    return config
-
-pub fn app_init_config_on_platform(take config: AppInitConfig, platform: Platform) -> AppInitConfig:
-    config.set_platform :: platform :: method
-    return config
-
-pub fn app_init_config_with_angle_platform_type(take config: AppInitConfig, platform_type: AnglePlatformType) -> AppInitConfig:
-    config.set_angle_platform_type :: platform_type :: method
-    return config
-
-pub fn app_init_config_with_cocoa_chdir_resources(take config: AppInitConfig, enabled: Bool) -> AppInitConfig:
-    config.set_cocoa_chdir_resources :: enabled :: method
-    return config
-
-pub fn app_init_config_with_cocoa_menubar(take config: AppInitConfig, enabled: Bool) -> AppInitConfig:
-    config.set_cocoa_menubar :: enabled :: method
-    return config
-
-pub fn app_init_config_with_x11_xcb_vulkan_surface(take config: AppInitConfig, enabled: Bool) -> AppInitConfig:
-    config.set_x11_xcb_vulkan_surface :: enabled :: method
-    return config
-
-pub fn app_init_config_with_wayland_libdecor(take config: AppInitConfig, mode: WaylandLibdecorMode) -> AppInitConfig:
-    config.set_wayland_libdecor :: mode :: method
-    return config
-
-pub fn win32_app_init_config() -> AppInitConfig:
-    let config = app_init_config :: :: call
-    return app_init_config_on_platform :: config, Platform.Win32 :: call
-
-impl AppInitConfig:
-    fn with_joystick_hat_buttons(take self, enabled: Bool) -> AppInitConfig:
-        self.set_joystick_hat_buttons :: enabled :: method
-        return self
-
-    fn on_platform(take self, platform: Platform) -> AppInitConfig:
-        self.set_platform :: platform :: method
-        return self
-
-    fn with_angle_platform_type(take self, platform_type: AnglePlatformType) -> AppInitConfig:
-        self.set_angle_platform_type :: platform_type :: method
-        return self
-
-    fn with_cocoa_chdir_resources(take self, enabled: Bool) -> AppInitConfig:
-        self.set_cocoa_chdir_resources :: enabled :: method
-        return self
-
-    fn with_cocoa_menubar(take self, enabled: Bool) -> AppInitConfig:
-        self.set_cocoa_menubar :: enabled :: method
-        return self
-
-    fn with_x11_xcb_vulkan_surface(take self, enabled: Bool) -> AppInitConfig:
-        self.set_x11_xcb_vulkan_surface :: enabled :: method
-        return self
-
-    fn with_wayland_libdecor(take self, mode: WaylandLibdecorMode) -> AppInitConfig:
-        self.set_wayland_libdecor :: mode :: method
-        return self
-
-    fn without_joystick_hat_buttons_override(take self) -> AppInitConfig:
-        self.clear_joystick_hat_buttons :: :: method
-        return self
-
-    fn without_platform_override(take self) -> AppInitConfig:
-        self.clear_platform :: :: method
-        return self
-
-    fn without_angle_platform_type_override(take self) -> AppInitConfig:
-        self.clear_angle_platform_type :: :: method
-        return self
-
-    fn without_cocoa_chdir_resources_override(take self) -> AppInitConfig:
-        self.clear_cocoa_chdir_resources :: :: method
-        return self
-
-    fn without_cocoa_menubar_override(take self) -> AppInitConfig:
-        self.clear_cocoa_menubar :: :: method
-        return self
-
-    fn without_x11_xcb_vulkan_surface_override(take self) -> AppInitConfig:
-        self.clear_x11_xcb_vulkan_surface :: :: method
-        return self
-
-    fn without_wayland_libdecor_override(take self) -> AppInitConfig:
-        self.clear_wayland_libdecor :: :: method
-        return self
-
-    fn set_joystick_hat_buttons(edit self, enabled: Bool) -> Unit:
-        select:
-            when enabled => self.joystick_hat_buttons = BoolOverride.Enabled
-            else => self.joystick_hat_buttons = BoolOverride.Disabled
-        return
-
-    fn clear_joystick_hat_buttons(edit self) -> Unit:
-        self.joystick_hat_buttons = BoolOverride.Default
-        return
-
-    fn set_platform(edit self, platform: Platform) -> Unit:
-        self.platform = PlatformOverride.Selected :: platform :: call
-        return
-
-    fn clear_platform(edit self) -> Unit:
-        self.platform = PlatformOverride.Default
-        return
-
-    fn set_angle_platform_type(edit self, platform_type: AnglePlatformType) -> Unit:
-        self.angle_platform_type = AnglePlatformTypeOverride.Selected :: platform_type :: call
-        return
-
-    fn clear_angle_platform_type(edit self) -> Unit:
-        self.angle_platform_type = AnglePlatformTypeOverride.Default
-        return
-
-    fn set_cocoa_chdir_resources(edit self, enabled: Bool) -> Unit:
-        select:
-            when enabled => self.cocoa_chdir_resources = BoolOverride.Enabled
-            else => self.cocoa_chdir_resources = BoolOverride.Disabled
-        return
-
-    fn clear_cocoa_chdir_resources(edit self) -> Unit:
-        self.cocoa_chdir_resources = BoolOverride.Default
-        return
-
-    fn set_cocoa_menubar(edit self, enabled: Bool) -> Unit:
-        select:
-            when enabled => self.cocoa_menubar = BoolOverride.Enabled
-            else => self.cocoa_menubar = BoolOverride.Disabled
-        return
-
-    fn clear_cocoa_menubar(edit self) -> Unit:
-        self.cocoa_menubar = BoolOverride.Default
-        return
-
-    fn set_x11_xcb_vulkan_surface(edit self, enabled: Bool) -> Unit:
-        select:
-            when enabled => self.x11_xcb_vulkan_surface = BoolOverride.Enabled
-            else => self.x11_xcb_vulkan_surface = BoolOverride.Disabled
-        return
-
-    fn clear_x11_xcb_vulkan_surface(edit self) -> Unit:
-        self.x11_xcb_vulkan_surface = BoolOverride.Default
-        return
-
-    fn set_wayland_libdecor(edit self, mode: WaylandLibdecorMode) -> Unit:
-        self.wayland_libdecor = WaylandLibdecorOverride.Selected :: mode :: call
-        return
-
-    fn clear_wayland_libdecor(edit self) -> Unit:
-        self.wayland_libdecor = WaylandLibdecorOverride.Default
-        return
-
 pub trait AppHandler:
     fn started(edit self, edit app: App) -> Result[ControlFlow, AppError]:
         let _ = app
         return Result.Ok :: ControlFlow.Wait :: call
-
     fn window_event(edit self, edit app: App, event: WindowEvent) -> Result[ControlFlow, AppError]:
         let _ = app
         let _ = event
         return Result.Ok :: ControlFlow.Wait :: call
-
     fn monitor_event(edit self, edit app: App, event: MonitorEvent) -> Result[ControlFlow, AppError]:
         let _ = app
         let _ = event
@@ -357,9 +121,209 @@ pub trait AppHandler:
     fn exiting(edit self, edit app: App) -> Unit:
         let _ = app
         return
+pub enum AnglePlatformType:
+    None
+    OpenGl
+    OpenGlEs
+    D3D9
+    D3D11
+    Vulkan
+    Metal
+    Unknown(CInt)
+pub enum WaylandLibdecorMode:
+    Prefer
+    Disable
+    Unknown(CInt)
+pub enum BoolOverride:
+    Default
+    Enabled
+    Disabled
+pub enum PlatformOverride:
+    Default
+    Selected(Platform)
+pub enum AnglePlatformTypeOverride:
+    Default
+    Selected(AnglePlatformType)
+pub enum WaylandLibdecorOverride:
+    Default
+    Selected(WaylandLibdecorMode)
+pub struct AppInitConfig:
+    pub joystick_hat_buttons: BoolOverride
+    pub platform: PlatformOverride
+    pub angle_platform_type: AnglePlatformTypeOverride
+    pub cocoa_chdir_resources: BoolOverride
+    pub cocoa_menubar: BoolOverride
+    pub x11_xcb_vulkan_surface: BoolOverride
+    pub wayland_libdecor: WaylandLibdecorOverride
+pub fn angle_platform_type_from_raw(raw: CInt) -> AnglePlatformType:
+    select:
+        when raw == 0x00037001 => return AnglePlatformType.None
+        when raw == 0x00037002 => return AnglePlatformType.OpenGl
+        when raw == 0x00037003 => return AnglePlatformType.OpenGlEs
+        when raw == 0x00037004 => return AnglePlatformType.D3D9
+        when raw == 0x00037005 => return AnglePlatformType.D3D11
+        when raw == 0x00037007 => return AnglePlatformType.Vulkan
+        when raw == 0x00037008 => return AnglePlatformType.Metal
+        else => return AnglePlatformType.Unknown :: raw :: call
+pub fn angle_platform_type_raw(read platform_type: AnglePlatformType) -> CInt:
+    select platform_type:
+        when AnglePlatformType.None => return 0x00037001
+        when AnglePlatformType.OpenGl => return 0x00037002
+        when AnglePlatformType.OpenGlEs => return 0x00037003
+        when AnglePlatformType.D3D9 => return 0x00037004
+        when AnglePlatformType.D3D11 => return 0x00037005
+        when AnglePlatformType.Vulkan => return 0x00037007
+        when AnglePlatformType.Metal => return 0x00037008
+        when AnglePlatformType.Unknown(raw) => return raw
+    return 0x00037001
+pub fn wayland_libdecor_mode_from_raw(raw: CInt) -> WaylandLibdecorMode:
+    select:
+        when raw == 0x00038001 => return WaylandLibdecorMode.Prefer
+        when raw == 0x00038002 => return WaylandLibdecorMode.Disable
+        else => return WaylandLibdecorMode.Unknown :: raw :: call
+pub fn wayland_libdecor_mode_raw(read mode: WaylandLibdecorMode) -> CInt:
+    select mode:
+        when WaylandLibdecorMode.Prefer => return 0x00038001
+        when WaylandLibdecorMode.Disable => return 0x00038002
+        when WaylandLibdecorMode.Unknown(raw) => return raw
+    return 0x00038001
+pub fn app_init_config() -> AppInitConfig:
+    let joystick_hat_buttons = BoolOverride.Default
+    let platform = PlatformOverride.Default
+    let angle_platform_type = AnglePlatformTypeOverride.Default
+    let cocoa_chdir_resources = BoolOverride.Default
+    let cocoa_menubar = BoolOverride.Default
+    let x11_xcb_vulkan_surface = BoolOverride.Default
+    let wayland_libdecor = WaylandLibdecorOverride.Default
+    return AppInitConfig :: :: call
+        joystick_hat_buttons = joystick_hat_buttons
+        platform = platform
+        angle_platform_type = angle_platform_type
+        cocoa_chdir_resources = cocoa_chdir_resources
+        cocoa_menubar = cocoa_menubar
+        x11_xcb_vulkan_surface = x11_xcb_vulkan_surface
+        wayland_libdecor = wayland_libdecor
+pub fn app_init_config_with_joystick_hat_buttons(take config: AppInitConfig, enabled: Bool) -> AppInitConfig:
+    config.set_joystick_hat_buttons :: enabled :: method
+    return config
+pub fn app_init_config_on_platform(take config: AppInitConfig, platform: Platform) -> AppInitConfig:
+    config.set_platform :: platform :: method
+    return config
+pub fn app_init_config_with_angle_platform_type(take config: AppInitConfig, platform_type: AnglePlatformType) -> AppInitConfig:
+    config.set_angle_platform_type :: platform_type :: method
+    return config
+pub fn app_init_config_with_cocoa_chdir_resources(take config: AppInitConfig, enabled: Bool) -> AppInitConfig:
+    config.set_cocoa_chdir_resources :: enabled :: method
+    return config
+pub fn app_init_config_with_cocoa_menubar(take config: AppInitConfig, enabled: Bool) -> AppInitConfig:
+    config.set_cocoa_menubar :: enabled :: method
+    return config
+pub fn app_init_config_with_x11_xcb_vulkan_surface(take config: AppInitConfig, enabled: Bool) -> AppInitConfig:
+    config.set_x11_xcb_vulkan_surface :: enabled :: method
+    return config
+pub fn app_init_config_with_wayland_libdecor(take config: AppInitConfig, mode: WaylandLibdecorMode) -> AppInitConfig:
+    config.set_wayland_libdecor :: mode :: method
+    return config
+pub fn win32_app_init_config() -> AppInitConfig:
+    let config = app_init_config :: :: call
+    return app_init_config_on_platform :: config, Platform.Win32 :: call
+impl AppInitConfig:
+    fn with_joystick_hat_buttons(take self, enabled: Bool) -> AppInitConfig:
+        self.set_joystick_hat_buttons :: enabled :: method
+        return self
+    fn on_platform(take self, platform: Platform) -> AppInitConfig:
+        self.set_platform :: platform :: method
+        return self
+    fn with_angle_platform_type(take self, platform_type: AnglePlatformType) -> AppInitConfig:
+        self.set_angle_platform_type :: platform_type :: method
+        return self
+    fn with_cocoa_chdir_resources(take self, enabled: Bool) -> AppInitConfig:
+        self.set_cocoa_chdir_resources :: enabled :: method
+        return self
+    fn with_cocoa_menubar(take self, enabled: Bool) -> AppInitConfig:
+        self.set_cocoa_menubar :: enabled :: method
+        return self
+    fn with_x11_xcb_vulkan_surface(take self, enabled: Bool) -> AppInitConfig:
+        self.set_x11_xcb_vulkan_surface :: enabled :: method
+        return self
+    fn with_wayland_libdecor(take self, mode: WaylandLibdecorMode) -> AppInitConfig:
+        self.set_wayland_libdecor :: mode :: method
+        return self
+    fn without_joystick_hat_buttons_override(take self) -> AppInitConfig:
+        self.clear_joystick_hat_buttons :: :: method
+        return self
+    fn without_platform_override(take self) -> AppInitConfig:
+        self.clear_platform :: :: method
+        return self
+    fn without_angle_platform_type_override(take self) -> AppInitConfig:
+        self.clear_angle_platform_type :: :: method
+        return self
+    fn without_cocoa_chdir_resources_override(take self) -> AppInitConfig:
+        self.clear_cocoa_chdir_resources :: :: method
+        return self
+    fn without_cocoa_menubar_override(take self) -> AppInitConfig:
+        self.clear_cocoa_menubar :: :: method
+        return self
+    fn without_x11_xcb_vulkan_surface_override(take self) -> AppInitConfig:
+        self.clear_x11_xcb_vulkan_surface :: :: method
+        return self
+    fn without_wayland_libdecor_override(take self) -> AppInitConfig:
+        self.clear_wayland_libdecor :: :: method
+        return self
+    fn set_joystick_hat_buttons(edit self, enabled: Bool) -> Unit:
+        select:
+            when enabled => self.joystick_hat_buttons = BoolOverride.Enabled
+            else => self.joystick_hat_buttons = BoolOverride.Disabled
+        return
+    fn clear_joystick_hat_buttons(edit self) -> Unit:
+        self.joystick_hat_buttons = BoolOverride.Default
+        return
+    fn set_platform(edit self, platform: Platform) -> Unit:
+        self.platform = PlatformOverride.Selected :: platform :: call
+        return
+    fn clear_platform(edit self) -> Unit:
+        self.platform = PlatformOverride.Default
+        return
+    fn set_angle_platform_type(edit self, platform_type: AnglePlatformType) -> Unit:
+        self.angle_platform_type = AnglePlatformTypeOverride.Selected :: platform_type :: call
+        return
+    fn clear_angle_platform_type(edit self) -> Unit:
+        self.angle_platform_type = AnglePlatformTypeOverride.Default
+        return
+    fn set_cocoa_chdir_resources(edit self, enabled: Bool) -> Unit:
+        select:
+            when enabled => self.cocoa_chdir_resources = BoolOverride.Enabled
+            else => self.cocoa_chdir_resources = BoolOverride.Disabled
+        return
+    fn clear_cocoa_chdir_resources(edit self) -> Unit:
+        self.cocoa_chdir_resources = BoolOverride.Default
+        return
+    fn set_cocoa_menubar(edit self, enabled: Bool) -> Unit:
+        select:
+            when enabled => self.cocoa_menubar = BoolOverride.Enabled
+            else => self.cocoa_menubar = BoolOverride.Disabled
+        return
+    fn clear_cocoa_menubar(edit self) -> Unit:
+        self.cocoa_menubar = BoolOverride.Default
+        return
+    fn set_x11_xcb_vulkan_surface(edit self, enabled: Bool) -> Unit:
+        select:
+            when enabled => self.x11_xcb_vulkan_surface = BoolOverride.Enabled
+            else => self.x11_xcb_vulkan_surface = BoolOverride.Disabled
+        return
+    fn clear_x11_xcb_vulkan_surface(edit self) -> Unit:
+        self.x11_xcb_vulkan_surface = BoolOverride.Default
+        return
+    fn set_wayland_libdecor(edit self, mode: WaylandLibdecorMode) -> Unit:
+        self.wayland_libdecor = WaylandLibdecorOverride.Selected :: mode :: call
+        return
+    fn clear_wayland_libdecor(edit self) -> Unit:
+        self.wayland_libdecor = WaylandLibdecorOverride.Default
+        return
 struct WindowRecord:
     pub(package) window: Window
     pub(package) mailbox: *edit WindowMailbox
+    pub(package) modifier_bits: CInt
     pub(package) should_close: Bool
     pub(package) pos: Point
     pub(package) size: Size
@@ -369,6 +333,9 @@ struct WindowRecord:
     pub(package) iconified: Bool
     pub(package) maximized: Bool
     pub(package) cursor_pos: CursorPos
+struct RawWindowCreation:
+    raw_window: GlfwWindow
+    appearance_settings: WindowAppearanceSettings
 struct MonitorRecord:
     pub(package) raw: *edit GlfwMonitorRaw
     pub(package) id: MonitorId
@@ -379,6 +346,7 @@ struct JoystickPresenceState:
     pub(package) pad2: CUInt
 pub struct App:
     pub(package) live: Bool
+    pub(package) drag_drop_runtime_initialized: Bool
     pub(package) next_window_id: WindowId
     pub(package) next_monitor_id: MonitorId
     pub(package) joystick_state: JoystickPresenceState
@@ -404,7 +372,6 @@ pub struct AppSnapshot:
     pub windows: List[WindowSnapshot]
     pub monitors: List[MonitorSnapshot]
     pub joysticks: List[JoystickSnapshot]
-
 pub struct WindowSnapshot:
     pub window: Window
     pub title: Result[Str, TextDecodeError]
@@ -446,7 +413,6 @@ pub struct WindowSnapshot:
     pub hovered: Bool
     pub floating: Bool
     pub fullscreen: Bool
-
 pub struct MonitorSnapshot:
     pub id: MonitorId
     pub monitor: Monitor
@@ -462,7 +428,6 @@ pub struct MonitorSnapshot:
     pub video_mode_count: CInt
     pub video_modes: List[VideoMode]
     pub gamma_ramp: Option[MonitorGammaRamp]
-
 pub struct JoystickSnapshot:
     pub joystick: Joystick
     pub name_text: Result[Option[Str], TextDecodeError]
@@ -477,7 +442,6 @@ pub struct JoystickSnapshot:
     pub buttons: List[Bool]
     pub hats: List[HatState]
     pub gamepad_state: Option[GamepadState]
-
 impl AppSnapshot:
     fn window_ids(read self) -> List[WindowId]:
         let ids = List[WindowId] :: :: call
@@ -489,7 +453,6 @@ impl AppSnapshot:
             ids.push :: self.windows[index].window.id :: method
             scan = scan + 1
         return ids
-
     fn monitor_ids(read self) -> List[MonitorId]:
         let ids = List[MonitorId] :: :: call
         let count = self.monitors.count :: :: method
@@ -500,7 +463,6 @@ impl AppSnapshot:
             ids.push :: self.monitors[index].id :: method
             scan = scan + 1
         return ids
-
     fn joystick_ids(read self) -> List[JoystickId]:
         let ids = List[JoystickId] :: :: call
         let count = self.joysticks.count :: :: method
@@ -511,7 +473,6 @@ impl AppSnapshot:
             ids.push :: self.joysticks[index].joystick.id :: method
             scan = scan + 1
         return ids
-
     fn window_index(read self, id: WindowId) -> Option[Index]:
         let count = self.windows.count :: :: method
         let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
@@ -523,7 +484,6 @@ impl AppSnapshot:
                 else => ()
             scan = scan + 1
         return Option.None
-
     fn monitor_index(read self, id: MonitorId) -> Option[Index]:
         let count = self.monitors.count :: :: method
         let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
@@ -535,7 +495,6 @@ impl AppSnapshot:
                 else => ()
             scan = scan + 1
         return Option.None
-
     fn joystick_index(read self, id: JoystickId) -> Option[Index]:
         let count = self.joysticks.count :: :: method
         let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
@@ -547,7 +506,6 @@ impl AppSnapshot:
                 else => ()
             scan = scan + 1
         return Option.None
-
     fn gamepad_index(read self, id: JoystickId) -> Option[Index]:
         select self.joystick_index :: id :: method:
             when Option.Some(index) =>
@@ -555,27 +513,22 @@ impl AppSnapshot:
                     when self.joysticks[index].gamepad => return Option.Some :: index :: call
                     else => return Option.None
             when Option.None => return Option.None
-
     fn has_window(read self, id: WindowId) -> Bool:
         select self.window_index :: id :: method:
             when Option.Some(_) => return true
             when Option.None => return false
-
     fn has_monitor(read self, id: MonitorId) -> Bool:
         select self.monitor_index :: id :: method:
             when Option.Some(_) => return true
             when Option.None => return false
-
     fn has_joystick(read self, id: JoystickId) -> Bool:
         select self.joystick_index :: id :: method:
             when Option.Some(_) => return true
             when Option.None => return false
-
     fn has_gamepad(read self, id: JoystickId) -> Bool:
         select self.gamepad_index :: id :: method:
             when Option.Some(_) => return true
             when Option.None => return false
-
     fn gamepad_count(read self) -> Index:
         let total: CInt = 0
         let count = self.joysticks.count :: :: method
@@ -589,10 +542,8 @@ impl AppSnapshot:
             scan = scan + 1
         let Result.Ok(result) = cint_to_index :: total :: call else => return 0
         return result
-
     fn has_gamepads(read self) -> Bool:
         return self.gamepad_count :: :: method != 0
-
     fn gamepad_ids(read self) -> List[JoystickId]:
         let ids = List[JoystickId] :: :: call
         let count = self.joysticks.count :: :: method
@@ -605,7 +556,6 @@ impl AppSnapshot:
                 else => ()
             scan = scan + 1
         return ids
-
     fn close_requested_window_count(read self) -> Index:
         let total: CInt = 0
         let count = self.windows.count :: :: method
@@ -619,10 +569,8 @@ impl AppSnapshot:
             scan = scan + 1
         let Result.Ok(result) = cint_to_index :: total :: call else => return 0
         return result
-
     fn has_close_requested_windows(read self) -> Bool:
         return self.close_requested_window_count :: :: method != 0
-
     fn close_requested_window_ids(read self) -> List[WindowId]:
         let ids = List[WindowId] :: :: call
         let count = self.windows.count :: :: method
@@ -635,12 +583,10 @@ impl AppSnapshot:
                 else => ()
             scan = scan + 1
         return ids
-
     fn window_close_requested(read self, id: WindowId) -> Bool:
         select self.window_index :: id :: method:
             when Option.Some(index) => return self.windows[index].should_close
             when Option.None => return false
-
     fn close_requested_windows(read self) -> List[WindowSnapshot]:
         let snapshots = List[WindowSnapshot] :: :: call
         let count = self.windows.count :: :: method
@@ -655,7 +601,6 @@ impl AppSnapshot:
                 else => ()
             scan = scan + 1
         return snapshots
-
     fn close_requested_window(read self, id: WindowId) -> Option[WindowSnapshot]:
         select self.window_index :: id :: method:
             when Option.Some(index) =>
@@ -665,42 +610,36 @@ impl AppSnapshot:
                         return Option.Some :: snapshot :: call
                     else => return Option.None
             when Option.None => return Option.None
-
     fn window(read self, id: WindowId) -> Option[WindowSnapshot]:
         select self.window_index :: id :: method:
             when Option.Some(index) =>
                 let snapshot = copy_window_snapshot :: self.windows[index] :: call
                 return Option.Some :: snapshot :: call
             when Option.None => return Option.None
-
     fn monitor(read self, id: MonitorId) -> Option[MonitorSnapshot]:
         select self.monitor_index :: id :: method:
             when Option.Some(index) =>
                 let snapshot = copy_monitor_snapshot :: self.monitors[index] :: call
                 return Option.Some :: snapshot :: call
             when Option.None => return Option.None
-
     fn take_window(edit self, id: WindowId) -> Option[WindowSnapshot]:
         select self.window_index :: id :: method:
             when Option.Some(index) =>
                 let snapshot = self.windows.remove :: index :: method
                 return Option.Some :: snapshot :: call
             when Option.None => return Option.None
-
     fn take_monitor(edit self, id: MonitorId) -> Option[MonitorSnapshot]:
         select self.monitor_index :: id :: method:
             when Option.Some(index) =>
                 let snapshot = self.monitors.remove :: index :: method
                 return Option.Some :: snapshot :: call
             when Option.None => return Option.None
-
     fn take_joystick(edit self, id: JoystickId) -> Option[JoystickSnapshot]:
         select self.joystick_index :: id :: method:
             when Option.Some(index) =>
                 let snapshot = self.joysticks.remove :: index :: method
                 return Option.Some :: snapshot :: call
             when Option.None => return Option.None
-
     fn take_gamepad(edit self, id: JoystickId) -> Option[JoystickSnapshot]:
         select self.joystick_index :: id :: method:
             when Option.Some(index) =>
@@ -710,66 +649,50 @@ impl AppSnapshot:
                         return Option.Some :: snapshot :: call
                     else => return Option.None
             when Option.None => return Option.None
-
     fn current_context_window_index(read self) -> Option[Index]:
         select self.current_context_window_id:
             when Option.Some(id) => return self.window_index :: id :: method
             when Option.None => return Option.None
-
     fn current_context_window(read self) -> Option[WindowSnapshot]:
         select self.current_context_window_id:
             when Option.Some(id) => return self.window :: id :: method
             when Option.None => return Option.None
-
     fn primary_monitor_index(read self) -> Option[Index]:
         select self.primary_monitor_id:
             when Option.Some(id) => return self.monitor_index :: id :: method
             when Option.None => return Option.None
-
     fn primary_monitor(read self) -> Option[MonitorSnapshot]:
         select self.primary_monitor_id:
             when Option.Some(id) => return self.monitor :: id :: method
             when Option.None => return Option.None
-
     fn take_current_context_window(edit self) -> Option[WindowSnapshot]:
         select self.current_context_window_id:
             when Option.Some(id) => return self.take_window :: id :: method
             when Option.None => return Option.None
-
     fn take_primary_monitor(edit self) -> Option[MonitorSnapshot]:
         select self.primary_monitor_id:
             when Option.Some(id) => return self.take_monitor :: id :: method
             when Option.None => return Option.None
-
 impl WindowSnapshot:
     fn key_state(read self, read key: KeyCode) -> InputAction:
         return self.input.key_state :: key :: method
-
     fn key_pressed(read self, read key: KeyCode) -> Bool:
         return self.input.key_pressed :: key :: method
-
     fn key_down(read self, read key: KeyCode) -> Bool:
         return self.input.key_down :: key :: method
-
     fn key_repeating(read self, read key: KeyCode) -> Bool:
         return self.input.key_repeating :: key :: method
-
     fn mouse_button_state(read self, read button: MouseButton) -> InputAction:
         return self.input.mouse_button_state :: button :: method
-
     fn mouse_button_pressed(read self, read button: MouseButton) -> Bool:
         return self.input.mouse_button_pressed :: button :: method
-
     fn mouse_button_down(read self, read button: MouseButton) -> Bool:
         return self.input.mouse_button_down :: button :: method
-
 impl MonitorSnapshot:
     fn available(read self) -> Bool:
         return self.available
-
     fn primary(read self) -> Bool:
         return self.primary
-
     fn fullscreen_spec(read self) -> Result[WindowMonitorSpec, WindowModeError]:
         select self.current_video_mode:
             when Option.Some(mode) =>
@@ -777,19 +700,16 @@ impl MonitorSnapshot:
                 let spec = window_monitor_spec :: self.monitor, self.screen_pos, size, mode.refresh_rate :: call
                 return Result.Ok :: spec :: call
             when Option.None => return Result.Err :: WindowModeError.MissingVideoMode :: call
-
     fn fullscreen_spec_with_video_mode(read self, read mode: VideoMode) -> Result[WindowMonitorSpec, WindowModeError]:
         let size = Size :: mode.width, mode.height :: call
         let spec = window_monitor_spec :: self.monitor, self.screen_pos, size, mode.refresh_rate :: call
         return Result.Ok :: spec :: call
-
     fn first_video_mode(read self) -> Option[VideoMode]:
         select:
             when self.video_modes.is_empty :: :: method => return Option.None
             else =>
                 let mode = copy_video_mode :: self.video_modes[0] :: call
                 return Option.Some :: mode :: call
-
     fn video_mode_at(read self, index: CInt) -> Option[VideoMode]:
         let Result.Ok(idx) = cint_to_index :: index :: call else => return Option.None
         select:
@@ -797,7 +717,6 @@ impl MonitorSnapshot:
             else =>
                 let mode = copy_video_mode :: self.video_modes[idx] :: call
                 return Option.Some :: mode :: call
-
     fn video_mode_matching(read self, width: CInt, height: CInt, refresh_rate: CInt) -> Option[VideoMode]:
         let Result.Ok(count) = index_to_cint :: self.video_modes.count :: :: method :: call else => return Option.None
         let scan: CInt = 0
@@ -811,7 +730,6 @@ impl MonitorSnapshot:
                 else => ()
             scan = scan + 1
         return Option.None
-
     fn video_mode_with_max_refresh(read self, width: CInt, height: CInt) -> Option[VideoMode]:
         let Result.Ok(count) = index_to_cint :: self.video_modes.count :: :: method :: call else => return Option.None
         let best_index: CInt = -1
@@ -835,42 +753,33 @@ impl MonitorSnapshot:
                 let mode = copy_video_mode :: self.video_modes[index] :: call
                 return Option.Some :: mode :: call
             else => return Option.None
-
     fn supports_video_mode(read self, read mode: VideoMode) -> Bool:
         select self.video_mode_matching :: mode.width, mode.height, mode.refresh_rate :: method:
             when Option.Some(_) => return true
             when Option.None => return false
-
     fn has_gamma_ramp(read self) -> Bool:
         select self.gamma_ramp:
             when Option.Some(_) => return true
             when Option.None => return false
-
 impl JoystickSnapshot:
     fn available(read self) -> Bool:
         return self.present
-
     fn axis_count(read self) -> Index:
         return self.axes.count :: :: method
-
     fn axis_at(read self, index: CInt) -> Option[F32]:
         let Result.Ok(idx) = cint_to_index :: index :: call else => return Option.None
         select:
             when idx >= self.axes.count :: :: method => return Option.None
             else => return Option.Some :: self.axes[idx] :: call
-
     fn button_count(read self) -> Index:
         return self.buttons.count :: :: method
-
     fn button_at(read self, index: CInt) -> Option[Bool]:
         let Result.Ok(idx) = cint_to_index :: index :: call else => return Option.None
         select:
             when idx >= self.buttons.count :: :: method => return Option.None
             else => return Option.Some :: self.buttons[idx] :: call
-
     fn hat_count(read self) -> Index:
         return self.hats.count :: :: method
-
     fn hat_at(read self, index: CInt) -> Option[HatState]:
         let Result.Ok(idx) = cint_to_index :: index :: call else => return Option.None
         select:
@@ -878,22 +787,18 @@ impl JoystickSnapshot:
             else =>
                 let hat = copy_hat_state :: self.hats[idx] :: call
                 return Option.Some :: hat :: call
-
     fn has_gamepad_state(read self) -> Bool:
         select self.gamepad_state:
             when Option.Some(_) => return true
             when Option.None => return false
-
     fn gamepad_button_down(read self, button: GamepadButton) -> Bool:
         select self.gamepad_state:
             when Option.Some(state) => return state.button_down :: button :: method
             when Option.None => return false
-
     fn gamepad_axis(read self, axis: GamepadAxis) -> F32:
         select self.gamepad_state:
             when Option.Some(state) => return state.axis :: axis :: method
             when Option.None => return 0.0F32
-
 fn apply_window_hint_string(hint: CInt, text: Str) -> Result[Unit, AppError]:
     select maybe_c_string :: text :: call:
         when Result.Ok(value) =>
@@ -901,19 +806,14 @@ fn apply_window_hint_string(hint: CInt, text: Str) -> Result[Unit, AppError]:
             glfw_window_hint_string :: hint, pointer :: call
             return Result.Ok :: () :: call
         when Result.Err(_) => return Result.Err :: AppError.InvalidWindowSpec :: call
-
 fn same_point(read left: Point, read right: Point) -> Bool:
     return left.x == right.x && left.y == right.y
-
 fn same_size(read left: Size, read right: Size) -> Bool:
     return left.width == right.width && left.height == right.height
-
 fn same_scale(read left: Scale, read right: Scale) -> Bool:
     return left.x == right.x && left.y == right.y
-
 fn same_cursor_pos(read left: CursorPos, read right: CursorPos) -> Bool:
     return left.x == right.x && left.y == right.y
-
 fn copy_video_mode(read mode: VideoMode) -> VideoMode:
     return VideoMode :: :: call
         width = mode.width
@@ -922,39 +822,32 @@ fn copy_video_mode(read mode: VideoMode) -> VideoMode:
         green_bits = mode.green_bits
         blue_bits = mode.blue_bits
         refresh_rate = mode.refresh_rate
-
 fn copy_hat_state(read state: HatState) -> HatState:
     let raw = hat_state_raw :: state :: call
     let Result.Ok(value) = raw as Maybe[CUnsignedChar] else => return hat_state_from_raw :: 0 :: call
     return hat_state_from_raw :: value :: call
-
 fn push_window_event(edit pending: List[AppEvent], event: WindowEvent) -> Unit:
     let wrapped = AppEvent.Window :: event :: call
     pending.push :: wrapped :: method
     return
-
 fn push_monitor_event(edit pending: List[AppEvent], event: MonitorEvent) -> Unit:
     let wrapped = AppEvent.Monitor :: event :: call
     pending.push :: wrapped :: method
     return
-
 fn push_joystick_event(edit pending: List[AppEvent], event: JoystickEvent) -> Unit:
     let wrapped = AppEvent.Joystick :: event :: call
     pending.push :: wrapped :: method
     return
-
 fn push_user_event(edit pending: List[AppEvent], event: UserEvent) -> Unit:
     let wrapped = AppEvent.User :: event :: call
     pending.push :: wrapped :: method
     return
-
 fn pending_pop_front(edit pending: List[AppEvent]) -> Option[AppEvent]:
     select:
         when pending.is_empty :: :: method => return Option.None
         else =>
             let event = pending.remove :: 0 :: method
             return Option.Some :: event :: call
-
 fn drain_pending_events(edit pending: List[AppEvent]) -> List[AppEvent]:
     let events = List[AppEvent] :: :: call
     repeat:
@@ -962,7 +855,6 @@ fn drain_pending_events(edit pending: List[AppEvent]) -> List[AppEvent]:
             when Option.Some(event) => events.push :: event :: method
             when Option.None => break
     return events
-
 fn snapshot_optional_text(present: Bool, text: Result[Str, TextDecodeError]) -> Result[Option[Str], TextDecodeError]:
     select:
         when !present => return Result.Ok :: Option.None :: call
@@ -972,7 +864,6 @@ fn snapshot_optional_text(present: Bool, text: Result[Str, TextDecodeError]) -> 
                     let wrapped = Option.Some :: value :: call
                     return Result.Ok :: wrapped :: call
                 when Result.Err(err) => return Result.Err :: err :: call
-
 fn snapshot_optional_gamepad_text(present: Bool, gamepad: Bool, text: Result[Str, TextDecodeError]) -> Result[Option[Str], TextDecodeError]:
     select:
         when !present => return Result.Ok :: Option.None :: call
@@ -983,37 +874,30 @@ fn snapshot_optional_gamepad_text(present: Bool, gamepad: Bool, text: Result[Str
                     let wrapped = Option.Some :: value :: call
                     return Result.Ok :: wrapped :: call
                 when Result.Err(err) => return Result.Err :: err :: call
-
 fn snapshot_axes(read joystick: Joystick, present: Bool) -> List[F32]:
     select:
         when present => return joystick.axes :: :: method
         else => return List[F32] :: :: call
-
 fn snapshot_buttons(read joystick: Joystick, present: Bool) -> List[Bool]:
     select:
         when present => return joystick.buttons :: :: method
         else => return List[Bool] :: :: call
-
 fn snapshot_hats(read joystick: Joystick, present: Bool) -> List[HatState]:
     select:
         when present => return joystick.hats :: :: method
         else => return List[HatState] :: :: call
-
 fn snapshot_gamepad_state(read joystick: Joystick, present: Bool, gamepad: Bool) -> Option[GamepadState]:
     select:
         when present && gamepad => return joystick.gamepad_state :: :: method
         else => return Option.None
-
 fn snapshot_current_context_window_id(read app: App) -> Option[WindowId]:
     select app.current_context_window :: :: method:
         when Result.Ok(window) => return Option.Some :: window.id :: call
         when Result.Err(_) => return Option.None
-
 fn snapshot_primary_monitor_id(read app: App) -> Option[MonitorId]:
     select app.primary_monitor_id :: :: method:
         when Result.Ok(id) => return Option.Some :: id :: call
         when Result.Err(_) => return Option.None
-
 fn clipboard_anchor_window(read app: App) -> Option[Window]:
     select app.current_context_window :: :: method:
         when Result.Ok(window) => return Option.Some :: window :: call
@@ -1024,7 +908,6 @@ fn clipboard_anchor_window(read app: App) -> Option[Window]:
         else =>
             let window = windows.remove :: 0 :: method
             return Option.Some :: window :: call
-
 pub(package) fn joystick_snapshot_from_id(id: JoystickId) -> JoystickSnapshot:
     let joystick = joystick_from_id :: id :: call
     let present = joystick.present :: :: method
@@ -1056,8 +939,7 @@ pub(package) fn joystick_snapshot_from_id(id: JoystickId) -> JoystickSnapshot:
         buttons = buttons
         hats = hats
         gamepad_state = gamepad_state
-
-fn window_record(take window: Window, mailbox: *edit WindowMailbox) -> WindowRecord:
+fn window_record(take window: Window, mailbox: *edit WindowMailbox, modifier_bits: CInt) -> WindowRecord:
     let raw_handle = glfw_window_raw_handle :: window.raw :: call
     let stored_raw = GlfwWindow :: raw_handle :: call
     let stored_id = window.id
@@ -1074,6 +956,7 @@ fn window_record(take window: Window, mailbox: *edit WindowMailbox) -> WindowRec
     return WindowRecord :: :: call
         window = stored_window
         mailbox = mailbox
+        modifier_bits = modifier_bits
         should_close = should_close
         pos = pos
         size = size
@@ -1083,7 +966,6 @@ fn window_record(take window: Window, mailbox: *edit WindowMailbox) -> WindowRec
         iconified = iconified
         maximized = maximized
         cursor_pos = cursor_pos
-
 fn live_window_from_record(read record: WindowRecord) -> Window:
     let raw_handle = glfw_window_raw_handle :: record.window.raw :: call
     let raw_window = GlfwWindow :: raw_handle :: call
@@ -1102,22 +984,22 @@ fn copy_cursor_pos(read pos: CursorPos) -> CursorPos:
     return GlfwCursorPos :: pos.x, pos.y :: call
 fn destroy_window_record(edit pending: List[AppEvent], take record: WindowRecord) -> Unit:
     let _ = pending
+    detach_window_platform_support :: record.window :: call
     clear_user_pointer :: record.window.raw :: call
     free_window_mailbox :: record.mailbox :: call
     record.window.destroy :: :: method
     return
-
 fn destroy_window_record_at(edit app: App, index: Index) -> WindowId:
     let record = app.windows.remove :: index :: method
     let id = record.window.id
-    drain_window_mailbox :: id, record.mailbox, app.pending :: call
+    let modifier_bits = record.modifier_bits
+    drain_window_mailbox :: id, record.mailbox, modifier_bits, app.pending :: call
     destroy_window_record :: app.pending, record :: call
     let event = WindowEvent.Destroyed :: :: call
         id = id
     push_window_event :: app.pending, event :: call
     return id
-
-fn create_raw_window_from_spec(take spec: WindowSpec) -> Result[GlfwWindow, AppError]:
+fn create_raw_window_from_spec(take spec: WindowSpec) -> Result[RawWindowCreation, AppError]:
     glfw_default_window_hints :: :: call
     glfw_window_hint_bool :: 0x00020004, spec.visible :: call
     glfw_window_hint_bool :: 0x00020003, spec.resizable :: call
@@ -1190,21 +1072,36 @@ fn create_raw_window_from_spec(take spec: WindowSpec) -> Result[GlfwWindow, AppE
             let raw_window = glfw_create_window_raw :: width, height, title_ptr, spec.monitor, spec.share :: call
             select:
                 when raw_window.is_null :: :: method => return Result.Err :: AppError.WindowCreateFailed :: call
-                else => return Result.Ok :: raw_window :: call
+                else =>
+                    let appearance_settings = WindowAppearanceSettings :: :: call
+                        undecorated_shadow = spec.win32_undecorated_shadow
+                        system_backdrop = spec.win32_system_backdrop
+                        border_color = spec.win32_border_color
+                        title_background_color = spec.win32_title_background_color
+                        title_text_color = spec.win32_title_text_color
+                        corner_preference = spec.win32_corner_preference
+                    let created = RawWindowCreation :: :: call
+                        raw_window = raw_window
+                        appearance_settings = appearance_settings
+                    return Result.Ok :: created :: call
         when Result.Err(_) => return Result.Err :: AppError.InvalidWindowSpec :: call
-
 fn register_created_window(edit app: App, take window: Window, mailbox: *edit WindowMailbox) -> Unit:
     let id = window.id
-    let record = window_record :: window, mailbox :: call
+    let record = window_record :: window, mailbox, 0 :: call
     app.windows.push :: record :: method
     let event = WindowEvent.Created :: :: call
         id = id
     push_window_event :: app.pending, event :: call
     return
-
 pub fn app_create_window(edit app: App, take spec: WindowSpec) -> Result[Window, AppError]:
+    let raw_window_level = window_level_raw :: spec.window_level :: call
+    let resize_increment_width = spec.resize_increment_width
+    let resize_increment_height = spec.resize_increment_height
+    let win32_skip_taskbar = spec.win32_skip_taskbar
     select create_raw_window_from_spec :: spec :: call:
-        when Result.Ok(raw_window) =>
+        when Result.Ok(raw_creation) =>
+            let raw_window = raw_creation.raw_window
+            let appearance_settings = raw_creation.appearance_settings
             let id = next_window_id :: app :: call
             let raw_handle = glfw_window_raw_handle :: raw_window :: call
             let stored_raw = GlfwWindow :: raw_handle :: call
@@ -1212,6 +1109,43 @@ pub fn app_create_window(edit app: App, take spec: WindowSpec) -> Result[Window,
             select allocate_window_mailbox :: :: call:
                 when Option.Some(mailbox) =>
                     attach_callbacks :: raw_window, mailbox :: call
+                    select attach_window_platform_support :: window, mailbox :: call:
+                        when Result.Ok(_) => ()
+                        when Result.Err(err) => return Result.Err :: err :: call
+                    let window_level = window_level_from_raw :: raw_window_level :: call
+                    select window.set_window_level :: window_level :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) =>
+                            detach_window_platform_support :: window :: call
+                            clear_user_pointer :: raw_window :: call
+                            free_window_mailbox :: mailbox :: call
+                            window.destroy :: :: method
+                            return Result.Err :: AppError.WindowLevelApplyFailed :: call
+                    select:
+                        when resize_increment_width > 0 && resize_increment_height > 0 =>
+                            let increments = Size :: resize_increment_width, resize_increment_height :: call
+                            window.apply_resize_increments :: increments :: method
+                        else => ()
+                    select:
+                        when win32_skip_taskbar =>
+                            select window.set_skip_taskbar :: true :: method:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) =>
+                                    detach_window_platform_support :: window :: call
+                                    clear_user_pointer :: raw_window :: call
+                                    free_window_mailbox :: mailbox :: call
+                                    window.destroy :: :: method
+                                    return Result.Err :: AppError.WindowSkipTaskbarApplyFailed :: call
+                        else => ()
+                    select apply_window_appearance :: window, appearance_settings :: call:
+                        when Result.Ok(_) => ()
+                        when Result.Err(error) =>
+                            detach_window_platform_support :: window :: call
+                            clear_user_pointer :: raw_window :: call
+                            free_window_mailbox :: mailbox :: call
+                            window.destroy :: :: method
+                            let failure = AppError.WindowAppearanceApplyFailed :: error :: call
+                            return Result.Err :: failure :: call
                     register_created_window :: app, window, mailbox :: call
                     let return_window = live_window_from_raw_handle :: raw_handle, id :: call
                     return Result.Ok :: return_window :: call
@@ -1219,7 +1153,6 @@ pub fn app_create_window(edit app: App, take spec: WindowSpec) -> Result[Window,
                     window.destroy :: :: method
                     return Result.Err :: AppError.MailboxAllocFailed :: call
         when Result.Err(err) => return Result.Err :: err :: call
-
 pub fn app_create_centered_window_on(edit app: App, take spec: WindowSpec, read monitor: Monitor) -> Result[Window, AppError]:
     select app_create_window :: app, spec :: call:
         when Result.Ok(window) =>
@@ -1228,27 +1161,22 @@ pub fn app_create_centered_window_on(edit app: App, take spec: WindowSpec, read 
                 else => ()
             return Result.Ok :: window :: call
         when Result.Err(err) => return Result.Err :: err :: call
-
 pub fn app_create_primary_centered_window(edit app: App, take spec: WindowSpec) -> Result[Window, AppError]:
     select app.primary_monitor :: :: method:
         when Result.Ok(monitor) => return app_create_centered_window_on :: app, spec, monitor :: call
         when Result.Err(err) => return Result.Err :: err :: call
-
 pub fn app_destroy_window_by_id(edit app: App, id: WindowId) -> Result[Unit, AppError]:
     let Option.Some(index) = find_window_index :: app, id :: call else => return Result.Err :: AppError.WindowNotFound :: call
     let _ = destroy_window_record_at :: app, index :: call
     return Result.Ok :: () :: call
-
 fn next_window_id(edit app: App) -> WindowId:
     let id = app.next_window_id
     app.next_window_id = app.next_window_id + WINDOW_ID_STEP
     return id
-
 fn next_monitor_id(edit app: App) -> MonitorId:
     let id = app.next_monitor_id
     app.next_monitor_id = app.next_monitor_id + MONITOR_ID_STEP
     return id
-
 fn find_window_index(read app: App, id: WindowId) -> Option[Index]:
     let count = app.windows.count :: :: method
     let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
@@ -1259,7 +1187,6 @@ fn find_window_index(read app: App, id: WindowId) -> Option[Index]:
             when app.windows[index].window.id == id => return Option.Some :: index :: call
             else => scan = scan + 1
     return Option.None
-
 fn find_monitor_index(read app: App, take monitor: Monitor) -> Option[Index]:
     let target_raw = glfw_monitor_raw_handle :: monitor :: call
     let count = app.monitors.count :: :: method
@@ -1271,7 +1198,6 @@ fn find_monitor_index(read app: App, take monitor: Monitor) -> Option[Index]:
             when app.monitors[index].raw == target_raw => return Option.Some :: index :: call
             else => scan = scan + 1
     return Option.None
-
 fn find_monitor_record_index(read app: App, id: MonitorId) -> Option[Index]:
     let count = app.monitors.count :: :: method
     let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
@@ -1282,7 +1208,6 @@ fn find_monitor_record_index(read app: App, id: MonitorId) -> Option[Index]:
             when app.monitors[index].id == id => return Option.Some :: index :: call
             else => scan = scan + 1
     return Option.None
-
 fn joystick_presence_bit(jid: JoystickId) -> CUInt:
     let bit: CUInt = 1
     let scan: CInt = 0
@@ -1290,33 +1215,27 @@ fn joystick_presence_bit(jid: JoystickId) -> CUInt:
         bit = bit * 2
         scan = scan + 1
     return bit
-
 fn joystick_present_in_bits(bits: CUInt, jid: JoystickId) -> Bool:
     let bit = joystick_presence_bit :: jid :: call
     return (bits & bit) != 0
-
 fn joystick_presence_state() -> JoystickPresenceState:
     return JoystickPresenceState :: :: call
         bits = 0
         pad0 = 0
         pad1 = 0
         pad2 = 0
-
 fn joystick_presence_state_with_bits(bits: CUInt) -> JoystickPresenceState:
     return JoystickPresenceState :: :: call
         bits = bits
         pad0 = 0
         pad1 = 0
         pad2 = 0
-
 impl JoystickPresenceState:
     fn bits_value(read self) -> CUInt:
         return self.bits
-
     fn set_bits(edit self, bits: CUInt) -> Unit:
         self.bits = bits
         return
-
 fn collect_joystick_bits(previous_bits: CUInt, emit_events: Bool, edit pending: List[AppEvent]) -> CUInt:
     let next_bits: CUInt = 0
     let jid: CInt = 0
@@ -1342,7 +1261,6 @@ fn collect_joystick_bits(previous_bits: CUInt, emit_events: Bool, edit pending: 
             else => ()
         jid = jid + 1
     return next_bits
-
 fn collect_window_events(edit app: App) -> Unit:
     let count = app.windows.count :: :: method
     let Result.Ok(limit) = index_to_cint :: count :: call else => return
@@ -1353,8 +1271,9 @@ fn collect_window_events(edit app: App) -> Unit:
         let previous_window = previous.window
         let previous_mailbox = previous.mailbox
         let previous_should_close = previous.should_close
-        drain_window_mailbox :: previous_window.id, previous_mailbox, app.pending :: call
-        let current = window_record :: previous_window, previous_mailbox :: call
+        let modifier_bits = previous.modifier_bits
+        drain_window_mailbox :: previous_window.id, previous_mailbox, modifier_bits, app.pending :: call
+        let current = window_record :: previous_window, previous_mailbox, modifier_bits :: call
         select:
             when current.should_close && !previous_should_close =>
                 let event = WindowEvent.CloseRequested :: :: call
@@ -1364,7 +1283,6 @@ fn collect_window_events(edit app: App) -> Unit:
         app.windows.insert :: index, current :: method
         scan = scan + 1
     return
-
 fn refresh_monitor_snapshot(edit app: App, emit_events: Bool) -> Unit:
     let next_records = List[MonitorRecord] :: :: call
     let current = glfw_monitors :: :: call
@@ -1417,7 +1335,6 @@ fn refresh_monitor_snapshot(edit app: App, emit_events: Bool) -> Unit:
         previous_scan = previous_scan + 1
     app.monitors = next_records
     return
-
 fn find_monitor_index_in_list(read records: List[MonitorRecord], take monitor: Monitor) -> Option[Index]:
     let target_raw = glfw_monitor_raw_handle :: monitor :: call
     let count = records.count :: :: method
@@ -1429,7 +1346,6 @@ fn find_monitor_index_in_list(read records: List[MonitorRecord], take monitor: M
             when records[index].raw == target_raw => return Option.Some :: index :: call
             else => scan = scan + 1
     return Option.None
-
 fn apply_app_init_config(config: AppInitConfig) -> Unit:
     select config.joystick_hat_buttons:
         when BoolOverride.Enabled => glfw_init_hint_bool :: 0x00050001, true :: call
@@ -1463,15 +1379,18 @@ fn apply_app_init_config(config: AppInitConfig) -> Unit:
             glfw_init_hint :: 0x00053001, raw :: call
         when WaylandLibdecorOverride.Default => ()
     return
-
 pub fn app_init() -> Result[App, AppError]:
     let config = app_init_config :: :: call
     return app_init_with :: config :: call
-
 pub fn app_init_with(config: AppInitConfig) -> Result[App, AppError]:
     apply_app_init_config :: config :: call
     select:
         when glfw_init :: :: call =>
+            select:
+                when initialize_drag_drop_runtime :: :: call => ()
+                else =>
+                    glfw_terminate :: :: call
+                    return Result.Err :: AppError.DragDropRuntimeInitFailed :: call
             let windows = List[WindowRecord] :: :: call
             let monitors = List[MonitorRecord] :: :: call
             let pending = List[AppEvent] :: :: call
@@ -1479,6 +1398,7 @@ pub fn app_init_with(config: AppInitConfig) -> Result[App, AppError]:
             let joystick_state = joystick_presence_state_with_bits :: joystick_bits :: call
             let app = App :: :: call
                 live = true
+                drag_drop_runtime_initialized = true
                 next_window_id = WINDOW_ID_START
                 next_monitor_id = MONITOR_ID_START
                 joystick_state = joystick_state
@@ -1488,36 +1408,29 @@ pub fn app_init_with(config: AppInitConfig) -> Result[App, AppError]:
             refresh_monitor_snapshot :: app, false :: call
             return Result.Ok :: app :: call
         else => return Result.Err :: AppError.InitFailed :: call
-
 impl App:
     fn is_live(read self) -> Bool:
         return self.live
-
     fn has_windows(read self) -> Bool:
         return !self.windows.is_empty :: :: method
-
     fn joystick(read self, id: JoystickId) -> Joystick:
         let _ = self
         return joystick_from_id :: id :: call
-
     fn joystick_snapshot(read self, id: JoystickId) -> JoystickSnapshot:
         let _ = self
         return joystick_snapshot_from_id :: id :: call
-
     fn gamepad(read self, id: JoystickId) -> Option[Joystick]:
         let joystick = self.joystick :: id :: method
         select:
             when joystick.present :: :: method && joystick.gamepad :: :: method =>
                 return Option.Some :: joystick :: call
             else => return Option.None
-
     fn gamepad_snapshot(read self, id: JoystickId) -> Option[JoystickSnapshot]:
         let snapshot = self.joystick_snapshot :: id :: method
         select:
             when snapshot.present && snapshot.gamepad =>
                 return Option.Some :: snapshot :: call
             else => return Option.None
-
     fn gamepad_index(read self, id: JoystickId) -> Option[Index]:
         let ids = self.gamepad_ids :: :: method
         let count = ids.count :: :: method
@@ -1530,19 +1443,15 @@ impl App:
                 else => ()
             scan = scan + 1
         return Option.None
-
     fn has_gamepad(read self, id: JoystickId) -> Bool:
         select self.gamepad :: id :: method:
             when Option.Some(_) => return true
             when Option.None => return false
-
     fn gamepad_count(read self) -> Index:
         let ids = self.gamepad_ids :: :: method
         return ids.count :: :: method
-
     fn has_gamepads(read self) -> Bool:
         return self.gamepad_count :: :: method != 0
-
     fn gamepad_ids(read self) -> List[JoystickId]:
         let ids = List[JoystickId] :: :: call
         let joystick_ids = self.connected_joystick_ids :: :: method
@@ -1552,11 +1461,9 @@ impl App:
                 when Option.Some(_) => ids.push :: id :: method
                 when Option.None => ()
         return ids
-
     fn connected_joystick_count(read self) -> Index:
         let ids = self.connected_joystick_ids :: :: method
         return ids.count :: :: method
-
     fn connected_joystick_ids(read self) -> List[JoystickId]:
         let ids = List[JoystickId] :: :: call
         let bits = self.joystick_state.bits_value :: :: method
@@ -1568,7 +1475,6 @@ impl App:
                 else => ()
             jid = jid + 1
         return ids
-
     fn connected_joysticks(read self) -> List[Joystick]:
         let joysticks = List[Joystick] :: :: call
         let ids = self.connected_joystick_ids :: :: method
@@ -1577,7 +1483,6 @@ impl App:
             let joystick = joystick_from_id :: id :: call
             joysticks.push :: joystick :: method
         return joysticks
-
     fn joystick_snapshots(read self) -> List[JoystickSnapshot]:
         let snapshots = List[JoystickSnapshot] :: :: call
         let ids = self.connected_joystick_ids :: :: method
@@ -1586,7 +1491,6 @@ impl App:
             let snapshot = joystick_snapshot_from_id :: id :: call
             snapshots.push :: snapshot :: method
         return snapshots
-
     fn gamepads(read self) -> List[Joystick]:
         let joysticks = List[Joystick] :: :: call
         let ids = self.connected_joystick_ids :: :: method
@@ -1597,7 +1501,6 @@ impl App:
                 when joystick.gamepad :: :: method => joysticks.push :: joystick :: method
                 else => ()
         return joysticks
-
     fn gamepad_snapshots(read self) -> List[JoystickSnapshot]:
         let snapshots = List[JoystickSnapshot] :: :: call
         let ids = self.connected_joystick_ids :: :: method
@@ -1610,15 +1513,12 @@ impl App:
                     snapshots.push :: snapshot :: method
                 else => ()
         return snapshots
-
     fn window_count(read self) -> Index:
         return self.windows.count :: :: method
-
     fn window_exists(read self, id: WindowId) -> Bool:
         select find_window_index :: self, id :: call:
             when Option.Some(_) => return true
             when Option.None => return false
-
     fn close_requested_window_count(read self) -> Index:
         let ids = self.window_ids :: :: method
         let total: CInt = 0
@@ -1632,10 +1532,8 @@ impl App:
                 when Result.Err(_) => ()
         let Result.Ok(result) = total as Maybe[Index] else => return 0
         return result
-
     fn has_close_requested_windows(read self) -> Bool:
         return self.close_requested_window_count :: :: method != 0
-
     fn close_requested_window_ids(read self) -> List[WindowId]:
         let ids = List[WindowId] :: :: call
         let window_ids = self.window_ids :: :: method
@@ -1648,12 +1546,10 @@ impl App:
                         else => ()
                 when Result.Err(_) => ()
         return ids
-
     fn window_close_requested(read self, id: WindowId) -> Bool:
         select self.window :: id :: method:
             when Result.Ok(window) => return window.should_close :: :: method
             when Result.Err(_) => return false
-
     fn close_requested_window(read self, id: WindowId) -> Option[Window]:
         select self.window :: id :: method:
             when Result.Ok(window) =>
@@ -1661,7 +1557,6 @@ impl App:
                     when window.should_close :: :: method => return Option.Some :: window :: call
                     else => return Option.None
             when Result.Err(_) => return Option.None
-
     fn close_requested_windows(read self) -> List[Window]:
         let windows = List[Window] :: :: call
         let ids = self.window_ids :: :: method
@@ -1674,7 +1569,6 @@ impl App:
                         else => ()
                 when Result.Err(_) => ()
         return windows
-
     fn close_requested_window_snapshot(read self, id: WindowId) -> Option[WindowSnapshot]:
         select self.window_snapshot :: id :: method:
             when Result.Ok(snapshot) =>
@@ -1682,7 +1576,6 @@ impl App:
                     when snapshot.should_close => return Option.Some :: snapshot :: call
                     else => return Option.None
             when Result.Err(_) => return Option.None
-
     fn close_requested_window_snapshots(read self) -> List[WindowSnapshot]:
         let snapshots = List[WindowSnapshot] :: :: call
         let count = self.windows.count :: :: method
@@ -1769,7 +1662,6 @@ impl App:
                 else => ()
             scan = scan + 1
         return snapshots
-
     fn window_ids(read self) -> List[WindowId]:
         let ids = List[WindowId] :: :: call
         let count = self.windows.count :: :: method
@@ -1780,7 +1672,6 @@ impl App:
             ids.push :: self.windows[index].window.id :: method
             scan = scan + 1
         return ids
-
     fn windows_snapshot(read self) -> List[Window]:
         let windows = List[Window] :: :: call
         let count = self.windows.count :: :: method
@@ -1793,7 +1684,6 @@ impl App:
             windows.push :: window :: method
             scan = scan + 1
         return windows
-
     fn window_snapshots(read self) -> List[WindowSnapshot]:
         let snapshots = List[WindowSnapshot] :: :: call
         let count = self.windows.count :: :: method
@@ -1878,7 +1768,6 @@ impl App:
             snapshots.push :: snapshot :: method
             scan = scan + 1
         return snapshots
-
     fn window_snapshot(read self, id: WindowId) -> Result[WindowSnapshot, AppError]:
         let Option.Some(index) = find_window_index :: self, id :: call else => return Result.Err :: AppError.WindowNotFound :: call
         let raw_handle = glfw_window_raw_handle :: self.windows[index].window.raw :: call
@@ -1956,10 +1845,8 @@ impl App:
             floating = floating
             fullscreen = fullscreen
         return Result.Ok :: snapshot :: call
-
     fn monitor_count(read self) -> Index:
         return self.monitors.count :: :: method
-
     fn monitor_ids(read self) -> List[MonitorId]:
         let ids = List[MonitorId] :: :: call
         let count = self.monitors.count :: :: method
@@ -1970,7 +1857,6 @@ impl App:
             ids.push :: self.monitors[index].id :: method
             scan = scan + 1
         return ids
-
     fn monitors_snapshot(read self) -> List[Monitor]:
         let monitors = List[Monitor] :: :: call
         let count = self.monitors.count :: :: method
@@ -1983,7 +1869,6 @@ impl App:
             monitors.push :: monitor :: method
             scan = scan + 1
         return monitors
-
     fn monitor_snapshots(read self) -> List[MonitorSnapshot]:
         let snapshots = List[MonitorSnapshot] :: :: call
         let count = self.monitors.count :: :: method
@@ -2022,7 +1907,6 @@ impl App:
             snapshots.push :: snapshot :: method
             scan = scan + 1
         return snapshots
-
     fn monitor_snapshot(read self, id: MonitorId) -> Result[MonitorSnapshot, AppError]:
         let Option.Some(index) = find_monitor_record_index :: self, id :: call else => return Result.Err :: AppError.MonitorNotFound :: call
         let monitor = GlfwMonitor :: self.monitors[index].raw :: call
@@ -2054,35 +1938,28 @@ impl App:
             video_modes = video_modes
             gamma_ramp = gamma_ramp
         return Result.Ok :: snapshot :: call
-
     fn monitor(read self, id: MonitorId) -> Result[Monitor, AppError]:
         let Option.Some(index) = find_monitor_record_index :: self, id :: call else => return Result.Err :: AppError.MonitorNotFound :: call
         let raw_handle = self.monitors[index].raw
         let monitor = GlfwMonitor :: raw_handle :: call
         return Result.Ok :: monitor :: call
-
     fn primary_monitor(read self) -> Result[Monitor, AppError]:
         let primary = glfw_primary_monitor :: :: call
         select:
             when primary.is_null :: :: method => return Result.Err :: AppError.PrimaryMonitorUnavailable :: call
             else => return Result.Ok :: primary :: call
-
     fn primary_monitor_id(read self) -> Result[MonitorId, AppError]:
         let Result.Ok(primary) = self.primary_monitor :: :: method else => return Result.Err :: AppError.PrimaryMonitorUnavailable :: call
         let Option.Some(index) = find_monitor_index :: self, primary :: call else => return Result.Err :: AppError.MonitorNotFound :: call
         let id = self.monitors[index].id
         return Result.Ok :: id :: call
-
     fn primary_monitor_snapshot(read self) -> Result[MonitorSnapshot, AppError]:
         let Result.Ok(id) = self.primary_monitor_id :: :: method else => return Result.Err :: AppError.PrimaryMonitorUnavailable :: call
         return self.monitor_snapshot :: id :: method
-
     fn has_pending_events(read self) -> Bool:
         return !self.pending.is_empty :: :: method
-
     fn pending_event_count(read self) -> Index:
         return self.pending.count :: :: method
-
     fn clipboard_string(read self) -> Result[Str, AppClipboardError]:
         select clipboard_anchor_window :: self :: call:
             when Option.Some(window) =>
@@ -2092,7 +1969,6 @@ impl App:
                         let value = AppClipboardError.TextDecode :: err :: call
                         return Result.Err :: value :: call
             when Option.None => return Result.Err :: AppClipboardError.WindowUnavailable :: call
-
     fn set_clipboard_string(read self, text: Str) -> Result[Unit, AppClipboardError]:
         select clipboard_anchor_window :: self :: call:
             when Option.Some(window) =>
@@ -2102,7 +1978,6 @@ impl App:
                         let value = AppClipboardError.TextDecode :: err :: call
                         return Result.Err :: value :: call
             when Option.None => return Result.Err :: AppClipboardError.WindowUnavailable :: call
-
     fn snapshot(read self) -> AppSnapshot:
         let live = self.is_live :: :: method
         let has_pending_events = self.has_pending_events :: :: method
@@ -2141,286 +2016,216 @@ impl App:
             windows = windows
             monitors = monitors
             joysticks = joysticks
-
     fn create_window(edit self, take spec: WindowSpec) -> Result[Window, AppError]:
         return app_create_window :: self, spec :: call
-
     fn create_centered_window_on(edit self, take spec: WindowSpec, read monitor: Monitor) -> Result[Window, AppError]:
         return app_create_centered_window_on :: self, spec, monitor :: call
-
     fn create_primary_centered_window(edit self, take spec: WindowSpec) -> Result[Window, AppError]:
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_fullscreen_window(edit self, take title: Str, read monitor: Monitor) -> Result[Window, AppError]:
         select fullscreen_window_spec :: title, monitor :: call:
             when Result.Ok(spec) => return app_create_window :: self, spec :: call
             when Result.Err(_) => return Result.Err :: AppError.InvalidWindowSpec :: call
-
     fn create_fullscreen_window_with_video_mode(edit self, take title: Str, read monitor: Monitor, read mode: VideoMode) -> Result[Window, AppError]:
         select fullscreen_window_spec_with_video_mode :: title, monitor, mode :: call:
             when Result.Ok(spec) => return app_create_window :: self, spec :: call
             when Result.Err(_) => return Result.Err :: AppError.InvalidWindowSpec :: call
-
     fn create_fullscreen_window_matching_mode(edit self, take title: Str, read monitor: Monitor, width: CInt, height: CInt, refresh_rate: CInt) -> Result[Window, AppError]:
         select monitor.video_mode_matching :: width, height, refresh_rate :: method:
             when Option.Some(mode) => return self.create_fullscreen_window_with_video_mode :: title, monitor, mode :: method
             when Option.None => return Result.Err :: AppError.VideoModeNotFound :: call
-
     fn create_primary_fullscreen_window(edit self, take title: Str) -> Result[Window, AppError]:
         select self.primary_monitor :: :: method:
             when Result.Ok(monitor) => return self.create_fullscreen_window :: title, monitor :: method
             when Result.Err(err) => return Result.Err :: err :: call
-
     fn create_primary_fullscreen_window_with_video_mode(edit self, take title: Str, read mode: VideoMode) -> Result[Window, AppError]:
         select self.primary_monitor :: :: method:
             when Result.Ok(monitor) => return self.create_fullscreen_window_with_video_mode :: title, monitor, mode :: method
             when Result.Err(err) => return Result.Err :: err :: call
-
     fn create_primary_fullscreen_window_matching_mode(edit self, take title: Str, width: CInt, height: CInt, refresh_rate: CInt) -> Result[Window, AppError]:
         select self.primary_monitor :: :: method:
             when Result.Ok(monitor) => return self.create_fullscreen_window_matching_mode :: title, monitor, width, height, refresh_rate :: method
             when Result.Err(err) => return Result.Err :: err :: call
-
     fn create_hidden_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = hidden_window_spec :: title, width, height :: call
         return app_create_window :: self, spec :: call
-
     fn create_primary_centered_hidden_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = hidden_window_spec :: title, width, height :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_positioned_window(edit self, take title: Str, width: Index, height: Index, x: CInt, y: CInt) -> Result[Window, AppError]:
         let spec = positioned_window_spec :: title, width, height, x, y :: call
         return app_create_window :: self, spec :: call
-
     fn create_fixed_size_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = fixed_size_window_spec :: title, width, height :: call
         return app_create_window :: self, spec :: call
-
     fn create_primary_centered_fixed_size_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = fixed_size_window_spec :: title, width, height :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_unfocused_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = unfocused_window_spec :: title, width, height :: call
         return app_create_window :: self, spec :: call
-
     fn create_primary_centered_unfocused_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = unfocused_window_spec :: title, width, height :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_undecorated_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = undecorated_window_spec :: title, width, height :: call
         return app_create_window :: self, spec :: call
-
     fn create_primary_centered_undecorated_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = undecorated_window_spec :: title, width, height :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_floating_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = floating_window_spec :: title, width, height :: call
         return app_create_window :: self, spec :: call
-
     fn create_primary_centered_floating_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = floating_window_spec :: title, width, height :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_maximized_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = maximized_window_spec :: title, width, height :: call
         return app_create_window :: self, spec :: call
-
     fn create_primary_centered_maximized_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = maximized_window_spec :: title, width, height :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_transparent_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = transparent_window_spec :: title, width, height :: call
         return app_create_window :: self, spec :: call
-
     fn create_primary_centered_transparent_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = transparent_window_spec :: title, width, height :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_mouse_passthrough_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = mouse_passthrough_window_spec :: title, width, height :: call
         return app_create_window :: self, spec :: call
-
     fn create_primary_centered_mouse_passthrough_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = mouse_passthrough_window_spec :: title, width, height :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_win32_keyboard_menu_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = win32_keyboard_menu_window_spec :: title, width, height :: call
         return app_create_window :: self, spec :: call
-
     fn create_primary_centered_win32_keyboard_menu_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = win32_keyboard_menu_window_spec :: title, width, height :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_win32_showdefault_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = win32_showdefault_window_spec :: title, width, height :: call
         return app_create_window :: self, spec :: call
-
     fn create_primary_centered_win32_showdefault_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = win32_showdefault_window_spec :: title, width, height :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_no_api_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = no_api_window_spec :: title, width, height :: call
         return app_create_window :: self, spec :: call
-
     fn create_primary_centered_no_api_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = no_api_window_spec :: title, width, height :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_vulkan_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = vulkan_window_spec :: title, width, height :: call
         return app_create_window :: self, spec :: call
-
     fn create_primary_centered_vulkan_window(edit self, take title: Str, width: Index, height: Index) -> Result[Window, AppError]:
         let spec = vulkan_window_spec :: title, width, height :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_window_spec :: title, width, height, major, minor :: call
         return app_create_window :: self, spec :: call
-
     fn create_opengl_core_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_core_window_spec :: title, width, height, major, minor :: call
         return app_create_window :: self, spec :: call
-
     fn create_opengl_compat_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_compat_window_spec :: title, width, height, major, minor :: call
         return app_create_window :: self, spec :: call
-
     fn create_opengl_es_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_es_window_spec :: title, width, height, major, minor :: call
         return app_create_window :: self, spec :: call
-
     fn create_egl_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = egl_opengl_window_spec :: title, width, height, major, minor :: call
         return app_create_window :: self, spec :: call
-
     fn create_egl_opengl_es_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = egl_opengl_es_window_spec :: title, width, height, major, minor :: call
         return app_create_window :: self, spec :: call
-
     fn create_osmesa_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = osmesa_opengl_window_spec :: title, width, height, major, minor :: call
         return app_create_window :: self, spec :: call
-
     fn create_opengl_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_debug_window_spec :: title, width, height, major, minor :: call
         return app_create_window :: self, spec :: call
-
     fn create_opengl_core_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_core_debug_window_spec :: title, width, height, major, minor :: call
         return app_create_window :: self, spec :: call
-
     fn create_opengl_compat_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_compat_debug_window_spec :: title, width, height, major, minor :: call
         return app_create_window :: self, spec :: call
-
     fn create_opengl_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_srgb_window_spec :: title, width, height, major, minor :: call
         return app_create_window :: self, spec :: call
-
     fn create_opengl_core_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_core_srgb_window_spec :: title, width, height, major, minor :: call
         return app_create_window :: self, spec :: call
-
     fn create_opengl_compat_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_compat_srgb_window_spec :: title, width, height, major, minor :: call
         return app_create_window :: self, spec :: call
-
     fn create_opengl_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_debug_srgb_window_spec :: title, width, height, major, minor :: call
         return app_create_window :: self, spec :: call
-
     fn create_opengl_core_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_core_debug_srgb_window_spec :: title, width, height, major, minor :: call
         return app_create_window :: self, spec :: call
-
     fn create_opengl_compat_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_compat_debug_srgb_window_spec :: title, width, height, major, minor :: call
         return app_create_window :: self, spec :: call
-
     fn create_primary_centered_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_window_spec :: title, width, height, major, minor :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_primary_centered_opengl_core_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_core_window_spec :: title, width, height, major, minor :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_primary_centered_opengl_compat_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_compat_window_spec :: title, width, height, major, minor :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_primary_centered_opengl_es_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_es_window_spec :: title, width, height, major, minor :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_primary_centered_egl_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = egl_opengl_window_spec :: title, width, height, major, minor :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_primary_centered_egl_opengl_es_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = egl_opengl_es_window_spec :: title, width, height, major, minor :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_primary_centered_osmesa_opengl_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = osmesa_opengl_window_spec :: title, width, height, major, minor :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_primary_centered_opengl_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_debug_window_spec :: title, width, height, major, minor :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_primary_centered_opengl_core_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_core_debug_window_spec :: title, width, height, major, minor :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_primary_centered_opengl_compat_debug_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_compat_debug_window_spec :: title, width, height, major, minor :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_primary_centered_opengl_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_srgb_window_spec :: title, width, height, major, minor :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_primary_centered_opengl_core_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_core_srgb_window_spec :: title, width, height, major, minor :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_primary_centered_opengl_compat_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_compat_srgb_window_spec :: title, width, height, major, minor :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_primary_centered_opengl_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_debug_srgb_window_spec :: title, width, height, major, minor :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_primary_centered_opengl_core_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_core_debug_srgb_window_spec :: title, width, height, major, minor :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn create_primary_centered_opengl_compat_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         let spec = opengl_compat_debug_srgb_window_spec :: title, width, height, major, minor :: call
         return app_create_primary_centered_window :: self, spec :: call
-
     fn window(read self, id: WindowId) -> Result[Window, AppError]:
         let Option.Some(index) = find_window_index :: self, id :: call else => return Result.Err :: AppError.WindowNotFound :: call
         let raw_handle = glfw_window_raw_handle :: self.windows[index].window.raw :: call
         let window = live_window_from_raw_handle :: raw_handle, self.windows[index].window.id :: call
         return Result.Ok :: window :: call
-
     fn destroy_window_by_id(edit self, id: WindowId) -> Result[Unit, AppError]:
         return app_destroy_window_by_id :: self, id :: call
-
     fn destroy_window(edit self, take window: Window) -> Result[Unit, AppError]:
         return app_destroy_window_by_id :: self, window.id :: call
-
     fn close_all_windows(read self) -> Unit:
         let ids = self.window_ids :: :: method
         let windows = List[Window] :: :: call
@@ -2433,7 +2238,6 @@ impl App:
             let window = windows.remove :: 0 :: method
             window.close :: :: method
         return
-
     fn destroy_close_requested_windows(edit self) -> Index:
         let destroyed: CInt = 0
         let ids = self.close_requested_window_ids :: :: method
@@ -2444,7 +2248,6 @@ impl App:
                 when Result.Err(_) => ()
         let Result.Ok(result) = destroyed as Maybe[Index] else => return 0
         return result
-
     fn destroy_all_windows(edit self) -> Index:
         let destroyed: CInt = 0
         repeat:
@@ -2455,63 +2258,51 @@ impl App:
                     destroyed = destroyed + 1
         let Result.Ok(result) = destroyed as Maybe[Index] else => return 0
         return result
-
     fn post_empty_event(read self) -> Unit:
         glfw_post_empty_event :: :: call
         return
-
     fn post_user_event(edit self, id: UserEventId) -> Unit:
         let event = UserEvent.Signaled :: :: call
             id = id
         push_user_event :: self.pending, event :: call
         glfw_post_empty_event :: :: call
         return
-
     fn next_event(edit self) -> Option[AppEvent]:
         return pending_pop_front :: self.pending :: call
-
     fn next_window_event(edit self) -> Option[WindowEvent]:
         let batch = self.take_event_batch :: :: method
         let event = batch.pop_window :: :: method
         self.pending = batch.events
         return event
-
     fn next_monitor_event(edit self) -> Option[MonitorEvent]:
         let batch = self.take_event_batch :: :: method
         let event = batch.pop_monitor :: :: method
         self.pending = batch.events
         return event
-
     fn next_joystick_event(edit self) -> Option[JoystickEvent]:
         let batch = self.take_event_batch :: :: method
         let event = batch.pop_joystick :: :: method
         self.pending = batch.events
         return event
-
     fn next_user_event(edit self) -> Option[UserEvent]:
         let batch = self.take_event_batch :: :: method
         let event = batch.pop_user :: :: method
         self.pending = batch.events
         return event
-
     fn take_pending_events(edit self) -> List[AppEvent]:
         return drain_pending_events :: self.pending :: call
-
     fn take_event_batch(edit self) -> AppEventBatch:
         let events = self.take_pending_events :: :: method
         return split_app_events :: events :: call
-
     fn events_for(edit self, read flow: ControlFlow) -> List[AppEvent]:
         select flow:
             when ControlFlow.Poll => return self.poll_events :: :: method
             when ControlFlow.Wait => return self.wait_events :: :: method
             when ControlFlow.WaitTimeout(seconds = seconds) => return self.wait_timeout_events :: seconds :: method
             when ControlFlow.Exit => return List[AppEvent] :: :: call
-
     fn event_batch_for(edit self, read flow: ControlFlow) -> AppEventBatch:
         let events = self.events_for :: flow :: method
         return split_app_events :: events :: call
-
     fn pump_poll(edit self) -> Unit:
         glfw_poll_events :: :: call
         collect_window_events :: self :: call
@@ -2520,7 +2311,6 @@ impl App:
         let next_bits = collect_joystick_bits :: previous_bits, true, self.pending :: call
         self.joystick_state.bits = next_bits
         return
-
     fn pump_wait(edit self) -> Unit:
         glfw_wait_events :: :: call
         collect_window_events :: self :: call
@@ -2529,7 +2319,6 @@ impl App:
         let next_bits = collect_joystick_bits :: previous_bits, true, self.pending :: call
         self.joystick_state.bits = next_bits
         return
-
     fn pump_wait_timeout(edit self, timeout: F64) -> Unit:
         glfw_wait_events_timeout :: timeout :: call
         collect_window_events :: self :: call
@@ -2538,328 +2327,273 @@ impl App:
         let next_bits = collect_joystick_bits :: previous_bits, true, self.pending :: call
         self.joystick_state.bits = next_bits
         return
-
     fn poll_events(edit self) -> List[AppEvent]:
         select:
             when self.has_pending_events :: :: method => return self.take_pending_events :: :: method
             else => ()
         self.pump_poll :: :: method
         return self.take_pending_events :: :: method
-
     fn poll_event_batch(edit self) -> AppEventBatch:
         let events = self.poll_events :: :: method
         return split_app_events :: events :: call
-
     fn poll_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
         let batch = self.poll_event_batch :: :: method
         let event = batch.pop_window :: :: method
         self.pending = batch.events
         return Result.Ok :: event :: call
-
     fn poll_monitor_event(edit self) -> Result[Option[MonitorEvent], AppError]:
         let batch = self.poll_event_batch :: :: method
         let event = batch.pop_monitor :: :: method
         self.pending = batch.events
         return Result.Ok :: event :: call
-
     fn poll_joystick_event(edit self) -> Result[Option[JoystickEvent], AppError]:
         let batch = self.poll_event_batch :: :: method
         let event = batch.pop_joystick :: :: method
         self.pending = batch.events
         return Result.Ok :: event :: call
-
     fn poll_user_event(edit self) -> Result[Option[UserEvent], AppError]:
         let batch = self.poll_event_batch :: :: method
         let event = batch.pop_user :: :: method
         self.pending = batch.events
         return Result.Ok :: event :: call
-
     fn poll_window_events(edit self) -> List[WindowEvent]:
         let batch = self.poll_event_batch :: :: method
         let events = batch.take_windows :: :: method
         self.pending = batch.events
         return events
-
     fn poll_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         let batch = self.poll_event_batch :: :: method
         let events = batch.take_window_events_for :: id :: method
         self.pending = batch.events
         return events
-
     fn poll_created_window_ids(edit self) -> List[WindowId]:
         let batch = self.poll_event_batch :: :: method
         let ids = batch.take_created_window_ids :: :: method
         self.pending = batch.events
         return ids
-
     fn poll_created_window_events(edit self) -> List[WindowEvent]:
         let batch = self.poll_event_batch :: :: method
         let events = batch.take_created_window_events :: :: method
         self.pending = batch.events
         return events
-
     fn poll_destroyed_window_ids(edit self) -> List[WindowId]:
         let batch = self.poll_event_batch :: :: method
         let ids = batch.take_destroyed_window_ids :: :: method
         self.pending = batch.events
         return ids
-
     fn poll_destroyed_window_events(edit self) -> List[WindowEvent]:
         let batch = self.poll_event_batch :: :: method
         let events = batch.take_destroyed_window_events :: :: method
         self.pending = batch.events
         return events
-
     fn poll_close_requested_window_ids(edit self) -> List[WindowId]:
         let batch = self.poll_event_batch :: :: method
         let ids = batch.take_close_requested_window_ids :: :: method
         self.pending = batch.events
         return ids
-
     fn poll_close_requested_window_events(edit self) -> List[WindowEvent]:
         let batch = self.poll_event_batch :: :: method
         let events = batch.take_close_requested_window_events :: :: method
         self.pending = batch.events
         return events
-
     fn poll_monitor_events(edit self) -> List[MonitorEvent]:
         let batch = self.poll_event_batch :: :: method
         let events = batch.take_monitors :: :: method
         self.pending = batch.events
         return events
-
     fn poll_joystick_events(edit self) -> List[JoystickEvent]:
         let batch = self.poll_event_batch :: :: method
         let events = batch.take_joysticks :: :: method
         self.pending = batch.events
         return events
-
     fn poll_user_events(edit self) -> List[UserEvent]:
         let batch = self.poll_event_batch :: :: method
         let events = batch.take_users :: :: method
         self.pending = batch.events
         return events
-
     fn poll_user_ids(edit self) -> List[UserEventId]:
         let batch = self.poll_event_batch :: :: method
         let ids = batch.take_user_ids :: :: method
         self.pending = batch.events
         return ids
-
     fn wait_events(edit self) -> List[AppEvent]:
         select:
             when self.has_pending_events :: :: method => return self.take_pending_events :: :: method
             else => ()
         self.pump_wait :: :: method
         return self.take_pending_events :: :: method
-
     fn wait_event_batch(edit self) -> AppEventBatch:
         let events = self.wait_events :: :: method
         return split_app_events :: events :: call
-
     fn wait_window_event(edit self) -> Result[Option[WindowEvent], AppError]:
         let batch = self.wait_event_batch :: :: method
         let event = batch.pop_window :: :: method
         self.pending = batch.events
         return Result.Ok :: event :: call
-
     fn wait_monitor_event(edit self) -> Result[Option[MonitorEvent], AppError]:
         let batch = self.wait_event_batch :: :: method
         let event = batch.pop_monitor :: :: method
         self.pending = batch.events
         return Result.Ok :: event :: call
-
     fn wait_joystick_event(edit self) -> Result[Option[JoystickEvent], AppError]:
         let batch = self.wait_event_batch :: :: method
         let event = batch.pop_joystick :: :: method
         self.pending = batch.events
         return Result.Ok :: event :: call
-
     fn wait_user_event(edit self) -> Result[Option[UserEvent], AppError]:
         let batch = self.wait_event_batch :: :: method
         let event = batch.pop_user :: :: method
         self.pending = batch.events
         return Result.Ok :: event :: call
-
     fn wait_window_events(edit self) -> List[WindowEvent]:
         let batch = self.wait_event_batch :: :: method
         let events = batch.take_windows :: :: method
         self.pending = batch.events
         return events
-
     fn wait_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         let batch = self.wait_event_batch :: :: method
         let events = batch.take_window_events_for :: id :: method
         self.pending = batch.events
         return events
-
     fn wait_created_window_ids(edit self) -> List[WindowId]:
         let batch = self.wait_event_batch :: :: method
         let ids = batch.take_created_window_ids :: :: method
         self.pending = batch.events
         return ids
-
     fn wait_created_window_events(edit self) -> List[WindowEvent]:
         let batch = self.wait_event_batch :: :: method
         let events = batch.take_created_window_events :: :: method
         self.pending = batch.events
         return events
-
     fn wait_destroyed_window_ids(edit self) -> List[WindowId]:
         let batch = self.wait_event_batch :: :: method
         let ids = batch.take_destroyed_window_ids :: :: method
         self.pending = batch.events
         return ids
-
     fn wait_destroyed_window_events(edit self) -> List[WindowEvent]:
         let batch = self.wait_event_batch :: :: method
         let events = batch.take_destroyed_window_events :: :: method
         self.pending = batch.events
         return events
-
     fn wait_close_requested_window_ids(edit self) -> List[WindowId]:
         let batch = self.wait_event_batch :: :: method
         let ids = batch.take_close_requested_window_ids :: :: method
         self.pending = batch.events
         return ids
-
     fn wait_close_requested_window_events(edit self) -> List[WindowEvent]:
         let batch = self.wait_event_batch :: :: method
         let events = batch.take_close_requested_window_events :: :: method
         self.pending = batch.events
         return events
-
     fn wait_monitor_events(edit self) -> List[MonitorEvent]:
         let batch = self.wait_event_batch :: :: method
         let events = batch.take_monitors :: :: method
         self.pending = batch.events
         return events
-
     fn wait_joystick_events(edit self) -> List[JoystickEvent]:
         let batch = self.wait_event_batch :: :: method
         let events = batch.take_joysticks :: :: method
         self.pending = batch.events
         return events
-
     fn wait_user_events(edit self) -> List[UserEvent]:
         let batch = self.wait_event_batch :: :: method
         let events = batch.take_users :: :: method
         self.pending = batch.events
         return events
-
     fn wait_user_ids(edit self) -> List[UserEventId]:
         let batch = self.wait_event_batch :: :: method
         let ids = batch.take_user_ids :: :: method
         self.pending = batch.events
         return ids
-
     fn wait_timeout_events(edit self, timeout: F64) -> List[AppEvent]:
         select:
             when self.has_pending_events :: :: method => return self.take_pending_events :: :: method
             else => ()
         self.pump_wait_timeout :: timeout :: method
         return self.take_pending_events :: :: method
-
     fn wait_timeout_event_batch(edit self, timeout: F64) -> AppEventBatch:
         let events = self.wait_timeout_events :: timeout :: method
         return split_app_events :: events :: call
-
     fn wait_timeout_window_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let event = batch.pop_window :: :: method
         self.pending = batch.events
         return Result.Ok :: event :: call
-
     fn wait_timeout_monitor_event(edit self, timeout: F64) -> Result[Option[MonitorEvent], AppError]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let event = batch.pop_monitor :: :: method
         self.pending = batch.events
         return Result.Ok :: event :: call
-
     fn wait_timeout_joystick_event(edit self, timeout: F64) -> Result[Option[JoystickEvent], AppError]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let event = batch.pop_joystick :: :: method
         self.pending = batch.events
         return Result.Ok :: event :: call
-
     fn wait_timeout_user_event(edit self, timeout: F64) -> Result[Option[UserEvent], AppError]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let event = batch.pop_user :: :: method
         self.pending = batch.events
         return Result.Ok :: event :: call
-
     fn wait_timeout_window_events(edit self, timeout: F64) -> List[WindowEvent]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let events = batch.take_windows :: :: method
         self.pending = batch.events
         return events
-
     fn wait_timeout_window_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let events = batch.take_window_events_for :: id :: method
         self.pending = batch.events
         return events
-
     fn wait_timeout_created_window_ids(edit self, timeout: F64) -> List[WindowId]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let ids = batch.take_created_window_ids :: :: method
         self.pending = batch.events
         return ids
-
     fn wait_timeout_created_window_events(edit self, timeout: F64) -> List[WindowEvent]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let events = batch.take_created_window_events :: :: method
         self.pending = batch.events
         return events
-
     fn wait_timeout_destroyed_window_ids(edit self, timeout: F64) -> List[WindowId]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let ids = batch.take_destroyed_window_ids :: :: method
         self.pending = batch.events
         return ids
-
     fn wait_timeout_destroyed_window_events(edit self, timeout: F64) -> List[WindowEvent]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let events = batch.take_destroyed_window_events :: :: method
         self.pending = batch.events
         return events
-
     fn wait_timeout_close_requested_window_ids(edit self, timeout: F64) -> List[WindowId]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let ids = batch.take_close_requested_window_ids :: :: method
         self.pending = batch.events
         return ids
-
     fn wait_timeout_close_requested_window_events(edit self, timeout: F64) -> List[WindowEvent]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let events = batch.take_close_requested_window_events :: :: method
         self.pending = batch.events
         return events
-
     fn wait_timeout_monitor_events(edit self, timeout: F64) -> List[MonitorEvent]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let events = batch.take_monitors :: :: method
         self.pending = batch.events
         return events
-
     fn wait_timeout_joystick_events(edit self, timeout: F64) -> List[JoystickEvent]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let events = batch.take_joysticks :: :: method
         self.pending = batch.events
         return events
-
     fn wait_timeout_user_events(edit self, timeout: F64) -> List[UserEvent]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let events = batch.take_users :: :: method
         self.pending = batch.events
         return events
-
     fn wait_timeout_user_ids(edit self, timeout: F64) -> List[UserEventId]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let ids = batch.take_user_ids :: :: method
         self.pending = batch.events
         return ids
-
     fn poll(edit self) -> Result[Option[AppEvent], AppError]:
         let queued = pending_pop_front :: self.pending :: call
         select queued:
@@ -2872,7 +2606,6 @@ impl App:
                 return Result.Ok :: drained :: call
         let empty: Option[AppEvent] = Option.None
         return Result.Ok :: empty :: call
-
     fn wait(edit self) -> Result[Option[AppEvent], AppError]:
         let queued = pending_pop_front :: self.pending :: call
         select queued:
@@ -2885,7 +2618,6 @@ impl App:
                 return Result.Ok :: drained :: call
         let empty: Option[AppEvent] = Option.None
         return Result.Ok :: empty :: call
-
     fn wait_timeout(edit self, timeout: F64) -> Result[Option[AppEvent], AppError]:
         let queued = pending_pop_front :: self.pending :: call
         select queued:
@@ -2898,43 +2630,33 @@ impl App:
                 return Result.Ok :: drained :: call
         let empty: Option[AppEvent] = Option.None
         return Result.Ok :: empty :: call
-
     fn time(read self) -> F64:
         return glfw_get_time :: :: call
-
     fn version_info(read self) -> VersionInfo:
         let _ = self
         return runtime_version :: :: call
-
     fn version_string(read self) -> Result[Str, TextDecodeError]:
         let _ = self
         return runtime_version_string :: :: call
-
     fn current_platform(read self) -> Platform:
         let _ = self
         return runtime_platform :: :: call
-
     fn platform_supported(read self, read platform: Platform) -> Bool:
         let _ = self
         return runtime_platform_supported :: platform :: call
-
     fn last_error(read self) -> Result[Option[RuntimeErrorInfo], TextDecodeError]:
         let _ = self
         return runtime_last_error :: :: call
-
     fn set_time(read self, time_value: F64) -> Unit:
         let _ = self
         glfw_set_time :: time_value :: call
         return
-
     fn timer_value(read self) -> U64:
         let _ = self
         return glfw_get_timer_value :: :: call
-
     fn timer_frequency(read self) -> U64:
         let _ = self
         return glfw_get_timer_frequency :: :: call
-
     fn current_context_window(read self) -> Result[Window, AppError]:
         let current = glfw_get_current_context :: :: call
         select:
@@ -2954,8 +2676,10 @@ impl App:
                 when Result.Err(_) => ()
             scan = scan + 1
         return Result.Err :: AppError.CurrentContextWindowNotTracked :: call
-
     fn terminate(take self) -> Unit:
         let _ = self.destroy_all_windows :: :: method
+        select:
+            when self.drag_drop_runtime_initialized => uninitialize_drag_drop_runtime :: :: call
+            else => ()
         glfw_terminate :: :: call
         return

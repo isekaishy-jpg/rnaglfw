@@ -1,0 +1,149 @@
+use std.{Option, Result}
+use runa_app.WindowId
+use runa_app_vulkan.VulkanPresentApp
+
+pub fn prove_window_modifier_runtime(edit present_app: VulkanPresentApp, window_id: WindowId) -> I32:
+    let pending_events = present_app.pending_modifiers_changed_events_for :: window_id :: method
+    let pending_states = present_app.pending_modifiers_states_for :: window_id :: method
+    select:
+        when pending_events.count :: :: method != 0 => return 3277
+        when pending_states.count :: :: method != 0 => return 3278
+        else => ()
+
+    present_app.post_user_event :: 311 :: method
+    select present_app.next_modifiers_state_for :: window_id :: method:
+        when Option.Some(_) => return 3279
+        when Option.None => ()
+    select present_app.next_user_event_for :: 311 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 311 => return 3280
+                else => ()
+        when Option.None => return 3281
+
+    present_app.post_user_event :: 312 :: method
+    select present_app.next_modifiers_changed_event_for :: window_id :: method:
+        when Option.Some(_) => return 3282
+        when Option.None => ()
+    select present_app.next_user_event_for :: 312 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 312 => return 3283
+                else => ()
+        when Option.None => return 3284
+
+    present_app.post_user_event :: 313 :: method
+    select present_app.poll_next_modifiers_state_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3285
+        when Result.Err(_) => return 3286
+    select present_app.next_user_event_for :: 313 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 313 => return 3287
+                else => ()
+        when Option.None => return 3288
+
+    present_app.post_user_event :: 314 :: method
+    select present_app.poll_next_modifiers_changed_event_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3289
+        when Result.Err(_) => return 3290
+    select present_app.next_user_event_for :: 314 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 314 => return 3291
+                else => ()
+        when Option.None => return 3292
+
+    present_app.post_user_event :: 315 :: method
+    select present_app.wait_next_modifiers_state_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3293
+        when Result.Err(_) => return 3294
+    select present_app.next_user_event_for :: 315 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 315 => return 3295
+                else => ()
+        when Option.None => return 3296
+
+    present_app.post_user_event :: 316 :: method
+    select present_app.wait_next_modifiers_changed_event_for :: window_id :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3297
+        when Result.Err(_) => return 3298
+    select present_app.next_user_event_for :: 316 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 316 => return 3299
+                else => ()
+        when Option.None => return 3300
+
+    present_app.post_user_event :: 317 :: method
+    select present_app.wait_timeout_next_modifiers_state_for :: window_id, 0.0 :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3301
+        when Result.Err(_) => return 3302
+    select present_app.next_user_event_for :: 317 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 317 => return 3303
+                else => ()
+        when Option.None => return 3304
+
+    present_app.post_user_event :: 318 :: method
+    select present_app.wait_timeout_next_modifiers_changed_event_for :: window_id, 0.0 :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3305
+        when Result.Err(_) => return 3306
+    select present_app.next_user_event_for :: 318 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 318 => return 3307
+                else => ()
+        when Option.None => return 3308
+
+    present_app.post_user_event :: 319 :: method
+    let polled_events = present_app.poll_modifiers_changed_events_for :: window_id :: method
+    let polled_states = present_app.poll_modifiers_states_for :: window_id :: method
+    select:
+        when polled_events.count :: :: method != 0 => return 3309
+        when polled_states.count :: :: method != 0 => return 3310
+        else => ()
+    select present_app.next_user_event_for :: 319 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 319 => return 3311
+                else => ()
+        when Option.None => return 3312
+
+    present_app.post_user_event :: 320 :: method
+    let waited_events = present_app.wait_modifiers_changed_events_for :: window_id :: method
+    let waited_states = present_app.wait_modifiers_states_for :: window_id :: method
+    select:
+        when waited_events.count :: :: method != 0 => return 3313
+        when waited_states.count :: :: method != 0 => return 3314
+        else => ()
+    select present_app.next_user_event_for :: 320 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 320 => return 3315
+                else => ()
+        when Option.None => return 3316
+
+    present_app.post_user_event :: 321 :: method
+    let timeout_events = present_app.wait_timeout_modifiers_changed_events_for :: window_id, 0.0 :: method
+    let timeout_states = present_app.wait_timeout_modifiers_states_for :: window_id, 0.0 :: method
+    select:
+        when timeout_events.count :: :: method != 0 => return 3317
+        when timeout_states.count :: :: method != 0 => return 3318
+        else => ()
+    select present_app.next_user_event_for :: 321 :: method:
+        when Option.Some(event) =>
+            select:
+                when event.user_id :: :: method != 321 => return 3319
+                else => ()
+        when Option.None => return 3320
+
+    return 0

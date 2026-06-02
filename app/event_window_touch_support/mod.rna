@@ -1,0 +1,246 @@
+use std.{List, Option}
+use event.{AppEvent, AppEventBatch, WindowEvent, WindowEventKind, WindowTouchData}
+use input.{TouchPhase, touch_phase_from_raw, touch_phase_raw}
+use window.WindowId
+
+fn push_window(edit events: List[AppEvent], event: WindowEvent) -> Unit:
+    let wrapped = AppEvent.Window :: event :: call
+    events.push :: wrapped :: method
+
+fn push_passthrough(edit events: List[AppEvent], event: AppEvent) -> Unit:
+    events.push :: event :: method
+
+fn copy_touch_phase(read phase: TouchPhase) -> TouchPhase:
+    let raw = touch_phase_raw :: phase :: call
+    return touch_phase_from_raw :: raw :: call
+
+fn build_touch_window_event(id: WindowId, touch_id: USize, read phase: TouchPhase, x: F64, y: F64) -> WindowEvent:
+    let copied_phase = copy_touch_phase :: phase :: call
+    return WindowEvent.Touch :: :: call
+        id = id
+        touch_id = touch_id
+        phase = copied_phase
+        x = x
+        y = y
+
+impl AppEventBatch:
+    fn pop_touch_data(edit self) -> Option[WindowTouchData]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowTouchData] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.Touch(id = _, touch_id = touch_id, phase = phase, x = x, y = y) =>
+                                    let data = WindowTouchData :: :: call
+                                        touch_id = touch_id
+                                        phase = copy_touch_phase :: phase :: call
+                                        x = x
+                                        y = y
+                                    found = Option.Some :: data :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_touch_data_for(edit self, id: WindowId) -> Option[WindowTouchData]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowTouchData] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.Touch(id = event_id, touch_id = touch_id, phase = phase, x = x, y = y) =>
+                                    select:
+                                        when event_id == id =>
+                                            let data = WindowTouchData :: :: call
+                                                touch_id = touch_id
+                                                phase = copy_touch_phase :: phase :: call
+                                                x = x
+                                                y = y
+                                            found = Option.Some :: data :: call
+                                        else => push_window :: remaining, (build_touch_window_event :: event_id, touch_id, phase, x, y :: call) :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_touch_event(edit self) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.Touch => found = Option.Some :: window_event :: call
+                                else => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_touch_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.Touch =>
+                                    select:
+                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
+                                        else => push_window :: remaining, window_event :: call
+                                else => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn touch_data(edit self) -> List[WindowTouchData]:
+        let remaining = List[AppEvent] :: :: call
+        let matched = List[WindowTouchData] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.Touch(id = event_id, touch_id = touch_id, phase = phase, x = x, y = y) =>
+                            let data = WindowTouchData :: :: call
+                                touch_id = touch_id
+                                phase = copy_touch_phase :: phase :: call
+                                x = x
+                                y = y
+                            matched.push :: data :: method
+                            let restored = build_touch_window_event :: event_id, touch_id, phase, x, y :: call
+                            push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return matched
+
+    fn touch_data_for(edit self, id: WindowId) -> List[WindowTouchData]:
+        let remaining = List[AppEvent] :: :: call
+        let matched = List[WindowTouchData] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.Touch(id = event_id, touch_id = touch_id, phase = phase, x = x, y = y) =>
+                            select:
+                                when event_id == id =>
+                                    let data = WindowTouchData :: :: call
+                                        touch_id = touch_id
+                                        phase = copy_touch_phase :: phase :: call
+                                        x = x
+                                        y = y
+                                    matched.push :: data :: method
+                                else => ()
+                            let restored = build_touch_window_event :: event_id, touch_id, phase, x, y :: call
+                            push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return matched
+
+    fn touch_events(edit self) -> List[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let events = List[WindowEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.Touch(id = event_id, touch_id = touch_id, phase = phase, x = x, y = y) =>
+                            let copied = build_touch_window_event :: event_id, touch_id, phase, x, y :: call
+                            events.push :: copied :: method
+                            let restored = build_touch_window_event :: event_id, touch_id, phase, x, y :: call
+                            push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return events
+
+    fn touch_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let events = List[WindowEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.Touch(id = event_id, touch_id = touch_id, phase = phase, x = x, y = y) =>
+                            select:
+                                when event_id == id => events.push :: (build_touch_window_event :: event_id, touch_id, phase, x, y :: call) :: method
+                                else => ()
+                            let restored = build_touch_window_event :: event_id, touch_id, phase, x, y :: call
+                            push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return events
+
+    fn take_touch_data(edit self) -> List[WindowTouchData]:
+        let data = List[WindowTouchData] :: :: call
+        let events = self.take_touch_events :: :: method
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.touch_data :: :: method:
+                when Option.Some(value) => data.push :: value :: method
+                when Option.None => ()
+        return data
+
+    fn take_touch_data_for(edit self, id: WindowId) -> List[WindowTouchData]:
+        let data = List[WindowTouchData] :: :: call
+        let events = self.take_touch_events_for :: id :: method
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.touch_data :: :: method:
+                when Option.Some(value) => data.push :: value :: method
+                when Option.None => ()
+        return data
+
+    fn take_touch_events(edit self) -> List[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let events = List[WindowEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event.kind :: :: method:
+                        when WindowEventKind.Touch => events.push :: window_event :: method
+                        else => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return events
+
+    fn take_touch_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let events = List[WindowEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event.kind :: :: method:
+                        when WindowEventKind.Touch =>
+                            select:
+                                when window_event.window_id :: :: method == id => events.push :: window_event :: method
+                                else => push_window :: remaining, window_event :: call
+                        else => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return events

@@ -1,0 +1,683 @@
+use std.{Clone, List, Option, Str}
+
+use event.{AppEvent, AppEventBatch, WindowCompositionData, WindowEvent, WindowEventKind}
+use window.WindowId
+
+fn push_window(edit events: List[AppEvent], event: WindowEvent) -> Unit:
+    let wrapped = AppEvent.Window :: event :: call
+    events.push :: wrapped :: method
+
+fn push_passthrough(edit events: List[AppEvent], event: AppEvent) -> Unit:
+    events.push :: event :: method
+
+fn build_composition_started_window_event(id: WindowId) -> WindowEvent:
+    return WindowEvent.CompositionStarted :: :: call
+        id = id
+
+fn build_composition_updated_window_event(id: WindowId, read text: Str, cursor: Option[Index]) -> WindowEvent:
+    let copied = text.clone :: :: method
+    return WindowEvent.CompositionUpdated :: :: call
+        id = id
+        text = copied
+        cursor = cursor
+
+fn build_composition_committed_window_event(id: WindowId, read text: Str) -> WindowEvent:
+    let copied = text.clone :: :: method
+    return WindowEvent.CompositionCommitted :: :: call
+        id = id
+        text = copied
+
+fn build_composition_ended_window_event(id: WindowId) -> WindowEvent:
+    return WindowEvent.CompositionEnded :: :: call
+        id = id
+
+fn copy_optional_index(read value: Option[Index]) -> Option[Index]:
+    select value:
+        when Option.Some(index) => return Option.Some :: index :: call
+        when Option.None => return Option.None
+
+impl AppEventBatch:
+    fn pop_composition_data(edit self) -> Option[WindowCompositionData]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowCompositionData] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.CompositionUpdated(id = _, text = text, cursor = cursor) =>
+                                    let value = WindowCompositionData :: :: call
+                                        text = text
+                                        cursor = cursor
+                                    found = Option.Some :: value :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_composition_commit_text(edit self) -> Option[Str]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[Str] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.CompositionCommitted(id = _, text = text) => found = Option.Some :: text :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_composition_data_for(edit self, id: WindowId) -> Option[WindowCompositionData]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowCompositionData] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.CompositionUpdated(id = event_id, text = text, cursor = cursor) =>
+                                    select:
+                                        when event_id == id =>
+                                            let value = WindowCompositionData :: :: call
+                                                text = text
+                                                cursor = cursor
+                                            found = Option.Some :: value :: call
+                                        else =>
+                                            let restored = WindowEvent.CompositionUpdated :: :: call
+                                                id = event_id
+                                                text = text
+                                                cursor = cursor
+                                            push_window :: remaining, restored :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_composition_commit_text_for(edit self, id: WindowId) -> Option[Str]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[Str] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event:
+                                when WindowEvent.CompositionCommitted(id = event_id, text = text) =>
+                                    select:
+                                        when event_id == id => found = Option.Some :: text :: call
+                                        else =>
+                                            let restored = WindowEvent.CompositionCommitted :: :: call
+                                                id = event_id
+                                                text = text
+                                            push_window :: remaining, restored :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_composition_started_event(edit self) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.CompositionStarted => found = Option.Some :: window_event :: call
+                                else => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_composition_updated_event(edit self) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.CompositionUpdated => found = Option.Some :: window_event :: call
+                                else => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_composition_committed_event(edit self) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.CompositionCommitted => found = Option.Some :: window_event :: call
+                                else => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_composition_ended_event(edit self) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.CompositionEnded => found = Option.Some :: window_event :: call
+                                else => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_composition_started_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.CompositionStarted =>
+                                    select:
+                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
+                                        else => push_window :: remaining, window_event :: call
+                                else => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_composition_updated_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.CompositionUpdated =>
+                                    select:
+                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
+                                        else => push_window :: remaining, window_event :: call
+                                else => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_composition_committed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.CompositionCommitted =>
+                                    select:
+                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
+                                        else => push_window :: remaining, window_event :: call
+                                else => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn pop_composition_ended_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let remaining = List[AppEvent] :: :: call
+        let found: Option[WindowEvent] = Option.None
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select found:
+                        when Option.None =>
+                            select window_event.kind :: :: method:
+                                when WindowEventKind.CompositionEnded =>
+                                    select:
+                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
+                                        else => push_window :: remaining, window_event :: call
+                                else => push_window :: remaining, window_event :: call
+                        when Option.Some(_) => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return found
+
+    fn composition_started_events(edit self) -> List[WindowEvent]:
+        let events = self.take_composition_started_events :: :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.CompositionStarted(id = event_id) =>
+                    let copied = build_composition_started_window_event :: event_id :: call
+                    let restored = build_composition_started_window_event :: event_id :: call
+                    matched.push :: copied :: method
+                    push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn composition_updated_events(edit self) -> List[WindowEvent]:
+        let events = self.take_composition_updated_events :: :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.CompositionUpdated(id = event_id, text = text, cursor = cursor) =>
+                    let copied_cursor = copy_optional_index :: cursor :: call
+                    let copied = build_composition_updated_window_event :: event_id, text, copied_cursor :: call
+                    let restored = build_composition_updated_window_event :: event_id, text, cursor :: call
+                    matched.push :: copied :: method
+                    push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn composition_committed_events(edit self) -> List[WindowEvent]:
+        let events = self.take_composition_committed_events :: :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.CompositionCommitted(id = event_id, text = text) =>
+                    let copied = build_composition_committed_window_event :: event_id, text :: call
+                    let restored = build_composition_committed_window_event :: event_id, text :: call
+                    matched.push :: copied :: method
+                    push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn composition_ended_events(edit self) -> List[WindowEvent]:
+        let events = self.take_composition_ended_events :: :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.CompositionEnded(id = event_id) =>
+                    let copied = build_composition_ended_window_event :: event_id :: call
+                    let restored = build_composition_ended_window_event :: event_id :: call
+                    matched.push :: copied :: method
+                    push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn composition_started_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = self.take_composition_started_events_for :: id :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.CompositionStarted(id = event_id) =>
+                    let copied = build_composition_started_window_event :: event_id :: call
+                    let restored = build_composition_started_window_event :: event_id :: call
+                    matched.push :: copied :: method
+                    push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn composition_updated_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = self.take_composition_updated_events_for :: id :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.CompositionUpdated(id = event_id, text = text, cursor = cursor) =>
+                    let copied_cursor = copy_optional_index :: cursor :: call
+                    let copied = build_composition_updated_window_event :: event_id, text, copied_cursor :: call
+                    let restored = build_composition_updated_window_event :: event_id, text, cursor :: call
+                    matched.push :: copied :: method
+                    push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn composition_committed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = self.take_composition_committed_events_for :: id :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.CompositionCommitted(id = event_id, text = text) =>
+                    let copied = build_composition_committed_window_event :: event_id, text :: call
+                    let restored = build_composition_committed_window_event :: event_id, text :: call
+                    matched.push :: copied :: method
+                    push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn composition_ended_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = self.take_composition_ended_events_for :: id :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.CompositionEnded(id = event_id) =>
+                    let copied = build_composition_ended_window_event :: event_id :: call
+                    let restored = build_composition_ended_window_event :: event_id :: call
+                    matched.push :: copied :: method
+                    push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn composition_data(edit self) -> List[WindowCompositionData]:
+        let matched = List[WindowCompositionData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CompositionUpdated(id = event_id, text = text, cursor = cursor) =>
+                            let copied = text.clone :: :: method
+                            let data_cursor = copy_optional_index :: cursor :: call
+                            let data = WindowCompositionData :: :: call
+                                text = copied
+                                cursor = data_cursor
+                            matched.push :: data :: method
+                            let restored = build_composition_updated_window_event :: event_id, text, cursor :: call
+                            push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return matched
+
+    fn composition_commit_texts(edit self) -> List[Str]:
+        let matched = List[Str] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CompositionCommitted(id = id, text = text) =>
+                            let copied = text.clone :: :: method
+                            matched.push :: copied :: method
+                            let restored = build_composition_committed_window_event :: id, text :: call
+                            push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return matched
+
+    fn composition_data_for(edit self, id: WindowId) -> List[WindowCompositionData]:
+        let matched = List[WindowCompositionData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CompositionUpdated(id = event_id, text = text, cursor = cursor) =>
+                            select:
+                                when event_id == id =>
+                                    let copied = text.clone :: :: method
+                                    let data_cursor = copy_optional_index :: cursor :: call
+                                    let data = WindowCompositionData :: :: call
+                                        text = copied
+                                        cursor = data_cursor
+                                    matched.push :: data :: method
+                                else => ()
+                            let restored = build_composition_updated_window_event :: event_id, text, cursor :: call
+                            push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return matched
+
+    fn composition_commit_texts_for(edit self, id: WindowId) -> List[Str]:
+        let matched = List[Str] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CompositionCommitted(id = event_id, text = text) =>
+                            select:
+                                when event_id == id =>
+                                    let copied = text.clone :: :: method
+                                    matched.push :: copied :: method
+                                    let restored = build_composition_committed_window_event :: event_id, text :: call
+                                    push_window :: remaining, restored :: call
+                                else =>
+                                    let restored = build_composition_committed_window_event :: event_id, text :: call
+                                    push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return matched
+
+    fn take_composition_started_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CompositionStarted(id = _) => events.push :: window_event :: method
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return events
+
+    fn take_composition_updated_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CompositionUpdated(id = _, text = _, cursor = _) => events.push :: window_event :: method
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return events
+
+    fn take_composition_committed_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CompositionCommitted(id = _, text = _) => events.push :: window_event :: method
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return events
+
+    fn take_composition_ended_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CompositionEnded(id = _) => events.push :: window_event :: method
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return events
+
+    fn take_composition_started_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CompositionStarted(id = event_id) =>
+                            select:
+                                when event_id == id =>
+                                    let copied = build_composition_started_window_event :: event_id :: call
+                                    events.push :: copied :: method
+                                else =>
+                                    let restored = build_composition_started_window_event :: event_id :: call
+                                    push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return events
+
+    fn take_composition_updated_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CompositionUpdated(id = event_id, text = text, cursor = cursor) =>
+                            select:
+                                when event_id == id =>
+                                    let copied_cursor = copy_optional_index :: cursor :: call
+                                    let copied = build_composition_updated_window_event :: event_id, text, copied_cursor :: call
+                                    events.push :: copied :: method
+                                else =>
+                                    let restored = build_composition_updated_window_event :: event_id, text, cursor :: call
+                                    push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return events
+
+    fn take_composition_committed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CompositionCommitted(id = event_id, text = text) =>
+                            select:
+                                when event_id == id =>
+                                    let copied = build_composition_committed_window_event :: event_id, text :: call
+                                    events.push :: copied :: method
+                                else =>
+                                    let restored = build_composition_committed_window_event :: event_id, text :: call
+                                    push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return events
+
+    fn take_composition_ended_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CompositionEnded(id = event_id) =>
+                            select:
+                                when event_id == id =>
+                                    let copied = build_composition_ended_window_event :: event_id :: call
+                                    events.push :: copied :: method
+                                else =>
+                                    let restored = build_composition_ended_window_event :: event_id :: call
+                                    push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return events
+
+    fn take_composition_data(edit self) -> List[WindowCompositionData]:
+        let events = self.take_composition_updated_events :: :: method
+        let data = List[WindowCompositionData] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.composition_data :: :: method:
+                when Option.Some(value) => data.push :: value :: method
+                when Option.None => ()
+        return data
+
+    fn take_composition_commit_texts(edit self) -> List[Str]:
+        let events = self.take_composition_committed_events :: :: method
+        let texts = List[Str] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.take_composition_commit_text :: :: method:
+                when Option.Some(value) => texts.push :: value :: method
+                when Option.None => ()
+        return texts
+
+    fn take_composition_data_for(edit self, id: WindowId) -> List[WindowCompositionData]:
+        let data = List[WindowCompositionData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CompositionUpdated(id = event_id, text = text, cursor = cursor) =>
+                            select:
+                                when event_id == id =>
+                                    let copied = text.clone :: :: method
+                                    let value = WindowCompositionData :: :: call
+                                        text = copied
+                                        cursor = cursor
+                                    data.push :: value :: method
+                                else =>
+                                    let restored = build_composition_updated_window_event :: event_id, text, cursor :: call
+                                    push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return data
+
+    fn take_composition_commit_texts_for(edit self, id: WindowId) -> List[Str]:
+        let texts = List[Str] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.CompositionCommitted(id = event_id, text = text) =>
+                            select:
+                                when event_id == id => texts.push :: text :: method
+                                else =>
+                                    let restored = build_composition_committed_window_event :: event_id, text :: call
+                                    push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when _ => push_passthrough :: remaining, event :: call
+        self.events = remaining
+        return texts

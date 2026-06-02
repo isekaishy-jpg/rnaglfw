@@ -1,0 +1,581 @@
+use std.{List, Option, Result, Str}
+use event.{WindowCompositionData, WindowEvent}
+use runtime.{App, AppError}
+use window.WindowId
+
+impl App:
+    fn next_composition_data(edit self) -> Option[WindowCompositionData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_composition_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn next_composition_commit_text(edit self) -> Option[Str]:
+        let batch = self.take_event_batch :: :: method
+        let text = batch.pop_composition_commit_text :: :: method
+        self.pending = batch.events
+        return text
+
+    fn next_composition_data_for(edit self, id: WindowId) -> Option[WindowCompositionData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.pop_composition_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn next_composition_commit_text_for(edit self, id: WindowId) -> Option[Str]:
+        let batch = self.take_event_batch :: :: method
+        let text = batch.pop_composition_commit_text_for :: id :: method
+        self.pending = batch.events
+        return text
+
+    fn next_composition_started_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_composition_started_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_composition_updated_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_composition_updated_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_composition_committed_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_composition_committed_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_composition_ended_event(edit self) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_composition_ended_event :: :: method
+        self.pending = batch.events
+        return event
+
+    fn next_composition_started_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_composition_started_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_composition_updated_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_composition_updated_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_composition_committed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_composition_committed_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn next_composition_ended_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_composition_ended_event_for :: id :: method
+        self.pending = batch.events
+        return event
+
+    fn poll_next_composition_data(edit self) -> Result[Option[WindowCompositionData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_composition_data :: :: method :: call
+
+    fn poll_next_composition_commit_text(edit self) -> Result[Option[Str], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_composition_commit_text :: :: method :: call
+
+    fn poll_next_composition_data_for(edit self, id: WindowId) -> Result[Option[WindowCompositionData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_composition_data_for :: id :: method :: call
+
+    fn poll_next_composition_commit_text_for(edit self, id: WindowId) -> Result[Option[Str], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_composition_commit_text_for :: id :: method :: call
+
+    fn poll_next_composition_started_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_composition_started_event :: :: method :: call
+
+    fn poll_next_composition_updated_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_composition_updated_event :: :: method :: call
+
+    fn poll_next_composition_committed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_composition_committed_event :: :: method :: call
+
+    fn poll_next_composition_ended_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_composition_ended_event :: :: method :: call
+
+    fn poll_next_composition_started_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_composition_started_event_for :: id :: method :: call
+
+    fn poll_next_composition_updated_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_composition_updated_event_for :: id :: method :: call
+
+    fn poll_next_composition_committed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_composition_committed_event_for :: id :: method :: call
+
+    fn poll_next_composition_ended_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_composition_ended_event_for :: id :: method :: call
+
+    fn wait_next_composition_data(edit self) -> Result[Option[WindowCompositionData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_composition_data :: :: method :: call
+
+    fn wait_next_composition_commit_text(edit self) -> Result[Option[Str], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_composition_commit_text :: :: method :: call
+
+    fn wait_next_composition_data_for(edit self, id: WindowId) -> Result[Option[WindowCompositionData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_composition_data_for :: id :: method :: call
+
+    fn wait_next_composition_commit_text_for(edit self, id: WindowId) -> Result[Option[Str], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_composition_commit_text_for :: id :: method :: call
+
+    fn wait_next_composition_started_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_composition_started_event :: :: method :: call
+
+    fn wait_next_composition_updated_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_composition_updated_event :: :: method :: call
+
+    fn wait_next_composition_committed_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_composition_committed_event :: :: method :: call
+
+    fn wait_next_composition_ended_event(edit self) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_composition_ended_event :: :: method :: call
+
+    fn wait_next_composition_started_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_composition_started_event_for :: id :: method :: call
+
+    fn wait_next_composition_updated_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_composition_updated_event_for :: id :: method :: call
+
+    fn wait_next_composition_committed_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_composition_committed_event_for :: id :: method :: call
+
+    fn wait_next_composition_ended_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_composition_ended_event_for :: id :: method :: call
+
+    fn wait_timeout_next_composition_data(edit self, timeout: F64) -> Result[Option[WindowCompositionData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_composition_data :: :: method :: call
+
+    fn wait_timeout_next_composition_commit_text(edit self, timeout: F64) -> Result[Option[Str], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_composition_commit_text :: :: method :: call
+
+    fn wait_timeout_next_composition_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowCompositionData], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_composition_data_for :: id :: method :: call
+
+    fn wait_timeout_next_composition_commit_text_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Str], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_composition_commit_text_for :: id :: method :: call
+
+    fn wait_timeout_next_composition_started_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_composition_started_event :: :: method :: call
+
+    fn wait_timeout_next_composition_updated_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_composition_updated_event :: :: method :: call
+
+    fn wait_timeout_next_composition_committed_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_composition_committed_event :: :: method :: call
+
+    fn wait_timeout_next_composition_ended_event(edit self, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_composition_ended_event :: :: method :: call
+
+    fn wait_timeout_next_composition_started_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_composition_started_event_for :: id :: method :: call
+
+    fn wait_timeout_next_composition_updated_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_composition_updated_event_for :: id :: method :: call
+
+    fn wait_timeout_next_composition_committed_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_composition_committed_event_for :: id :: method :: call
+
+    fn wait_timeout_next_composition_ended_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_composition_ended_event_for :: id :: method :: call
+
+    fn pending_composition_started_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.composition_started_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_composition_updated_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.composition_updated_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_composition_committed_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.composition_committed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_composition_ended_events(edit self) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.composition_ended_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_composition_started_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.composition_started_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_composition_updated_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.composition_updated_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_composition_committed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.composition_committed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_composition_ended_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.composition_ended_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_composition_data(edit self) -> List[WindowCompositionData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.composition_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_composition_commit_texts(edit self) -> List[Str]:
+        let batch = self.take_event_batch :: :: method
+        let texts = batch.composition_commit_texts :: :: method
+        self.pending = batch.events
+        return texts
+
+    fn pending_composition_data_for(edit self, id: WindowId) -> List[WindowCompositionData]:
+        let batch = self.take_event_batch :: :: method
+        let data = batch.composition_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn pending_composition_commit_texts_for(edit self, id: WindowId) -> List[Str]:
+        let batch = self.take_event_batch :: :: method
+        let texts = batch.composition_commit_texts_for :: id :: method
+        self.pending = batch.events
+        return texts
+
+    fn poll_composition_started_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_composition_started_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_composition_updated_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_composition_updated_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_composition_committed_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_composition_committed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_composition_ended_events(edit self) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_composition_ended_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_composition_started_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_composition_started_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_composition_updated_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_composition_updated_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_composition_committed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_composition_committed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_composition_ended_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_composition_ended_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_composition_data(edit self) -> List[WindowCompositionData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_composition_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_composition_commit_texts(edit self) -> List[Str]:
+        let batch = self.poll_event_batch :: :: method
+        let texts = batch.take_composition_commit_texts :: :: method
+        self.pending = batch.events
+        return texts
+
+    fn poll_composition_data_for(edit self, id: WindowId) -> List[WindowCompositionData]:
+        let batch = self.poll_event_batch :: :: method
+        let data = batch.take_composition_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn poll_composition_commit_texts_for(edit self, id: WindowId) -> List[Str]:
+        let batch = self.poll_event_batch :: :: method
+        let texts = batch.take_composition_commit_texts_for :: id :: method
+        self.pending = batch.events
+        return texts
+
+    fn wait_composition_started_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_composition_started_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_composition_updated_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_composition_updated_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_composition_committed_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_composition_committed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_composition_ended_events(edit self) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_composition_ended_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_composition_started_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_composition_started_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_composition_updated_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_composition_updated_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_composition_committed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_composition_committed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_composition_ended_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_composition_ended_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_composition_data(edit self) -> List[WindowCompositionData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_composition_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_composition_commit_texts(edit self) -> List[Str]:
+        let batch = self.wait_event_batch :: :: method
+        let texts = batch.take_composition_commit_texts :: :: method
+        self.pending = batch.events
+        return texts
+
+    fn wait_composition_data_for(edit self, id: WindowId) -> List[WindowCompositionData]:
+        let batch = self.wait_event_batch :: :: method
+        let data = batch.take_composition_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_composition_commit_texts_for(edit self, id: WindowId) -> List[Str]:
+        let batch = self.wait_event_batch :: :: method
+        let texts = batch.take_composition_commit_texts_for :: id :: method
+        self.pending = batch.events
+        return texts
+
+    fn wait_timeout_composition_started_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_composition_started_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_composition_updated_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_composition_updated_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_composition_committed_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_composition_committed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_composition_ended_events(edit self, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_composition_ended_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_composition_started_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_composition_started_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_composition_updated_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_composition_updated_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_composition_committed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_composition_committed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_composition_ended_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_composition_ended_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_composition_data(edit self, timeout: F64) -> List[WindowCompositionData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_composition_data :: :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_composition_commit_texts(edit self, timeout: F64) -> List[Str]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let texts = batch.take_composition_commit_texts :: :: method
+        self.pending = batch.events
+        return texts
+
+    fn wait_timeout_composition_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowCompositionData]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let data = batch.take_composition_data_for :: id :: method
+        self.pending = batch.events
+        return data
+
+    fn wait_timeout_composition_commit_texts_for(edit self, id: WindowId, timeout: F64) -> List[Str]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let texts = batch.take_composition_commit_texts_for :: id :: method
+        self.pending = batch.events
+        return texts

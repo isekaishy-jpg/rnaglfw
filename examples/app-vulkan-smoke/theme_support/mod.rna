@@ -1,0 +1,163 @@
+use std.{Option, Result}
+
+use runa_app.{Theme, Win32HWnd, WindowEvent, WindowId}
+use runa_app_vulkan.VulkanPresentApp
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn SendMessageW(window: Win32HWnd, message: CUInt, wparam: USize, lparam: ISize) -> ISize
+
+const WM_THEMECHANGED: CUInt = 0x031A
+
+fn themes_match(read left: Theme, read right: Theme) -> Bool:
+    select left:
+        when Theme.Light =>
+            select right:
+                when Theme.Light => return true
+                when Theme.Dark => return false
+        when Theme.Dark =>
+            select right:
+                when Theme.Light => return false
+                when Theme.Dark => return true
+
+fn check_theme(read actual: Theme, read expected: Theme, mismatch_code: I32) -> I32:
+    select:
+        when !themes_match :: actual, expected :: call => return mismatch_code
+        else => return 0
+
+fn alternate_theme(read theme: Theme) -> Theme:
+    select theme:
+        when Theme.Light => return Theme.Dark
+        when Theme.Dark => return Theme.Light
+    return Theme.Dark
+
+fn prove_window_theme_runtime_with(edit present_app: VulkanPresentApp, window_id: WindowId, read current_theme: Theme) -> I32:
+    let owned_window = present_app.window :: :: method
+    select owned_window.theme :: :: method:
+        when Option.Some(theme) =>
+            select check_theme :: theme, current_theme, 3211 :: call:
+                when 0 => ()
+                when code => return code
+        when Option.None => return 3210
+
+    select present_app.set_theme :: Option.Some :: alternate_theme :: current_theme :: call :: call :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3235
+    select present_app.theme :: :: method:
+        when Option.Some(theme) =>
+            select check_theme :: theme, alternate_theme :: current_theme :: call, 3236 :: call:
+                when 0 => ()
+                when code => return code
+        when Option.None => return 3237
+    select owned_window.theme :: :: method:
+        when Option.Some(theme) =>
+            select check_theme :: theme, alternate_theme :: current_theme :: call, 3238 :: call:
+                when 0 => ()
+                when code => return code
+        when Option.None => return 3239
+
+    let follow_system: Option[Theme] = Option.None
+    select owned_window.set_theme :: follow_system :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3240
+    select present_app.theme :: :: method:
+        when Option.Some(theme) =>
+            select check_theme :: theme, current_theme, 3241 :: call:
+                when 0 => ()
+                when code => return code
+        when Option.None => return 3242
+    select owned_window.theme :: :: method:
+        when Option.Some(theme) =>
+            select check_theme :: theme, current_theme, 3243 :: call:
+                when 0 => ()
+                when code => return code
+        when Option.None => return 3244
+
+    present_app.poll_theme_changed_events_for :: window_id :: method
+
+    let hwnd = owned_window.hwnd :: :: method
+    #unsafe SendMessageW :: hwnd, WM_THEMECHANGED, 0USize, 0ISize :: call
+
+    let pending_events = present_app.poll_theme_changed_events_for :: window_id :: method
+    select:
+        when pending_events.count :: :: method != 1 => return 3212
+        else => ()
+
+    let pending_event = pending_events.remove :: 0 :: method
+    select pending_event:
+        when WindowEvent.ThemeChanged(id = event_id, theme = theme) =>
+            select:
+                when event_id != window_id => return 3215
+                else => ()
+            select check_theme :: theme, current_theme, 3216 :: call:
+                when 0 => ()
+                when code => return code
+        when _ => return 3214
+
+    #unsafe SendMessageW :: hwnd, WM_THEMECHANGED, 0USize, 0ISize :: call
+    let pending_themes = present_app.poll_themes_for :: window_id :: method
+    select:
+        when pending_themes.count :: :: method != 1 => return 3213
+        else => ()
+
+    let pending_theme = pending_themes.remove :: 0 :: method
+    select check_theme :: pending_theme, current_theme, 3218 :: call:
+        when 0 => ()
+        when code => return code
+
+    #unsafe SendMessageW :: hwnd, WM_THEMECHANGED, 0USize, 0ISize :: call
+    let staged_users = present_app.poll_user_events :: :: method
+    select:
+        when staged_users.count :: :: method != 0 => return 3222
+        else => ()
+    select present_app.next_theme_changed_event_for :: window_id :: method:
+        when Option.Some(event) =>
+            select event:
+                when WindowEvent.ThemeChanged(id = event_id, theme = theme) =>
+                    select:
+                        when event_id != window_id => return 3220
+                        else => ()
+                    select check_theme :: theme, current_theme, 3221 :: call:
+                        when 0 => ()
+                        when code => return code
+                when _ => return 3219
+        when Option.None => return 3223
+
+    #unsafe SendMessageW :: hwnd, WM_THEMECHANGED, 0USize, 0ISize :: call
+    let staged_users = present_app.poll_user_events :: :: method
+    select:
+        when staged_users.count :: :: method != 0 => return 3224
+        else => ()
+    select present_app.wait_next_theme_for :: window_id :: method:
+        when Result.Ok(Option.Some(theme)) =>
+            select check_theme :: theme, current_theme, 3225 :: call:
+                when 0 => ()
+                when code => return code
+        when Result.Ok(Option.None) => return 3226
+        when Result.Err(_) => return 3227
+
+    #unsafe SendMessageW :: hwnd, WM_THEMECHANGED, 0USize, 0ISize :: call
+    let staged_users = present_app.poll_user_events :: :: method
+    select:
+        when staged_users.count :: :: method != 0 => return 3228
+        else => ()
+    select present_app.wait_timeout_next_theme_changed_event_for :: window_id, 0.0 :: method:
+        when Result.Ok(Option.Some(event)) =>
+            select event:
+                when WindowEvent.ThemeChanged(id = event_id, theme = theme) =>
+                    select:
+                        when event_id != window_id => return 3229
+                        else => ()
+                    select check_theme :: theme, current_theme, 3230 :: call:
+                        when 0 => ()
+                        when code => return code
+                when _ => return 3231
+        when Result.Ok(Option.None) => return 3232
+        when Result.Err(_) => return 3233
+
+    return 0
+
+pub fn prove_window_theme_runtime(edit present_app: VulkanPresentApp, window_id: WindowId) -> I32:
+    select present_app.theme :: :: method:
+        when Option.Some(current_theme) => return prove_window_theme_runtime_with :: present_app, window_id, current_theme :: call
+        when Option.None => return 3234

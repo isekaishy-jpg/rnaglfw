@@ -1,0 +1,150 @@
+use std.{ByteBuffer, Result}
+
+use buffer_support.{copy_vulkan_buffer_bytes_from_memory, vulkan_buffer_from_plan_internal, write_vulkan_buffer_bytes_to_memory}
+use present.{VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_BUFFER_USAGE_TRANSFER_SRC_BIT}
+use present.{VulkanBuffer, VulkanBufferPlan, VulkanPresentApp, VulkanPresentContext, VulkanPresentError}
+
+fn transfer_buffer_usage(read context: VulkanPresentContext) -> CUInt:
+    return context.transfer_source_buffer_usage :: :: method | context.transfer_destination_buffer_usage :: :: method
+
+pub(package) fn read_vulkan_buffer_bytes(read context: VulkanPresentContext, read buffer: VulkanBuffer) -> Result[ByteBuffer, VulkanPresentError]:
+    select:
+        when buffer.host_visible :: :: method => return copy_vulkan_buffer_bytes_from_memory :: context, buffer :: call
+        when !buffer.transfer_source_compatible :: :: method =>
+            let error = VulkanPresentError.BufferUsageMissing :: VK_BUFFER_USAGE_TRANSFER_SRC_BIT, buffer.usage :: :: method :: call
+            return Result.Err :: error :: call
+        else => ()
+    select context.buffer_transfer_buffer :: buffer :: method:
+        when Result.Ok(transfer_buffer) =>
+            select context.copy_buffer :: buffer, transfer_buffer :: method:
+                when Result.Ok(_) =>
+                    select copy_vulkan_buffer_bytes_from_memory :: context, transfer_buffer :: call:
+                        when Result.Ok(bytes) =>
+                            context.destroy_buffer_resource :: transfer_buffer :: method
+                            return Result.Ok :: bytes :: call
+                        when Result.Err(err) =>
+                            context.destroy_buffer_resource :: transfer_buffer :: method
+                            return Result.Err :: err :: call
+                when Result.Err(err) =>
+                    context.destroy_buffer_resource :: transfer_buffer :: method
+                    return Result.Err :: err :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+pub(package) fn write_vulkan_buffer_bytes(read context: VulkanPresentContext, read buffer: VulkanBuffer, take bytes: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+    select:
+        when buffer.host_visible :: :: method => return write_vulkan_buffer_bytes_to_memory :: context, buffer, bytes :: call
+        when !buffer.transfer_destination_compatible :: :: method =>
+            let error = VulkanPresentError.BufferUsageMissing :: VK_BUFFER_USAGE_TRANSFER_DST_BIT, buffer.usage :: :: method :: call
+            return Result.Err :: error :: call
+        else => ()
+    select context.buffer_transfer_buffer :: buffer :: method:
+        when Result.Ok(transfer_buffer) =>
+            select write_vulkan_buffer_bytes_to_memory :: context, transfer_buffer, bytes :: call:
+                when Result.Ok(_) =>
+                    select context.copy_buffer :: transfer_buffer, buffer :: method:
+                        when Result.Ok(_) =>
+                            context.destroy_buffer_resource :: transfer_buffer :: method
+                            return Result.Ok :: :: call
+                        when Result.Err(err) =>
+                            context.destroy_buffer_resource :: transfer_buffer :: method
+                            return Result.Err :: err :: call
+                when Result.Err(err) =>
+                    context.destroy_buffer_resource :: transfer_buffer :: method
+                    return Result.Err :: err :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+impl VulkanPresentContext:
+    fn buffer_bytes(read self, read buffer: VulkanBuffer) -> Result[ByteBuffer, VulkanPresentError]:
+        return read_vulkan_buffer_bytes :: self, buffer :: call
+
+    fn write_buffer(read self, read buffer: VulkanBuffer, take bytes: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+        return write_vulkan_buffer_bytes :: self, buffer, bytes :: call
+
+    fn buffer_transfer_buffer(read self, read buffer: VulkanBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
+        let usage = transfer_buffer_usage :: self :: call
+        return self.host_coherent_buffer :: buffer.byte_count :: :: method, usage :: method
+
+    fn buffer_to_transfer_buffer(read self, read buffer: VulkanBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
+        select self.buffer_transfer_buffer :: buffer :: method:
+            when Result.Ok(transfer_buffer) =>
+                select:
+                    when buffer.host_visible :: :: method =>
+                        select copy_vulkan_buffer_bytes_from_memory :: self, buffer :: call:
+                            when Result.Ok(bytes) =>
+                                select write_vulkan_buffer_bytes_to_memory :: self, transfer_buffer, bytes :: call:
+                                    when Result.Ok(_) => return Result.Ok :: transfer_buffer :: call
+                                    when Result.Err(err) =>
+                                        self.destroy_buffer_resource :: transfer_buffer :: method
+                                        return Result.Err :: err :: call
+                            when Result.Err(err) =>
+                                self.destroy_buffer_resource :: transfer_buffer :: method
+                                return Result.Err :: err :: call
+                    when !buffer.transfer_source_compatible :: :: method =>
+                        self.destroy_buffer_resource :: transfer_buffer :: method
+                        let error = VulkanPresentError.BufferUsageMissing :: VK_BUFFER_USAGE_TRANSFER_SRC_BIT, buffer.usage :: :: method :: call
+                        return Result.Err :: error :: call
+                    else =>
+                        select self.copy_buffer :: buffer, transfer_buffer :: method:
+                            when Result.Ok(_) => return Result.Ok :: transfer_buffer :: call
+                            when Result.Err(err) =>
+                                self.destroy_buffer_resource :: transfer_buffer :: method
+                                return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn buffer_from_plan_with_bytes(read self, read plan: VulkanBufferPlan, take bytes: ByteBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
+        select vulkan_buffer_from_plan_internal :: self, plan :: call:
+            when Result.Ok(buffer) =>
+                select write_vulkan_buffer_bytes :: self, buffer, bytes :: call:
+                    when Result.Ok(_) => return Result.Ok :: buffer :: call
+                    when Result.Err(err) =>
+                        self.destroy_buffer_resource :: buffer :: method
+                        return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn buffer_from_bytes(read self, byte_count: Index, usage: CUInt, memory_type_index: CUInt, take bytes: ByteBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
+        select self.buffer_plan :: byte_count, usage, memory_type_index :: method:
+            when Result.Ok(plan) => return self.buffer_from_plan_with_bytes :: plan, bytes :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn host_visible_buffer_from_bytes(read self, byte_count: Index, usage: CUInt, take bytes: ByteBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
+        select self.host_visible_buffer_plan :: byte_count, usage :: method:
+            when Result.Ok(plan) => return self.buffer_from_plan_with_bytes :: plan, bytes :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn host_coherent_buffer_from_bytes(read self, byte_count: Index, usage: CUInt, take bytes: ByteBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
+        select self.host_coherent_buffer_plan :: byte_count, usage :: method:
+            when Result.Ok(plan) => return self.buffer_from_plan_with_bytes :: plan, bytes :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn device_local_buffer_from_bytes(read self, byte_count: Index, usage: CUInt, take bytes: ByteBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
+        select self.device_local_buffer_plan :: byte_count, usage :: method:
+            when Result.Ok(plan) => return self.buffer_from_plan_with_bytes :: plan, bytes :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+impl VulkanPresentApp:
+    fn buffer_bytes(read self, read buffer: VulkanBuffer) -> Result[ByteBuffer, VulkanPresentError]:
+        return self.context.buffer_bytes :: buffer :: method
+
+    fn write_buffer(read self, read buffer: VulkanBuffer, take bytes: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+        return self.context.write_buffer :: buffer, bytes :: method
+
+    fn buffer_transfer_buffer(read self, read buffer: VulkanBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
+        return self.context.buffer_transfer_buffer :: buffer :: method
+
+    fn buffer_to_transfer_buffer(read self, read buffer: VulkanBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
+        return self.context.buffer_to_transfer_buffer :: buffer :: method
+
+    fn buffer_from_plan_with_bytes(read self, read plan: VulkanBufferPlan, take bytes: ByteBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
+        return self.context.buffer_from_plan_with_bytes :: plan, bytes :: method
+
+    fn buffer_from_bytes(read self, byte_count: Index, usage: CUInt, memory_type_index: CUInt, take bytes: ByteBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
+        return self.context.buffer_from_bytes :: byte_count, usage, memory_type_index, bytes :: method
+
+    fn host_visible_buffer_from_bytes(read self, byte_count: Index, usage: CUInt, take bytes: ByteBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
+        return self.context.host_visible_buffer_from_bytes :: byte_count, usage, bytes :: method
+
+    fn host_coherent_buffer_from_bytes(read self, byte_count: Index, usage: CUInt, take bytes: ByteBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
+        return self.context.host_coherent_buffer_from_bytes :: byte_count, usage, bytes :: method
+
+    fn device_local_buffer_from_bytes(read self, byte_count: Index, usage: CUInt, take bytes: ByteBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
+        return self.context.device_local_buffer_from_bytes :: byte_count, usage, bytes :: method

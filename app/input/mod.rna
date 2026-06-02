@@ -145,6 +145,13 @@ pub enum MouseButton:
     Button8
     Other(CInt)
 
+pub enum TouchPhase:
+    Started
+    Moved
+    Ended
+    Cancelled
+    Unknown(CInt)
+
 pub struct Modifiers:
     shift_down: Bool
     control_down: Bool
@@ -440,6 +447,22 @@ pub fn mouse_button_raw(read button: MouseButton) -> CInt:
         when MouseButton.Button7 => return 6
         when MouseButton.Button8 => return 7
         when MouseButton.Other(raw) => return raw
+
+pub fn touch_phase_from_raw(raw: CInt) -> TouchPhase:
+    select:
+        when raw == 0 => return TouchPhase.Started
+        when raw == 1 => return TouchPhase.Moved
+        when raw == 2 => return TouchPhase.Ended
+        when raw == 3 => return TouchPhase.Cancelled
+        else => return TouchPhase.Unknown :: raw :: call
+
+pub fn touch_phase_raw(read phase: TouchPhase) -> CInt:
+    select phase:
+        when TouchPhase.Started => return 0
+        when TouchPhase.Moved => return 1
+        when TouchPhase.Ended => return 2
+        when TouchPhase.Cancelled => return 3
+        when TouchPhase.Unknown(raw) => return raw
     return 0
 
 pub fn modifiers_from_raw(raw: CInt) -> Modifiers:
@@ -456,6 +479,28 @@ pub fn modifiers_from_raw(raw: CInt) -> Modifiers:
         super_down = super_down
         caps_lock_on = caps_lock_on
         num_lock_on = num_lock_on
+
+pub fn modifiers_raw(read mods: Modifiers) -> CInt:
+    let raw: CInt = 0
+    select:
+        when mods.shift :: :: method => raw = raw | 0x0001
+        else => ()
+    select:
+        when mods.control :: :: method => raw = raw | 0x0002
+        else => ()
+    select:
+        when mods.alt :: :: method => raw = raw | 0x0004
+        else => ()
+    select:
+        when mods.super_key :: :: method => raw = raw | 0x0008
+        else => ()
+    select:
+        when mods.caps_lock :: :: method => raw = raw | 0x0010
+        else => ()
+    select:
+        when mods.num_lock :: :: method => raw = raw | 0x0020
+        else => ()
+    return raw
 
 pub fn key_name(read key: KeyCode, scancode: ScanCode) -> Result[Str, TextDecodeError]:
     let raw_key = key_raw :: key :: call

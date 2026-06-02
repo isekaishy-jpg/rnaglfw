@@ -114,6 +114,28 @@ General package rules:
 - `path` and `registry` do not combine.
 - `[build].target` selects the explicit build target when present.
 
+## Repo Structural Rules
+
+This repo now relies on explicit owner-module splits instead of giant
+catch-all files.
+
+- Keep raw owning state and narrow façades in the root owner modules.
+- For `runa_app`, that usually means `app/runtime/mod.rna`,
+  `app/window/mod.rna`, `app/event/mod.rna`, and `app/graphics/mod.rna`.
+- For `app-vulkan`, that usually means `app-vulkan/present/mod.rna` for raw
+  Vulkan handles, context state, core errors, and bootstrapping.
+- Reusable helper families belong in dedicated `*_support/mod.rna` modules.
+- Generic resource helpers stay separate from surface- or app-specific
+  convenience layers.
+- Declare every new support module explicitly from the owning `lib.rna`.
+- If a proof-heavy example root approaches the hard line cap, move the helper
+  logic into example-local `*_support/mod.rna` modules instead of bloating
+  `main.rna`.
+- Do not thread unrelated new helpers through an existing owner module just to
+  avoid creating the correct support module.
+- When a helper can be reused by a future GPU package, keep it in the generic
+  `app-vulkan` substrate layer, not in surface-only helpers.
+
 Minimal package manifest:
 
 ```toml
@@ -1111,6 +1133,12 @@ Practical rules:
 - `runa add`, `runa remove`, `runa import`, `runa vendor`, and `runa publish`
   are explicit package-lifecycle commands, separate from `check`, `build`,
   `test`, and `fmt`.
+- In this repo, validate the edited package with `runa check` first.
+- Then validate the nearest example package that proves the new surface.
+- If a file is drifting toward the hard 3000-line limit, split it before
+  adding more surface.
+- If `build` fails after `check` passes, verify whether it is an already
+  recorded compiler issue before rewriting package code around it.
 
 ## Repo Working Rule
 

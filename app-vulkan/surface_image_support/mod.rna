@@ -1,0 +1,617 @@
+use std.{ByteBuffer, Option, Result}
+
+use command_support.{acquire_recording_command_resources, finish_recording_command_resources_sync}
+use image_present_support.{PresentSurfaceCopyImageRequest, present_surface_copy_image_raw}
+use pixel_support.VulkanPixelFormat
+use present.{CLEAR_RANGE, IMAGE_COPY_SUBRESOURCE, VK_ACCESS_MEMORY_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT}
+use present.{VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL}
+use present.VK_COMMAND_BUFFER_LEVEL_PRIMARY
+use present.{VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT}
+use present.{VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT}
+use present.{VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT}
+use present.{VK_QUEUE_FAMILY_IGNORED, VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO}
+use present.{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO}
+use present.{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO}
+use present.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
+use present.{VK_SAMPLE_COUNT_1_BIT, VK_SHARING_MODE_EXCLUSIVE}
+use present.VK_SUCCESS
+use present.{VkBufferImageCopy, VkCommandBuffer, VkCommandBufferAllocateInfo, VkCommandBufferBeginInfo, VkCommandPool}
+use present.{VkCommandPoolCreateInfo, VkDeviceMemory, VkExtent3D, VkImage, VkImageCreateInfo, VkImageMemoryBarrier, VkMemoryAllocateInfo, VkMemoryRequirements}
+use present.VkSurfaceFormatKHR
+use present.{VulkanMemoryAllocationPlan, ZERO_OFFSET3D}
+use present.{VulkanPresentApp, VulkanPresentContext, VulkanPresentError}
+use present.{VulkanSurfaceTransferDestinationImage, VulkanSurfaceTransferDestinationImagePlan, VulkanTransferSourceBuffer}
+use pixel_support.VulkanPixelFrame
+use runa_app.RgbaImage
+use surface_support.surface_image_shape_from_extent
+
+impl VulkanSurfaceTransferDestinationImagePlan:
+    fn width(read self) -> CUInt:
+        return self.extent.width
+
+    fn height(read self) -> CUInt:
+        return self.extent.height
+
+    fn surface_format(read self) -> VkSurfaceFormatKHR:
+        return self.surface_format
+
+    fn surface_pixel_format(read self) -> Result[VulkanPixelFormat, VulkanPresentError]:
+        return self.surface_format.surface_pixel_format :: :: method
+
+    fn requirements(read self) -> VkMemoryRequirements:
+        return self.requirements
+
+    fn allocation_plan(read self) -> VulkanMemoryAllocationPlan:
+        return self.allocation_plan
+
+    fn size(read self) -> U64:
+        return self.requirements.size
+
+    fn alignment(read self) -> U64:
+        return self.requirements.alignment
+
+    fn memory_type_bits(read self) -> CUInt:
+        return self.requirements.memory_type_bits
+
+    fn memory_type_index(read self) -> CUInt:
+        return self.allocation_plan.memory_type_index
+
+    fn heap_index(read self) -> CUInt:
+        return self.allocation_plan.heap_index :: :: method
+
+    fn device_local(read self) -> Bool:
+        return self.allocation_plan.device_local :: :: method
+
+    fn host_visible(read self) -> Bool:
+        return self.allocation_plan.host_visible :: :: method
+
+    fn host_coherent(read self) -> Bool:
+        return self.allocation_plan.host_coherent :: :: method
+
+    fn staging_compatible(read self) -> Bool:
+        return self.allocation_plan.staging_compatible :: :: method
+
+impl VulkanSurfaceTransferDestinationImage:
+    fn image_handle(read self) -> U64:
+        return self.image
+
+    fn memory_handle(read self) -> U64:
+        return self.memory
+
+    fn valid(read self) -> Bool:
+        return self.image != 0U64 && self.memory != 0U64
+
+    fn plan(read self) -> VulkanSurfaceTransferDestinationImagePlan:
+        return self.plan
+
+    fn width(read self) -> CUInt:
+        return self.plan.width :: :: method
+
+    fn height(read self) -> CUInt:
+        return self.plan.height :: :: method
+
+    fn surface_pixel_format(read self) -> Result[VulkanPixelFormat, VulkanPresentError]:
+        return self.plan.surface_pixel_format :: :: method
+
+    fn requirements(read self) -> VkMemoryRequirements:
+        return self.plan.requirements :: :: method
+
+    fn allocation_plan(read self) -> VulkanMemoryAllocationPlan:
+        return self.plan.allocation_plan :: :: method
+
+    fn size(read self) -> U64:
+        return self.plan.size :: :: method
+
+    fn alignment(read self) -> U64:
+        return self.plan.alignment :: :: method
+
+    fn memory_type_bits(read self) -> CUInt:
+        return self.plan.memory_type_bits :: :: method
+
+    fn memory_type_index(read self) -> CUInt:
+        return self.plan.memory_type_index :: :: method
+
+    fn heap_index(read self) -> CUInt:
+        return self.plan.heap_index :: :: method
+
+    fn device_local(read self) -> Bool:
+        return self.plan.device_local :: :: method
+
+    fn host_visible(read self) -> Bool:
+        return self.plan.host_visible :: :: method
+
+    fn host_coherent(read self) -> Bool:
+        return self.plan.host_coherent :: :: method
+
+    fn staging_compatible(read self) -> Bool:
+        return self.plan.staging_compatible :: :: method
+
+    fn layout_code(read self) -> CInt:
+        return self.layout
+
+    fn transfer_destination_ready(read self) -> Bool:
+        return self.layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+
+    fn transfer_source_ready(read self) -> Bool:
+        return self.layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+
+impl VulkanPresentContext:
+    fn surface_transfer_destination_image_requirements(read self) -> Result[VkMemoryRequirements, VulkanPresentError]:
+        let image: VkImage = 0U64
+        let image_extent = VkExtent3D :: :: call
+            width = self.extent.width
+            height = self.extent.height
+            depth = 1
+        let image_info = VkImageCreateInfo :: :: call
+            stype = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO
+            pnext = null
+            flags = 0
+            image_type = VK_IMAGE_TYPE_2D
+            format = self.surface_format.format
+            extent = image_extent
+            mip_levels = 1
+            array_layers = 1
+            samples = VK_SAMPLE_COUNT_1_BIT
+            tiling = VK_IMAGE_TILING_OPTIMAL
+            usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+            sharing_mode = VK_SHARING_MODE_EXCLUSIVE
+            queuefamily_index_count = 0
+            queuefamily_indices = null
+            initial_layout = VK_IMAGE_LAYOUT_UNDEFINED
+        let image_ptr: *edit VkImage = #unsafe &raw edit image
+        let image_info_ptr: *read VkImageCreateInfo = #unsafe &raw read image_info
+        let image_result = #unsafe self.create_image :: self.device, image_info_ptr, null, image_ptr :: call
+        select:
+            when image_result != VK_SUCCESS || image == 0U64 =>
+                let error = VulkanPresentError.TransferDestinationImageCreateFailed :: image_result :: call
+                return Result.Err :: error :: call
+            else => ()
+
+        let requirements = VkMemoryRequirements :: :: call
+            size = 0U64
+            alignment = 0U64
+            memory_type_bits = 0
+        let requirements_ptr: *edit VkMemoryRequirements = #unsafe &raw edit requirements
+        #unsafe self.get_image_memory_requirements :: self.device, image, requirements_ptr :: call
+        #unsafe self.destroy_image :: self.device, image, null :: call
+        return Result.Ok :: requirements :: call
+
+    fn surface_transfer_destination_image_plan(read self) -> Result[VulkanSurfaceTransferDestinationImagePlan, VulkanPresentError]:
+        let memory_properties = self.memory_properties :: :: method
+        select either:
+            when requirements: Result.Ok(requirements) <- self.surface_transfer_destination_image_requirements :: :: method
+            when allocation_plan: Option.Some(allocation_plan) <- memory_properties.device_local_allocation_plan :: requirements :: method =>
+                let plan = VulkanSurfaceTransferDestinationImagePlan :: :: call
+                    extent = self.surface_extent :: :: method
+                    surface_format = self.chosen_surface_format :: :: method
+                    requirements = requirements
+                    allocation_plan = allocation_plan
+                return Result.Ok :: plan :: call
+
+        with Result.Err(err):
+            requirements => return Result.Err :: err :: call
+
+        with Option.None:
+            allocation_plan =>
+                let error = VulkanPresentError.TransferDestinationImageMemoryTypeUnavailable :: requirements.memory_type_bits :: call
+                return Result.Err :: error :: call
+
+    fn surface_transfer_destination_image(read self) -> Result[VulkanSurfaceTransferDestinationImage, VulkanPresentError]:
+        select self.surface_transfer_destination_image_plan :: :: method:
+            when Result.Ok(plan) => return self.surface_transfer_destination_image_from_plan :: plan :: method
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn surface_transfer_destination_image_from_plan(read self, read plan: VulkanSurfaceTransferDestinationImagePlan) -> Result[VulkanSurfaceTransferDestinationImage, VulkanPresentError]:
+        let image: VkImage = 0U64
+        let memory: VkDeviceMemory = 0U64
+        let image_extent = VkExtent3D :: :: call
+            width = plan.extent.width
+            height = plan.extent.height
+            depth = 1
+        let image_info = VkImageCreateInfo :: :: call
+            stype = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO
+            pnext = null
+            flags = 0
+            image_type = VK_IMAGE_TYPE_2D
+            format = plan.surface_format.format
+            extent = image_extent
+            mip_levels = 1
+            array_layers = 1
+            samples = VK_SAMPLE_COUNT_1_BIT
+            tiling = VK_IMAGE_TILING_OPTIMAL
+            usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+            sharing_mode = VK_SHARING_MODE_EXCLUSIVE
+            queuefamily_index_count = 0
+            queuefamily_indices = null
+            initial_layout = VK_IMAGE_LAYOUT_UNDEFINED
+        let image_ptr: *edit VkImage = #unsafe &raw edit image
+        let image_info_ptr: *read VkImageCreateInfo = #unsafe &raw read image_info
+        let image_result = #unsafe self.create_image :: self.device, image_info_ptr, null, image_ptr :: call
+        select:
+            when image_result != VK_SUCCESS || image == 0U64 =>
+                let error = VulkanPresentError.TransferDestinationImageCreateFailed :: image_result :: call
+                return Result.Err :: error :: call
+            else => ()
+
+        let allocation_info = VkMemoryAllocateInfo :: :: call
+            stype = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO
+            pnext = null
+            allocation_size = plan.requirements.size
+            memory_type_index = plan.allocation_plan.memory_type_index
+        let allocation_info_ptr: *read VkMemoryAllocateInfo = #unsafe &raw read allocation_info
+        let memory_ptr: *edit VkDeviceMemory = #unsafe &raw edit memory
+        let allocate_result = #unsafe self.allocate_memory :: self.device, allocation_info_ptr, null, memory_ptr :: call
+        select:
+            when allocate_result != VK_SUCCESS || memory == 0U64 =>
+                select:
+                    when image != 0U64 => #unsafe self.destroy_image :: self.device, image, null :: call
+                    else => ()
+                let error = VulkanPresentError.TransferDestinationImageMemoryAllocateFailed :: allocate_result :: call
+                return Result.Err :: error :: call
+            else => ()
+
+        let bind_result = #unsafe self.bind_image_memory :: self.device, image, memory, 0U64 :: call
+        select:
+            when bind_result != VK_SUCCESS =>
+                select:
+                    when image != 0U64 => #unsafe self.destroy_image :: self.device, image, null :: call
+                    else => ()
+                select:
+                    when memory != 0U64 => #unsafe self.free_memory :: self.device, memory, null :: call
+                    else => ()
+                let error = VulkanPresentError.TransferDestinationImageBindFailed :: bind_result :: call
+                return Result.Err :: error :: call
+            else => ()
+
+        let resource = VulkanSurfaceTransferDestinationImage :: :: call
+            image = image
+            memory = memory
+            plan = plan
+            layout = VK_IMAGE_LAYOUT_UNDEFINED
+        return Result.Ok :: resource :: call
+
+    fn destroy_surface_transfer_destination_image(read self, take image: VulkanSurfaceTransferDestinationImage) -> Unit:
+        select:
+            when image.image != 0U64 => #unsafe self.destroy_image :: self.device, image.image, null :: call
+            else => ()
+        select:
+            when image.memory != 0U64 => #unsafe self.free_memory :: self.device, image.memory, null :: call
+            else => ()
+        return
+
+    fn copy_transfer_source_buffer_to_surface_transfer_destination_image_raw(edit self, read upload: VulkanTransferSourceBuffer, edit image: VulkanSurfaceTransferDestinationImage) -> Result[Unit, VulkanPresentError]:
+        select surface_image_shape_from_extent :: image.plan.extent :: call:
+            when Result.Ok(shape) =>
+                select:
+                    when upload.byte_count != shape.rgba_byte_count =>
+                        let error = VulkanPresentError.PixelByteCountMismatch :: upload.byte_count, shape.rgba_byte_count :: call
+                        return Result.Err :: error :: call
+                    else => ()
+            when Result.Err(err) => return Result.Err :: err :: call
+        select acquire_recording_command_resources :: self :: call:
+            when Result.Ok(resources) =>
+                select:
+                    when image.layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL =>
+                        let before_barrier = VkImageMemoryBarrier :: :: call
+                            stype = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
+                            pnext = null
+                            src_access_mask = 0
+                            dst_access_mask = VK_ACCESS_TRANSFER_WRITE_BIT
+                            old_layout = VK_IMAGE_LAYOUT_UNDEFINED
+                            new_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+                            src_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
+                            dst_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
+                            image = image.image
+                            subresource_range = CLEAR_RANGE
+                        let before_stage: CUInt = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+                        select:
+                            when image.layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL =>
+                                before_barrier.src_access_mask = VK_ACCESS_TRANSFER_READ_BIT
+                                before_barrier.old_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                                before_stage = VK_PIPELINE_STAGE_TRANSFER_BIT
+                            else => ()
+                        let before_barrier_ptr: *read VkImageMemoryBarrier = #unsafe &raw read before_barrier
+                        #unsafe self.cmd_pipeline_barrier :: resources.command_buffer, before_stage, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, null, 0, null, 1, before_barrier_ptr :: call
+                    else => ()
+                let copy_extent = VkExtent3D :: :: call
+                    width = image.plan.extent.width
+                    height = image.plan.extent.height
+                    depth = 1
+                let copy_region = VkBufferImageCopy :: :: call
+                    buffer_offset = 0U64
+                    buffer_row_length = 0
+                    buffer_image_height = 0
+                    image_subresource = IMAGE_COPY_SUBRESOURCE
+                    image_offset = ZERO_OFFSET3D
+                    image_extent = copy_extent
+                let copy_region_ptr: *read VkBufferImageCopy = #unsafe &raw read copy_region
+                #unsafe self.cmd_copy_buffer_to_image :: resources.command_buffer, upload.buffer, image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, copy_region_ptr :: call
+                select finish_recording_command_resources_sync :: self, resources :: call:
+                    when Result.Ok(_) =>
+                        image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+                        return Result.Ok :: () :: call
+                    when Result.Err(err) => return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn copy_transfer_source_buffer_to_surface_transfer_destination_image(edit self, read upload: VulkanTransferSourceBuffer, edit image: VulkanSurfaceTransferDestinationImage) -> Result[Unit, VulkanPresentError]:
+        return self.copy_transfer_source_buffer_to_surface_transfer_destination_image_raw :: upload, image :: method
+
+    fn write_surface_transfer_destination_image(edit self, edit image: VulkanSurfaceTransferDestinationImage, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+        select either:
+            when upload: Result.Ok(upload) <- self.surface_transfer_source_buffer :: pixels :: method
+            when copied: Result.Ok(_) <- self.copy_transfer_source_buffer_to_surface_transfer_destination_image :: upload, image :: method =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Ok :: :: call
+
+        with Result.Err(err):
+            upload => return Result.Err :: err :: call
+            copied =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Err :: err :: call
+
+    fn write_surface_transfer_destination_image_from_pixel_frame(edit self, edit image: VulkanSurfaceTransferDestinationImage, read frame: VulkanPixelFrame) -> Result[Unit, VulkanPresentError]:
+        select either:
+            when upload: Result.Ok(upload) <- self.surface_transfer_source_buffer_from_pixel_frame :: frame :: method
+            when copied: Result.Ok(_) <- self.copy_transfer_source_buffer_to_surface_transfer_destination_image :: upload, image :: method =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Ok :: :: call
+
+        with Result.Err(err):
+            upload => return Result.Err :: err :: call
+            copied =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Err :: err :: call
+
+    fn write_surface_transfer_destination_image_from_image(edit self, edit image: VulkanSurfaceTransferDestinationImage, read source: RgbaImage) -> Result[Unit, VulkanPresentError]:
+        select either:
+            when upload: Result.Ok(upload) <- self.surface_transfer_source_buffer_from_image :: source :: method
+            when copied: Result.Ok(_) <- self.copy_transfer_source_buffer_to_surface_transfer_destination_image :: upload, image :: method =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Ok :: :: call
+
+        with Result.Err(err):
+            upload => return Result.Err :: err :: call
+            copied =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Err :: err :: call
+
+    fn surface_transfer_destination_image_from_transfer_source_buffer(edit self, read upload: VulkanTransferSourceBuffer) -> Result[VulkanSurfaceTransferDestinationImage, VulkanPresentError]:
+        select either:
+            when image: Result.Ok(image) <- self.surface_transfer_destination_image :: :: method
+            when copied: Result.Ok(_) <- self.copy_transfer_source_buffer_to_surface_transfer_destination_image :: upload, image :: method =>
+                return Result.Ok :: image :: call
+
+        with Result.Err(err):
+            image => return Result.Err :: err :: call
+            copied =>
+                self.destroy_surface_transfer_destination_image :: image :: method
+                return Result.Err :: err :: call
+
+    fn copy_surface_transfer_destination_image_to_transfer_source_buffer_raw(read self, edit image: VulkanSurfaceTransferDestinationImage, read upload: VulkanTransferSourceBuffer) -> Result[Unit, VulkanPresentError]:
+        select:
+            when image.layout == VK_IMAGE_LAYOUT_UNDEFINED =>
+                let error = VulkanPresentError.TransferDestinationImageUninitialized :: :: call
+                return Result.Err :: error :: call
+            else => ()
+        select surface_image_shape_from_extent :: image.plan.extent :: call:
+            when Result.Ok(shape) =>
+                select:
+                    when upload.byte_count != shape.rgba_byte_count =>
+                        let error = VulkanPresentError.PixelByteCountMismatch :: upload.byte_count, shape.rgba_byte_count :: call
+                        return Result.Err :: error :: call
+                    else => ()
+            when Result.Err(err) => return Result.Err :: err :: call
+        select acquire_recording_command_resources :: self :: call:
+            when Result.Ok(resources) =>
+                select:
+                    when image.layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL =>
+                        let source_barrier = VkImageMemoryBarrier :: :: call
+                            stype = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
+                            pnext = null
+                            src_access_mask = 0
+                            dst_access_mask = VK_ACCESS_TRANSFER_READ_BIT
+                            old_layout = VK_IMAGE_LAYOUT_UNDEFINED
+                            new_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                            src_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
+                            dst_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
+                            image = image.image
+                            subresource_range = CLEAR_RANGE
+                        let source_stage: CUInt = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+                        select:
+                            when image.layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL =>
+                                source_barrier.src_access_mask = VK_ACCESS_TRANSFER_WRITE_BIT
+                                source_barrier.old_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+                                source_stage = VK_PIPELINE_STAGE_TRANSFER_BIT
+                            else => ()
+                        let source_barrier_ptr: *read VkImageMemoryBarrier = #unsafe &raw read source_barrier
+                        #unsafe self.cmd_pipeline_barrier :: resources.command_buffer, source_stage, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, null, 0, null, 1, source_barrier_ptr :: call
+                    else => ()
+                let copy_region = VkBufferImageCopy :: :: call
+                    buffer_offset = 0U64
+                    buffer_row_length = 0
+                    buffer_image_height = 0
+                    image_subresource = IMAGE_COPY_SUBRESOURCE
+                    image_offset = ZERO_OFFSET3D
+                    image_extent = VkExtent3D :: :: call
+                        width = image.plan.extent.width
+                        height = image.plan.extent.height
+                        depth = 1
+                let copy_region_ptr: *read VkBufferImageCopy = #unsafe &raw read copy_region
+                #unsafe self.cmd_copy_image_to_buffer :: resources.command_buffer, image.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, upload.buffer, 1, copy_region_ptr :: call
+                select finish_recording_command_resources_sync :: self, resources :: call:
+                    when Result.Ok(_) =>
+                        image.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                        return Result.Ok :: () :: call
+                    when Result.Err(err) => return Result.Err :: err :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn copy_surface_transfer_destination_image_to_transfer_source_buffer(read self, edit image: VulkanSurfaceTransferDestinationImage, read upload: VulkanTransferSourceBuffer) -> Result[Unit, VulkanPresentError]:
+        return self.copy_surface_transfer_destination_image_to_transfer_source_buffer_raw :: image, upload :: method
+
+    fn surface_transfer_destination_image_to_transfer_source_buffer(read self, edit image: VulkanSurfaceTransferDestinationImage) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+        select either:
+            when upload: Result.Ok(upload) <- self.surface_transfer_source_buffer_empty :: :: method
+            when copied: Result.Ok(_) <- self.copy_surface_transfer_destination_image_to_transfer_source_buffer :: image, upload :: method =>
+                return Result.Ok :: upload :: call
+
+        with Result.Err(err):
+            upload => return Result.Err :: err :: call
+            copied =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Err :: err :: call
+
+    fn surface_transfer_destination_image_surface_bytes(read self, edit image: VulkanSurfaceTransferDestinationImage) -> Result[ByteBuffer, VulkanPresentError]:
+        select either:
+            when upload: Result.Ok(upload) <- self.surface_transfer_destination_image_to_transfer_source_buffer :: image :: method
+            when surface_bytes: Result.Ok(surface_bytes) <- self.transfer_source_buffer_bytes :: upload :: method =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Ok :: surface_bytes :: call
+
+        with Result.Err(err):
+            upload => return Result.Err :: err :: call
+            surface_bytes =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Err :: err :: call
+
+    fn surface_transfer_destination_image_pixel_frame(read self, edit image: VulkanSurfaceTransferDestinationImage) -> Result[VulkanPixelFrame, VulkanPresentError]:
+        select either:
+            when surface_bytes: Result.Ok(surface_bytes) <- self.surface_transfer_destination_image_surface_bytes :: image :: method
+            when frame: Result.Ok(frame) <- self.surface_pixel_frame_from_surface_bytes :: surface_bytes :: method =>
+                return Result.Ok :: frame :: call
+
+        with Result.Err(err):
+            surface_bytes => return Result.Err :: err :: call
+            frame => return Result.Err :: err :: call
+
+    fn surface_transfer_destination_image_image(read self, edit image: VulkanSurfaceTransferDestinationImage) -> Result[RgbaImage, VulkanPresentError]:
+        select either:
+            when upload: Result.Ok(upload) <- self.surface_transfer_destination_image_to_transfer_source_buffer :: image :: method
+            when roundtrip_image: Result.Ok(roundtrip_image) <- self.surface_transfer_source_buffer_image :: upload :: method =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Ok :: roundtrip_image :: call
+
+        with Result.Err(err):
+            upload => return Result.Err :: err :: call
+            roundtrip_image =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Err :: err :: call
+
+    fn present_surface_transfer_destination_image_raw(edit self, edit image: VulkanSurfaceTransferDestinationImage) -> Result[Unit, VulkanPresentError]:
+        select:
+            when image.layout == VK_IMAGE_LAYOUT_UNDEFINED =>
+                let error = VulkanPresentError.TransferDestinationImageUninitialized :: :: call
+                return Result.Err :: error :: call
+            else => ()
+        let request = PresentSurfaceCopyImageRequest :: :: call
+            image = image.image
+            source_layout = image.layout
+            source_width = image.plan.extent.width
+            source_height = image.plan.extent.height
+            source_format = image.plan.surface_format.format
+        select present_surface_copy_image_raw :: self, request :: call:
+            when Result.Ok(_) =>
+                image.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                return Result.Ok :: () :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn present_surface_transfer_destination_image(edit self, edit image: VulkanSurfaceTransferDestinationImage) -> Result[Unit, VulkanPresentError]:
+        return self.present_surface_transfer_destination_image_raw :: image :: method
+
+    fn surface_transfer_destination_image_from_pixels(edit self, take pixels: ByteBuffer) -> Result[VulkanSurfaceTransferDestinationImage, VulkanPresentError]:
+        select either:
+            when upload: Result.Ok(upload) <- self.surface_transfer_source_buffer :: pixels :: method
+            when image: Result.Ok(image) <- self.surface_transfer_destination_image_from_transfer_source_buffer :: upload :: method =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Ok :: image :: call
+
+        with Result.Err(err):
+            upload => return Result.Err :: err :: call
+            image =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Err :: err :: call
+
+    fn surface_transfer_destination_image_from_pixel_frame(edit self, read frame: VulkanPixelFrame) -> Result[VulkanSurfaceTransferDestinationImage, VulkanPresentError]:
+        select either:
+            when upload: Result.Ok(upload) <- self.surface_transfer_source_buffer_from_pixel_frame :: frame :: method
+            when image: Result.Ok(image) <- self.surface_transfer_destination_image_from_transfer_source_buffer :: upload :: method =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Ok :: image :: call
+
+        with Result.Err(err):
+            upload => return Result.Err :: err :: call
+            image =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Err :: err :: call
+
+    fn surface_transfer_destination_image_from_image(edit self, read image: RgbaImage) -> Result[VulkanSurfaceTransferDestinationImage, VulkanPresentError]:
+        select either:
+            when upload: Result.Ok(upload) <- self.surface_transfer_source_buffer_from_image :: image :: method
+            when destination: Result.Ok(destination) <- self.surface_transfer_destination_image_from_transfer_source_buffer :: upload :: method =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Ok :: destination :: call
+
+        with Result.Err(err):
+            upload => return Result.Err :: err :: call
+            destination =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Err :: err :: call
+
+impl VulkanPresentApp:
+    fn surface_transfer_destination_image_requirements(read self) -> Result[VkMemoryRequirements, VulkanPresentError]:
+        return self.context.surface_transfer_destination_image_requirements :: :: method
+
+    fn surface_transfer_destination_image_plan(read self) -> Result[VulkanSurfaceTransferDestinationImagePlan, VulkanPresentError]:
+        return self.context.surface_transfer_destination_image_plan :: :: method
+
+    fn surface_transfer_destination_image(read self) -> Result[VulkanSurfaceTransferDestinationImage, VulkanPresentError]:
+        return self.context.surface_transfer_destination_image :: :: method
+
+    fn surface_transfer_destination_image_from_plan(read self, read plan: VulkanSurfaceTransferDestinationImagePlan) -> Result[VulkanSurfaceTransferDestinationImage, VulkanPresentError]:
+        return self.context.surface_transfer_destination_image_from_plan :: plan :: method
+
+    fn copy_transfer_source_buffer_to_surface_transfer_destination_image(edit self, read upload: VulkanTransferSourceBuffer, edit image: VulkanSurfaceTransferDestinationImage) -> Result[Unit, VulkanPresentError]:
+        return self.context.copy_transfer_source_buffer_to_surface_transfer_destination_image :: upload, image :: method
+
+    fn write_surface_transfer_destination_image(edit self, edit image: VulkanSurfaceTransferDestinationImage, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
+        return self.context.write_surface_transfer_destination_image :: image, pixels :: method
+
+    fn write_surface_transfer_destination_image_from_pixel_frame(edit self, edit image: VulkanSurfaceTransferDestinationImage, read frame: VulkanPixelFrame) -> Result[Unit, VulkanPresentError]:
+        return self.context.write_surface_transfer_destination_image_from_pixel_frame :: image, frame :: method
+
+    fn write_surface_transfer_destination_image_from_image(edit self, edit image: VulkanSurfaceTransferDestinationImage, read source: RgbaImage) -> Result[Unit, VulkanPresentError]:
+        return self.context.write_surface_transfer_destination_image_from_image :: image, source :: method
+
+    fn surface_transfer_destination_image_from_transfer_source_buffer(edit self, read upload: VulkanTransferSourceBuffer) -> Result[VulkanSurfaceTransferDestinationImage, VulkanPresentError]:
+        return self.context.surface_transfer_destination_image_from_transfer_source_buffer :: upload :: method
+
+    fn copy_surface_transfer_destination_image_to_transfer_source_buffer(read self, edit image: VulkanSurfaceTransferDestinationImage, read upload: VulkanTransferSourceBuffer) -> Result[Unit, VulkanPresentError]:
+        return self.context.copy_surface_transfer_destination_image_to_transfer_source_buffer :: image, upload :: method
+
+    fn surface_transfer_destination_image_to_transfer_source_buffer(read self, edit image: VulkanSurfaceTransferDestinationImage) -> Result[VulkanTransferSourceBuffer, VulkanPresentError]:
+        return self.context.surface_transfer_destination_image_to_transfer_source_buffer :: image :: method
+
+    fn surface_transfer_destination_image_surface_bytes(read self, edit image: VulkanSurfaceTransferDestinationImage) -> Result[ByteBuffer, VulkanPresentError]:
+        return self.context.surface_transfer_destination_image_surface_bytes :: image :: method
+
+    fn surface_transfer_destination_image_pixel_frame(read self, edit image: VulkanSurfaceTransferDestinationImage) -> Result[VulkanPixelFrame, VulkanPresentError]:
+        return self.context.surface_transfer_destination_image_pixel_frame :: image :: method
+
+    fn surface_transfer_destination_image_image(read self, edit image: VulkanSurfaceTransferDestinationImage) -> Result[RgbaImage, VulkanPresentError]:
+        return self.context.surface_transfer_destination_image_image :: image :: method
+
+    fn present_surface_transfer_destination_image(edit self, edit image: VulkanSurfaceTransferDestinationImage) -> Result[Unit, VulkanPresentError]:
+        return self.context.present_surface_transfer_destination_image :: image :: method
+
+    fn surface_transfer_destination_image_from_pixels(edit self, take pixels: ByteBuffer) -> Result[VulkanSurfaceTransferDestinationImage, VulkanPresentError]:
+        return self.context.surface_transfer_destination_image_from_pixels :: pixels :: method
+
+    fn surface_transfer_destination_image_from_pixel_frame(edit self, read frame: VulkanPixelFrame) -> Result[VulkanSurfaceTransferDestinationImage, VulkanPresentError]:
+        return self.context.surface_transfer_destination_image_from_pixel_frame :: frame :: method
+
+    fn surface_transfer_destination_image_from_image(edit self, read image: RgbaImage) -> Result[VulkanSurfaceTransferDestinationImage, VulkanPresentError]:
+        return self.context.surface_transfer_destination_image_from_image :: image :: method
+
+    fn destroy_surface_transfer_destination_image(read self, take image: VulkanSurfaceTransferDestinationImage) -> Unit:
+        self.context.destroy_surface_transfer_destination_image :: image :: method
+        return
+

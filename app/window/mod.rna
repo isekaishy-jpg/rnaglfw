@@ -2,18 +2,38 @@ use std.{ByteBuffer, List, Option, Result, Str}
 use bridge.{TextDecodeError, bool_to_cint, maybe_c_string}
 use bridge.index_to_cint
 use bridge.copy_c_string
+use mailbox.request_window_refresh
+use win32_window_appearance_support.{current_window_border_color, current_window_corner_preference}
+use win32_window_appearance_support.{current_window_system_backdrop, current_window_title_background_color}
+use win32_window_appearance_support.{current_window_title_text_color, current_window_undecorated_shadow}
+use win32_ime_support.{current_window_ime_allowed, current_window_ime_cursor_area}
+use win32_ime_support.{set_window_ime_allowed, set_window_ime_cursor_area}
+use win32_theme_support.{current_window_theme, set_window_theme}
+use win32_window_appearance_support.{set_window_border_color, set_window_corner_preference}
+use win32_window_appearance_support.{set_window_system_backdrop, set_window_title_background_color}
+use win32_window_appearance_support.{set_window_title_text_color, set_window_undecorated_shadow}
+use win32_window_control_support.{current_window_buttons, current_window_content_protected}
+use win32_window_control_support.{current_window_enabled, current_window_skip_taskbar}
+use win32_window_control_support.current_window_level
+use win32_window_control_support.current_window_resize_increments
+use win32_window_control_support.{drag_resize_window_interaction, set_window_content_protected}
+use win32_window_control_support.{drag_window_interaction, set_window_buttons}
+use win32_window_control_support.set_window_resize_increments
+use win32_window_control_support.{set_window_enabled, set_window_skip_taskbar}
+use win32_window_control_support.{set_window_level, sync_window_level_for_floating}
+use win32_window_control_support.{request_window_attention, show_window_system_menu}
 use glfw.{GlfwCursor, GlfwCursorPos, GlfwFrameSize, GlfwGammaRamp, GlfwImage}
 use glfw.{GlfwMonitor, GlfwRect}
 use glfw.{GlfwMonitorRaw, GlfwPoint, GlfwScale, GlfwSize, GlfwVideoMode}
 use glfw.{GlfwWin32HWnd, GlfwWindow, GlfwWindowMonitorSpec, GlfwWindowRaw}
 use glfw.{glfw_create_cursor, glfw_image}
 use glfw.{glfw_create_standard_cursor, glfw_cursor_none, glfw_monitor_none}
+use glfw.{glfw_monitors, glfw_post_empty_event}
 use glfw.{glfw_monitor_raw_handle, glfw_window_raw_handle}
 use input.{InputAction, KeyCode, MouseButton, ScanCode}
 use input.{input_action_from_raw, key_from_raw, key_raw, key_scancode}
 use input.{mouse_button_from_raw, mouse_button_raw}
 use glfw.{glfw_primary_monitor, glfw_raw_mouse_motion_supported, glfw_swap_interval}
-
 pub type WindowId = USize
 pub type Point = GlfwPoint
 pub type Size = GlfwSize
@@ -26,13 +46,32 @@ pub type VideoMode = GlfwVideoMode
 pub type Win32HWnd = GlfwWin32HWnd
 pub type WindowMonitorSpec = GlfwWindowMonitorSpec
 const POINTER_OFFSET_STEP: ISize = 1
-
 pub enum CursorMode:
     Normal
     Hidden
     Disabled
     Captured
-
+pub enum Theme:
+    Light
+    Dark
+pub enum WindowLevel:
+    Normal
+    AlwaysOnTop
+    AlwaysOnBottom
+pub enum WindowSystemBackdrop:
+    Auto
+    None
+    MainWindow
+    TransientWindow
+    TabbedWindow
+pub enum WindowCornerPreference:
+    Default
+    DoNotRound
+    Round
+    RoundSmall
+pub enum UserAttentionType:
+    Critical
+    Informational
 pub enum StandardCursor:
     Arrow
     IBeam
@@ -44,86 +83,108 @@ pub enum StandardCursor:
     ResizeNESW
     ResizeAll
     NotAllowed
-
 pub enum ClientApi:
     None
     OpenGl
     OpenGlEs
     Unknown(CInt)
-
 pub enum OpenGlProfile:
     Any
     Core
     Compat
     Unknown(CInt)
-
 pub enum ContextCreationApi:
     Native
     Egl
     OsMesa
     Unknown(CInt)
-
 pub enum WindowModeError:
     MissingVideoMode
     SizeOutOfRange
-
 pub enum MonitorGammaRampError:
     Empty
     ChannelLengthMismatch
     ChannelCountOutOfRange
-
 pub enum RgbaImageError:
     ZeroSize
     SizeOutOfRange
     PixelCountMismatch
     CoordOutOfRange(Index, Index, CInt, CInt)
     RectZeroSize
-
 pub enum WindowIconError:
     CountOutOfRange
-
+pub enum WindowControlError:
+    NativeWindowUnavailable
+    SystemMenuUnavailable
+    StyleQueryFailed
+    StyleUpdateFailed
+    ExStyleQueryFailed
+    ExStyleUpdateFailed
+    WindowLevelUpdateFailed
+    ContentProtectionQueryFailed
+    ContentProtectionUpdateFailed
+    ScreenPositionFailed
+    SystemCommandDispatchFailed
+    MenuShowFailed
+    AttentionRequestFailed
+pub enum WindowThemeError:
+    NativeWindowUnavailable
+    ThemeUpdateFailed
+pub enum WindowAppearanceError:
+    NativeWindowUnavailable
+    UndecoratedShadowUpdateFailed
+    SystemBackdropUpdateFailed
+    BorderColorUpdateFailed
+    TitleBackgroundColorUpdateFailed
+    TitleTextColorUpdateFailed
+    CornerPreferenceUpdateFailed
 pub struct RgbaColor:
     pub red: U8
     pub green: U8
     pub blue: U8
     pub alpha: U8
-
+pub struct WindowButtons:
+    pub close: Bool
+    pub minimize: Bool
+    pub maximize: Bool
+pub enum WindowResizeDirection:
+    West
+    East
+    North
+    South
+    NorthWest
+    NorthEast
+    SouthWest
+    SouthEast
 pub struct MonitorGammaRamp:
     pub red: List[CUShort]
     pub green: List[CUShort]
     pub blue: List[CUShort]
-
 pub struct WindowPlacement:
     pub pos: Point
     pub size: Size
-
 pub struct WindowSizeLimits:
     pub min_width: CInt
     pub min_height: CInt
     pub max_width: CInt
     pub max_height: CInt
-
 pub struct WindowAspectRatio:
     pub numerator: CInt
     pub denominator: CInt
-
 pub struct RgbaImage:
     pub(package) width: CInt
     pub(package) height: CInt
     pub(package) pixels: ByteBuffer
-
 struct CheckedRgbaRect:
     start_x: CInt
     start_y: CInt
     width: CInt
     height: CInt
-
 struct BlendFactors:
     dest_alpha: USize
     source_alpha: USize
     inv_source_alpha: USize
     out_alpha: USize
-
 pub struct WindowSpec:
     pub title: Str
     pub width: Index
@@ -139,13 +200,23 @@ pub struct WindowSpec:
     pub auto_iconify: Bool
     pub floating: Bool
     pub maximized: Bool
+    pub window_level: WindowLevel
+    pub resize_increment_width: CInt
+    pub resize_increment_height: CInt
     pub center_cursor: Bool
     pub transparent_framebuffer: Bool
     pub focus_on_show: Bool
     pub mouse_passthrough: Bool
     pub scale_to_monitor: Bool
+    pub win32_skip_taskbar: Bool
     pub win32_keyboard_menu: Bool
     pub win32_showdefault: Bool
+    pub win32_undecorated_shadow: Bool
+    pub win32_system_backdrop: WindowSystemBackdrop
+    pub win32_border_color: Option[RgbaColor]
+    pub win32_title_background_color: Option[RgbaColor]
+    pub win32_title_text_color: Option[RgbaColor]
+    pub win32_corner_preference: WindowCornerPreference
     pub cocoa_frame_name: Option[Str]
     pub x11_class_name: Option[Str]
     pub x11_instance_name: Option[Str]
@@ -168,17 +239,14 @@ pub struct WindowSpec:
     pub context_no_error: Bool
     pub srgb_capable: Bool
     pub doublebuffer: Bool
-
 pub struct Window:
     pub(package) raw: GlfwWindow
     pub id: WindowId
-
 pub struct KeyboardInputSnapshot:
     pub keys_down: List[KeyCode]
     pub repeating_keys: List[KeyCode]
     pub sticky_keys_enabled: Bool
     pub lock_key_mods_enabled: Bool
-
 pub struct MouseInputSnapshot:
     pub cursor_pos: CursorPos
     pub buttons_down: List[MouseButton]
@@ -186,16 +254,13 @@ pub struct MouseInputSnapshot:
     pub sticky_mouse_buttons_enabled: Bool
     pub raw_mouse_motion_supported: Bool
     pub raw_mouse_motion_enabled: Bool
-
 pub struct WindowInputSnapshot:
     pub keyboard: KeyboardInputSnapshot
     pub mouse: MouseInputSnapshot
-
 const FIRST_KEY_RAW: CInt = 32
 const LAST_KEY_RAW: CInt = 348
 const FIRST_MOUSE_BUTTON_RAW: CInt = 0
 const LAST_MOUSE_BUTTON_RAW: CInt = 7
-
 fn gamma_channel_slot_at(base: *edit CUShort, index: CUInt) -> *edit CUShort:
     let slot: *edit CUShort = base
     let scan: CUInt = 0
@@ -203,7 +268,6 @@ fn gamma_channel_slot_at(base: *edit CUShort, index: CUInt) -> *edit CUShort:
         slot = #unsafe slot.offset :: POINTER_OFFSET_STEP :: method
         scan = scan + 1
     return slot
-
 fn copy_gamma_channel(base: *edit CUShort, count: CUInt) -> List[CUShort]:
     let values = List[CUShort] :: :: call
     select:
@@ -216,7 +280,6 @@ fn copy_gamma_channel(base: *edit CUShort, count: CUInt) -> List[CUShort]:
         values.push :: value :: method
         scan = scan + 1
     return values
-
 fn gamma_ramp_channel_count(read ramp: MonitorGammaRamp) -> Result[CUInt, MonitorGammaRampError]:
     let red_count = ramp.red.count :: :: method
     let green_count = ramp.green.count :: :: method
@@ -228,13 +291,11 @@ fn gamma_ramp_channel_count(read ramp: MonitorGammaRamp) -> Result[CUInt, Monito
         else => ()
     let Result.Ok(count) = red_count as Maybe[CUInt] else => return Result.Err :: MonitorGammaRampError.ChannelCountOutOfRange :: call
     return Result.Ok :: count :: call
-
 fn known_key_code(raw: CInt) -> Option[KeyCode]:
     let key = key_from_raw :: raw :: call
     select key:
         when KeyCode.Unknown(_) => return Option.None
         when _ => return Option.Some :: key :: call
-
 fn key_code_list_contains(read values: List[KeyCode], read key: KeyCode) -> Bool:
     let count = values.count :: :: method
     let Result.Ok(limit) = index_to_cint :: count :: call else => return false
@@ -248,7 +309,6 @@ fn key_code_list_contains(read values: List[KeyCode], read key: KeyCode) -> Bool
             when current_raw == target_raw => return true
             else => scan = scan + 1
     return false
-
 fn mouse_button_list_contains(read values: List[MouseButton], read button: MouseButton) -> Bool:
     let count = values.count :: :: method
     let Result.Ok(limit) = index_to_cint :: count :: call else => return false
@@ -262,13 +322,11 @@ fn mouse_button_list_contains(read values: List[MouseButton], read button: Mouse
             when current_raw == target_raw => return true
             else => scan = scan + 1
     return false
-
 fn rgba_expected_byte_count(raw_width: CInt, raw_height: CInt) -> Result[Index, RgbaImageError]:
     let raw_pixel_count: CInt = raw_width * raw_height
     let raw_byte_count: CInt = raw_pixel_count * 4
     let Result.Ok(expected) = raw_byte_count as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
     return Result.Ok :: expected :: call
-
 fn rgba_checked_offset(read image: RgbaImage, x: Index, y: Index) -> Result[Index, RgbaImageError]:
     let Result.Ok(raw_x) = index_to_cint :: x :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
     let Result.Ok(raw_y) = index_to_cint :: y :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
@@ -280,13 +338,11 @@ fn rgba_checked_offset(read image: RgbaImage, x: Index, y: Index) -> Result[Inde
     let raw_offset: CInt = ((raw_y * image.width) + raw_x) * 4
     let Result.Ok(offset) = raw_offset as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
     return Result.Ok :: offset :: call
-
 fn rgba_channel_index(offset: Index, delta: USize) -> Result[Index, RgbaImageError]:
     let Result.Ok(offset_wide) = offset as Maybe[USize] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
     let target_wide: USize = offset_wide + delta
     let Result.Ok(target) = target_wide as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
     return Result.Ok :: target :: call
-
 fn rgba_checked_rect(read image: RgbaImage, x: Index, y: Index, width: Index, height: Index) -> Result[CheckedRgbaRect, RgbaImageError]:
     select:
         when width == 0 || height == 0 => return Result.Err :: RgbaImageError.RectZeroSize :: call
@@ -311,7 +367,6 @@ fn rgba_checked_rect(read image: RgbaImage, x: Index, y: Index, width: Index, he
         else => ()
     let rect = CheckedRgbaRect :: raw_x, raw_y, raw_width, raw_height :: call
     return Result.Ok :: rect :: call
-
 fn copy_rgba_bytes(read source: ByteBuffer) -> Result[ByteBuffer, RgbaImageError]:
     let count = source.byte_count :: :: method
     let copied = ByteBuffer :: :: call
@@ -324,7 +379,6 @@ fn copy_rgba_bytes(read source: ByteBuffer) -> Result[ByteBuffer, RgbaImageError
         copied.push :: value :: method
         scan = scan + 1USize
     return Result.Ok :: copied :: call
-
 pub fn rgba_image(width: Index, height: Index, take pixels: ByteBuffer) -> Result[RgbaImage, RgbaImageError]:
     select:
         when width == 0 => return Result.Err :: RgbaImageError.ZeroSize :: call
@@ -342,22 +396,66 @@ pub fn rgba_image(width: Index, height: Index, take pixels: ByteBuffer) -> Resul
         height = raw_height
         pixels = pixels
     return Result.Ok :: image :: call
-
 pub fn rgba_color(red: U8, green: U8, blue: U8, alpha: U8) -> RgbaColor:
     return RgbaColor :: :: call
         red = red
         green = green
         blue = blue
         alpha = alpha
-
+pub fn theme_from_raw(raw: CInt) -> Theme:
+    select:
+        when raw == 0 => return Theme.Dark
+        else => return Theme.Light
+pub fn theme_raw(read theme: Theme) -> CInt:
+    select theme:
+        when Theme.Light => return 1
+        when Theme.Dark => return 0
+    return 0
+pub fn window_level_from_raw(raw: CInt) -> WindowLevel:
+    select:
+        when raw == 1 => return WindowLevel.AlwaysOnTop
+        when raw == 2 => return WindowLevel.AlwaysOnBottom
+        else => return WindowLevel.Normal
+pub fn window_level_raw(read level: WindowLevel) -> CInt:
+    select level:
+        when WindowLevel.Normal => return 0
+        when WindowLevel.AlwaysOnTop => return 1
+        when WindowLevel.AlwaysOnBottom => return 2
+    return 0
+pub fn window_system_backdrop_from_raw(raw: CInt) -> WindowSystemBackdrop:
+    select:
+        when raw == 1 => return WindowSystemBackdrop.None
+        when raw == 2 => return WindowSystemBackdrop.MainWindow
+        when raw == 3 => return WindowSystemBackdrop.TransientWindow
+        when raw == 4 => return WindowSystemBackdrop.TabbedWindow
+        else => return WindowSystemBackdrop.Auto
+pub fn window_system_backdrop_raw(read backdrop: WindowSystemBackdrop) -> CInt:
+    select backdrop:
+        when WindowSystemBackdrop.Auto => return 0
+        when WindowSystemBackdrop.None => return 1
+        when WindowSystemBackdrop.MainWindow => return 2
+        when WindowSystemBackdrop.TransientWindow => return 3
+        when WindowSystemBackdrop.TabbedWindow => return 4
+    return 0
+pub fn window_corner_preference_from_raw(raw: CInt) -> WindowCornerPreference:
+    select:
+        when raw == 1 => return WindowCornerPreference.DoNotRound
+        when raw == 2 => return WindowCornerPreference.Round
+        when raw == 3 => return WindowCornerPreference.RoundSmall
+        else => return WindowCornerPreference.Default
+pub fn window_corner_preference_raw(read preference: WindowCornerPreference) -> CInt:
+    select preference:
+        when WindowCornerPreference.Default => return 0
+        when WindowCornerPreference.DoNotRound => return 1
+        when WindowCornerPreference.Round => return 2
+        when WindowCornerPreference.RoundSmall => return 3
+    return 0
 fn rgba_widen_channel(value: U8) -> Result[USize, RgbaImageError]:
     let Result.Ok(widened) = value as Maybe[USize] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
     return Result.Ok :: widened :: call
-
 fn rgba_narrow_channel(value: USize) -> Result[U8, RgbaImageError]:
     let Result.Ok(narrowed) = value as Maybe[U8] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
     return Result.Ok :: narrowed :: call
-
 fn rgba_blend_channel(dest: U8, source: U8, read factors: BlendFactors) -> Result[U8, RgbaImageError]:
     select:
         when factors.out_alpha == 0USize => return Result.Ok :: 0U8 :: call
@@ -369,20 +467,17 @@ fn rgba_blend_channel(dest: U8, source: U8, read factors: BlendFactors) -> Resul
     let out_premul: USize = source_premul + dest_premul
     let out_value: USize = (out_premul + (factors.out_alpha / 2USize)) / factors.out_alpha
     return rgba_narrow_channel :: out_value :: call
-
 fn rgba_abs_delta(value: CInt) -> CInt:
     select:
         when value < 0 => return 0 - value
         else => return value
     return value
-
 fn rgba_step_direction(start: CInt, end: CInt) -> CInt:
     select:
         when start < end => return 1
         when start > end => return -1
         else => return 0
     return 0
-
 pub fn rgba_blend_source_over(read dest: RgbaColor, read source: RgbaColor) -> Result[RgbaColor, RgbaImageError]:
     let Result.Ok(dest_alpha) = rgba_widen_channel :: dest.alpha :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
     let Result.Ok(source_alpha) = rgba_widen_channel :: source.alpha :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
@@ -398,13 +493,11 @@ pub fn rgba_blend_source_over(read dest: RgbaColor, read source: RgbaColor) -> R
         return Result.Err :: RgbaImageError.SizeOutOfRange :: call
     let color = rgba_color :: out_red, out_green, out_blue, out_alpha :: call
     return Result.Ok :: color :: call
-
 pub fn monitor_gamma_ramp(take red: List[CUShort], take green: List[CUShort], take blue: List[CUShort]) -> Result[MonitorGammaRamp, MonitorGammaRampError]:
     let ramp = MonitorGammaRamp :: red, green, blue :: call
     select gamma_ramp_channel_count :: ramp :: call:
         when Result.Ok(_) => return Result.Ok :: ramp :: call
         when Result.Err(error) => return Result.Err :: error :: call
-
 pub fn solid_rgba_image(width: Index, height: Index, read fill: RgbaColor) -> Result[RgbaImage, RgbaImageError]:
     select:
         when width == 0 => return Result.Err :: RgbaImageError.ZeroSize :: call
@@ -424,18 +517,15 @@ pub fn solid_rgba_image(width: Index, height: Index, read fill: RgbaColor) -> Re
         pixels.push :: fill.alpha :: method
         scan = scan + 1
     return rgba_image :: width, height, pixels :: call
-
 pub fn create_cursor_image(edit image: RgbaImage, xhot: CInt, yhot: CInt) -> Option[GlfwCursor]:
     let raw = image.raw_image :: :: method
     return glfw_create_cursor :: raw, xhot, yhot :: call
-
 pub fn client_api_from_raw(raw: CInt) -> ClientApi:
     select:
         when raw == 0 => return ClientApi.None
         when raw == 0x00030001 => return ClientApi.OpenGl
         when raw == 0x00030002 => return ClientApi.OpenGlEs
         else => return ClientApi.Unknown :: raw :: call
-
 pub fn client_api_raw(read api: ClientApi) -> CInt:
     select api:
         when ClientApi.None => return 0
@@ -443,14 +533,12 @@ pub fn client_api_raw(read api: ClientApi) -> CInt:
         when ClientApi.OpenGlEs => return 0x00030002
         when ClientApi.Unknown(raw) => return raw
     return 0
-
 pub fn opengl_profile_from_raw(raw: CInt) -> OpenGlProfile:
     select:
         when raw == 0 => return OpenGlProfile.Any
         when raw == 0x00032001 => return OpenGlProfile.Core
         when raw == 0x00032002 => return OpenGlProfile.Compat
         else => return OpenGlProfile.Unknown :: raw :: call
-
 pub fn opengl_profile_raw(read profile: OpenGlProfile) -> CInt:
     select profile:
         when OpenGlProfile.Any => return 0
@@ -458,14 +546,12 @@ pub fn opengl_profile_raw(read profile: OpenGlProfile) -> CInt:
         when OpenGlProfile.Compat => return 0x00032002
         when OpenGlProfile.Unknown(raw) => return raw
     return 0
-
 pub fn context_creation_api_from_raw(raw: CInt) -> ContextCreationApi:
     select:
         when raw == 0x00036001 => return ContextCreationApi.Native
         when raw == 0x00036002 => return ContextCreationApi.Egl
         when raw == 0x00036003 => return ContextCreationApi.OsMesa
         else => return ContextCreationApi.Unknown :: raw :: call
-
 pub fn context_creation_api_raw(read api: ContextCreationApi) -> CInt:
     select api:
         when ContextCreationApi.Native => return 0x00036001
@@ -473,7 +559,6 @@ pub fn context_creation_api_raw(read api: ContextCreationApi) -> CInt:
         when ContextCreationApi.OsMesa => return 0x00036003
         when ContextCreationApi.Unknown(raw) => return raw
     return 0x00036001
-
 pub fn cursor_mode_from_raw(raw: CInt) -> CursorMode:
     select:
         when raw == 0x00034001 => return CursorMode.Normal
@@ -481,55 +566,140 @@ pub fn cursor_mode_from_raw(raw: CInt) -> CursorMode:
         when raw == 0x00034003 => return CursorMode.Disabled
         when raw == 0x00034004 => return CursorMode.Captured
         else => return CursorMode.Normal
-
 pub fn cursor_mode_raw(read mode: CursorMode) -> CInt:
     return cursor_mode_value :: mode :: call
-
 pub fn point(x: CInt, y: CInt) -> Point:
     return GlfwPoint :: x, y :: call
-
 pub fn size(width: CInt, height: CInt) -> Size:
     return GlfwSize :: width, height :: call
-
+pub fn rect(x: CInt, y: CInt, width: CInt, height: CInt) -> Rect:
+    return GlfwRect :: x, y, width, height :: call
 pub fn window_placement(pos: Point, size: Size) -> WindowPlacement:
     return WindowPlacement :: :: call
         pos = pos
         size = size
-
+fn rect_right(read value: Rect) -> CInt:
+    return value.x + value.width
+fn rect_bottom(read value: Rect) -> CInt:
+    return value.y + value.height
+fn rect_center_x(read value: Rect) -> CInt:
+    return value.x + value.width / 2
+fn rect_center_y(read value: Rect) -> CInt:
+    return value.y + value.height / 2
+fn rect_intersection_area(read left: Rect, read right: Rect) -> CInt:
+    let overlap_left = left.x
+    select:
+        when right.x > overlap_left => overlap_left = right.x
+        else => ()
+    let overlap_top = left.y
+    select:
+        when right.y > overlap_top => overlap_top = right.y
+        else => ()
+    let overlap_right = rect_right :: left :: call
+    let right_right = rect_right :: right :: call
+    select:
+        when right_right < overlap_right => overlap_right = right_right
+        else => ()
+    let overlap_bottom = rect_bottom :: left :: call
+    let right_bottom = rect_bottom :: right :: call
+    select:
+        when right_bottom < overlap_bottom => overlap_bottom = right_bottom
+        else => ()
+    select:
+        when overlap_right <= overlap_left => return 0
+        when overlap_bottom <= overlap_top => return 0
+        else => return (overlap_right - overlap_left) * (overlap_bottom - overlap_top)
+fn cint_to_i64(value: CInt) -> I64:
+    let Result.Ok(widened) = value as Maybe[I64] else => return 0I64
+    return widened
+fn point_distance_squared(ax: CInt, ay: CInt, bx: CInt, by: CInt) -> I64:
+    let dx = cint_to_i64 :: ax - bx :: call
+    let dy = cint_to_i64 :: ay - by :: call
+    return dx * dx + dy * dy
+fn monitor_display_rect(read monitor: Monitor) -> Rect:
+    let pos = monitor.screen_pos :: :: method
+    select monitor.current_video_mode :: :: method:
+        when Option.Some(mode) => return rect :: pos.x, pos.y, mode.width, mode.height :: call
+        when Option.None => return monitor.work_rect :: :: method
+fn current_monitor_for_window(read window: Window) -> Option[Monitor]:
+    let placement = window.outer_placement :: :: method
+    let window_rect = rect :: placement.pos.x, placement.pos.y, placement.size.width, placement.size.height :: call
+    let window_center_x = rect_center_x :: window_rect :: call
+    let window_center_y = rect_center_y :: window_rect :: call
+    let monitors = glfw_monitors :: :: call
+    let count = monitors.count :: :: method
+    let best_monitor = glfw_monitor_none :: :: call
+    let best_overlap: CInt = -1
+    let best_distance: I64 = -1I64
+    let scan: CInt = 0
+    repeat while scan < count:
+        let monitor = monitors.at :: scan :: method
+        select:
+            when !monitor.available :: :: method => ()
+            else =>
+                let display_rect = monitor_display_rect :: monitor :: call
+                let overlap = rect_intersection_area :: window_rect, display_rect :: call
+                let monitor_center_x = rect_center_x :: display_rect :: call
+                let monitor_center_y = rect_center_y :: display_rect :: call
+                let distance = point_distance_squared :: window_center_x, window_center_y, monitor_center_x, monitor_center_y :: call
+                select:
+                    when best_monitor.is_null :: :: method =>
+                        best_monitor = monitor
+                        best_overlap = overlap
+                        best_distance = distance
+                    when overlap > best_overlap =>
+                        best_monitor = monitor
+                        best_overlap = overlap
+                        best_distance = distance
+                    when overlap == best_overlap =>
+                        select:
+                            when best_overlap <= 0 && (best_distance < 0I64 || distance < best_distance) =>
+                                best_monitor = monitor
+                                best_overlap = overlap
+                                best_distance = distance
+                            else => ()
+                    else => ()
+        scan = scan + 1
+    select:
+        when best_monitor.is_null :: :: method => return Option.None
+        else => return Option.Some :: best_monitor :: call
+pub fn window_buttons(close: Bool, minimize: Bool, maximize: Bool) -> WindowButtons:
+    return WindowButtons :: :: call
+        close = close
+        minimize = minimize
+        maximize = maximize
+pub fn all_window_buttons() -> WindowButtons:
+    return window_buttons :: true, true, true :: call
+pub fn no_window_buttons() -> WindowButtons:
+    return window_buttons :: false, false, false :: call
 pub fn window_size_limits(read min: Size, read max: Size) -> WindowSizeLimits:
     return WindowSizeLimits :: :: call
         min_width = min.width
         min_height = min.height
         max_width = max.width
         max_height = max.height
-
 pub fn window_min_size_limits(read min: Size) -> WindowSizeLimits:
     return WindowSizeLimits :: :: call
         min_width = min.width
         min_height = min.height
         max_width = 0 - 1
         max_height = 0 - 1
-
 pub fn window_max_size_limits(read max: Size) -> WindowSizeLimits:
     return WindowSizeLimits :: :: call
         min_width = 0 - 1
         min_height = 0 - 1
         max_width = max.width
         max_height = max.height
-
 pub fn window_no_size_limits() -> WindowSizeLimits:
     return WindowSizeLimits :: :: call
         min_width = 0 - 1
         min_height = 0 - 1
         max_width = 0 - 1
         max_height = 0 - 1
-
 pub fn window_aspect_ratio(numerator: CInt, denominator: CInt) -> WindowAspectRatio:
     return WindowAspectRatio :: numerator, denominator :: call
-
 pub fn window_aspect_ratio_from_size(read size: Size) -> WindowAspectRatio:
     return WindowAspectRatio :: size.width, size.height :: call
-
 pub fn window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
     let monitor: *edit GlfwMonitorRaw = null
     let share: *edit GlfwWindowRaw = null
@@ -548,13 +718,23 @@ pub fn window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
         auto_iconify = true
         floating = false
         maximized = false
+        window_level = WindowLevel.Normal
+        resize_increment_width = 0
+        resize_increment_height = 0
         center_cursor = true
         transparent_framebuffer = false
         focus_on_show = true
         mouse_passthrough = false
         scale_to_monitor = true
+        win32_skip_taskbar = false
         win32_keyboard_menu = false
         win32_showdefault = false
+        win32_undecorated_shadow = false
+        win32_system_backdrop = WindowSystemBackdrop.Auto
+        win32_border_color = Option.None
+        win32_title_background_color = Option.None
+        win32_title_text_color = Option.None
+        win32_corner_preference = WindowCornerPreference.Default
         cocoa_frame_name = Option.None
         x11_class_name = Option.None
         x11_instance_name = Option.None
@@ -577,311 +757,291 @@ pub fn window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
         context_no_error = false
         srgb_capable = false
         doublebuffer = true
-
 pub fn hidden_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.hidden :: :: method
     return spec
-
 pub fn positioned_window_spec(title: Str, width: Index, height: Index, x: CInt, y: CInt) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.at :: x, y :: method
     return spec
-
 pub fn fixed_size_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.fixed_size :: :: method
     return spec
-
 pub fn unfocused_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.unfocused :: :: method
     return spec
-
 pub fn undecorated_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.undecorated :: :: method
     return spec
-
 pub fn floating_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.floating :: :: method
     return spec
-
+pub fn always_on_top_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
+    let spec = window_spec :: title, width, height :: call
+    spec.always_on_top :: :: method
+    return spec
+pub fn always_on_bottom_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
+    let spec = window_spec :: title, width, height :: call
+    spec.always_on_bottom :: :: method
+    return spec
 pub fn maximized_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.maximized :: :: method
     return spec
-
 pub fn transparent_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.transparent_framebuffer :: :: method
     return spec
-
 pub fn mouse_passthrough_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.mouse_passthrough :: :: method
     return spec
-
 pub fn win32_keyboard_menu_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.enable_win32_keyboard_menu :: :: method
     return spec
-
+pub fn win32_skip_taskbar_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
+    let spec = window_spec :: title, width, height :: call
+    spec.enable_win32_skip_taskbar :: :: method
+    return spec
 pub fn win32_showdefault_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.enable_win32_showdefault :: :: method
     return spec
-
+pub fn window_spec_with_win32_undecorated_shadow(take spec: WindowSpec) -> WindowSpec:
+    spec.enable_win32_undecorated_shadow :: :: method
+    return spec
+pub fn window_spec_with_win32_system_backdrop(take spec: WindowSpec, read backdrop: WindowSystemBackdrop) -> WindowSpec:
+    spec.set_win32_system_backdrop :: backdrop :: method
+    return spec
+pub fn window_spec_with_win32_border_color(take spec: WindowSpec, read color: RgbaColor) -> WindowSpec:
+    spec.set_win32_border_color :: color :: method
+    return spec
+pub fn window_spec_without_win32_border_color(take spec: WindowSpec) -> WindowSpec:
+    spec.clear_win32_border_color :: :: method
+    return spec
+pub fn window_spec_with_win32_title_background_color(take spec: WindowSpec, read color: RgbaColor) -> WindowSpec:
+    spec.set_win32_title_background_color :: color :: method
+    return spec
+pub fn window_spec_without_win32_title_background_color(take spec: WindowSpec) -> WindowSpec:
+    spec.clear_win32_title_background_color :: :: method
+    return spec
+pub fn window_spec_with_win32_title_text_color(take spec: WindowSpec, read color: RgbaColor) -> WindowSpec:
+    spec.set_win32_title_text_color :: color :: method
+    return spec
+pub fn window_spec_without_win32_title_text_color(take spec: WindowSpec) -> WindowSpec:
+    spec.clear_win32_title_text_color :: :: method
+    return spec
+pub fn window_spec_with_win32_corner_preference(take spec: WindowSpec, read preference: WindowCornerPreference) -> WindowSpec:
+    spec.set_win32_corner_preference :: preference :: method
+    return spec
 pub fn cocoa_frame_named_window_spec(title: Str, width: Index, height: Index, name: Str) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.set_cocoa_frame_name :: name :: method
     return spec
-
 pub fn x11_class_named_window_spec(title: Str, width: Index, height: Index, name: Str) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.set_x11_class_name :: name :: method
     return spec
-
 pub fn x11_instance_named_window_spec(title: Str, width: Index, height: Index, name: Str) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.set_x11_instance_name :: name :: method
     return spec
-
 pub fn wayland_app_id_window_spec(title: Str, width: Index, height: Index, app_id: Str) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.set_wayland_app_id :: app_id :: method
     return spec
-
 pub fn no_api_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.use_no_api :: :: method
     return spec
-
 pub fn vulkan_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.use_vulkan :: :: method
     return spec
-
 pub fn opengl_window_spec(title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.use_opengl :: major, minor :: method
     return spec
-
 pub fn opengl_core_window_spec(title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.use_opengl_core :: major, minor :: method
     return spec
-
 pub fn opengl_compat_window_spec(title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.use_opengl_compat :: major, minor :: method
     return spec
-
 pub fn opengl_es_window_spec(title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.use_opengl_es :: major, minor :: method
     return spec
-
 pub fn egl_opengl_window_spec(title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> WindowSpec:
     let spec = opengl_window_spec :: title, width, height, major, minor :: call
     spec.use_context_creation_api :: ContextCreationApi.Egl :: method
     return spec
-
 pub fn egl_opengl_es_window_spec(title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> WindowSpec:
     let spec = opengl_es_window_spec :: title, width, height, major, minor :: call
     spec.use_context_creation_api :: ContextCreationApi.Egl :: method
     return spec
-
 pub fn osmesa_opengl_window_spec(title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> WindowSpec:
     let spec = opengl_window_spec :: title, width, height, major, minor :: call
     spec.use_context_creation_api :: ContextCreationApi.OsMesa :: method
     return spec
-
 pub fn window_spec_with_shared_context(take spec: WindowSpec, read window: Window) -> WindowSpec:
     spec.share_from :: window :: method
     return spec
-
 pub fn window_spec_windowed(take spec: WindowSpec) -> WindowSpec:
     spec.windowed :: :: method
     return spec
-
 pub fn window_spec_without_shared_context(take spec: WindowSpec) -> WindowSpec:
     spec.no_share :: :: method
     return spec
-
 pub fn window_spec_with_position(take spec: WindowSpec, x: CInt, y: CInt) -> WindowSpec:
     spec.at :: x, y :: method
     return spec
-
 pub fn window_spec_with_default_position(take spec: WindowSpec) -> WindowSpec:
     spec.default_position :: :: method
     return spec
-
 pub fn window_spec_unfocused(take spec: WindowSpec) -> WindowSpec:
     spec.unfocused :: :: method
     return spec
-
 pub fn window_spec_without_auto_iconify(take spec: WindowSpec) -> WindowSpec:
     spec.disable_auto_iconify :: :: method
     return spec
-
 pub fn window_spec_floating(take spec: WindowSpec) -> WindowSpec:
     spec.floating :: :: method
     return spec
-
 pub fn window_spec_maximized(take spec: WindowSpec) -> WindowSpec:
     spec.maximized :: :: method
     return spec
-
+pub fn window_spec_with_window_level(take spec: WindowSpec, read level: WindowLevel) -> WindowSpec:
+    spec.set_window_level :: level :: method
+    return spec
+pub fn window_spec_with_resize_increments(take spec: WindowSpec, read increments: Size) -> WindowSpec:
+    spec.apply_resize_increments :: increments :: method
+    return spec
+pub fn window_spec_without_resize_increments(take spec: WindowSpec) -> WindowSpec:
+    spec.clear_resize_increments :: :: method
+    return spec
 pub fn window_spec_without_center_cursor(take spec: WindowSpec) -> WindowSpec:
     spec.disable_center_cursor :: :: method
     return spec
-
 pub fn window_spec_without_focus_on_show(take spec: WindowSpec) -> WindowSpec:
     spec.disable_focus_on_show :: :: method
     return spec
-
 pub fn window_spec_with_mouse_passthrough(take spec: WindowSpec) -> WindowSpec:
     spec.mouse_passthrough :: :: method
     return spec
-
 pub fn window_spec_without_scale_to_monitor(take spec: WindowSpec) -> WindowSpec:
     spec.disable_scale_to_monitor :: :: method
     return spec
-
 pub fn window_spec_with_win32_keyboard_menu(take spec: WindowSpec) -> WindowSpec:
     spec.enable_win32_keyboard_menu :: :: method
     return spec
-
+pub fn window_spec_with_win32_skip_taskbar(take spec: WindowSpec) -> WindowSpec:
+    spec.enable_win32_skip_taskbar :: :: method
+    return spec
 pub fn window_spec_with_win32_showdefault(take spec: WindowSpec) -> WindowSpec:
     spec.enable_win32_showdefault :: :: method
     return spec
-
 pub fn window_spec_with_cocoa_frame_name(take spec: WindowSpec, take name: Str) -> WindowSpec:
     spec.set_cocoa_frame_name :: name :: method
     return spec
-
 pub fn window_spec_with_x11_class_name(take spec: WindowSpec, take name: Str) -> WindowSpec:
     spec.set_x11_class_name :: name :: method
     return spec
-
 pub fn window_spec_with_x11_instance_name(take spec: WindowSpec, take name: Str) -> WindowSpec:
     spec.set_x11_instance_name :: name :: method
     return spec
-
 pub fn window_spec_with_wayland_app_id(take spec: WindowSpec, take app_id: Str) -> WindowSpec:
     spec.set_wayland_app_id :: app_id :: method
     return spec
-
 pub fn window_spec_without_cocoa_frame_name(take spec: WindowSpec) -> WindowSpec:
     spec.clear_cocoa_frame_name :: :: method
     return spec
-
 pub fn window_spec_without_x11_class_name(take spec: WindowSpec) -> WindowSpec:
     spec.clear_x11_class_name :: :: method
     return spec
-
 pub fn window_spec_without_x11_instance_name(take spec: WindowSpec) -> WindowSpec:
     spec.clear_x11_instance_name :: :: method
     return spec
-
 pub fn window_spec_without_wayland_app_id(take spec: WindowSpec) -> WindowSpec:
     spec.clear_wayland_app_id :: :: method
     return spec
-
 pub fn window_spec_with_client_api(take spec: WindowSpec, api: ClientApi) -> WindowSpec:
     spec.use_client_api :: api :: method
     return spec
-
 pub fn window_spec_with_vulkan(take spec: WindowSpec) -> WindowSpec:
     spec.use_vulkan :: :: method
     return spec
-
 pub fn window_spec_with_context_creation_api(take spec: WindowSpec, api: ContextCreationApi) -> WindowSpec:
     spec.use_context_creation_api :: api :: method
     return spec
-
 pub fn window_spec_with_opengl_profile(take spec: WindowSpec, profile: OpenGlProfile) -> WindowSpec:
     spec.use_opengl_profile :: profile :: method
     return spec
-
 pub fn window_spec_with_color_bits(take spec: WindowSpec, red: CInt, green: CInt, blue: CInt, alpha: CInt) -> WindowSpec:
     spec.color_bits :: red, green, blue, alpha :: method
     return spec
-
 pub fn window_spec_with_depth_stencil_bits(take spec: WindowSpec, depth: CInt, stencil: CInt) -> WindowSpec:
     spec.depth_stencil_bits :: depth, stencil :: method
     return spec
-
 pub fn window_spec_with_multisampling(take spec: WindowSpec, samples: CInt) -> WindowSpec:
     spec.multisampling :: samples :: method
     return spec
-
 pub fn window_spec_with_refresh_rate(take spec: WindowSpec, refresh_rate: CInt) -> WindowSpec:
     spec.refresh_rate :: refresh_rate :: method
     return spec
-
 pub fn window_spec_with_default_refresh_rate(take spec: WindowSpec) -> WindowSpec:
     spec.default_refresh_rate :: :: method
     return spec
-
 pub fn window_spec_with_srgb(take spec: WindowSpec) -> WindowSpec:
     spec.srgb_capable :: :: method
     return spec
-
 pub fn window_spec_with_opengl_debug_context(take spec: WindowSpec) -> WindowSpec:
     spec.enable_opengl_debug_context :: :: method
     return spec
-
 pub fn window_spec_with_opengl_forward_compat(take spec: WindowSpec) -> WindowSpec:
     spec.enable_opengl_forward_compat :: :: method
     return spec
-
 pub fn window_spec_with_context_no_error(take spec: WindowSpec) -> WindowSpec:
     spec.enable_context_no_error :: :: method
     return spec
-
 pub fn window_spec_single_buffered(take spec: WindowSpec) -> WindowSpec:
     spec.single_buffered :: :: method
     return spec
-
 pub fn opengl_debug_window_spec(title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> WindowSpec:
     let spec = opengl_window_spec :: title, width, height, major, minor :: call
     return window_spec_with_opengl_debug_context :: spec :: call
-
 pub fn opengl_core_debug_window_spec(title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> WindowSpec:
     let spec = opengl_core_window_spec :: title, width, height, major, minor :: call
     return window_spec_with_opengl_debug_context :: spec :: call
-
 pub fn opengl_compat_debug_window_spec(title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> WindowSpec:
     let spec = opengl_compat_window_spec :: title, width, height, major, minor :: call
     return window_spec_with_opengl_debug_context :: spec :: call
-
 pub fn opengl_srgb_window_spec(title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> WindowSpec:
     let spec = opengl_window_spec :: title, width, height, major, minor :: call
     return window_spec_with_srgb :: spec :: call
-
 pub fn opengl_core_srgb_window_spec(title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> WindowSpec:
     let spec = opengl_core_window_spec :: title, width, height, major, minor :: call
     return window_spec_with_srgb :: spec :: call
-
 pub fn opengl_compat_srgb_window_spec(title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> WindowSpec:
     let spec = opengl_compat_window_spec :: title, width, height, major, minor :: call
     return window_spec_with_srgb :: spec :: call
-
 pub fn opengl_debug_srgb_window_spec(title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> WindowSpec:
     let spec = opengl_debug_window_spec :: title, width, height, major, minor :: call
     return window_spec_with_srgb :: spec :: call
-
 pub fn opengl_core_debug_srgb_window_spec(title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> WindowSpec:
     let spec = opengl_core_debug_window_spec :: title, width, height, major, minor :: call
     return window_spec_with_srgb :: spec :: call
-
 pub fn opengl_compat_debug_srgb_window_spec(title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> WindowSpec:
     let spec = opengl_compat_debug_window_spec :: title, width, height, major, minor :: call
     return window_spec_with_srgb :: spec :: call
-
 fn cursor_mode_value(read mode: CursorMode) -> CInt:
     select mode:
         when CursorMode.Normal => return 0x00034001
@@ -889,7 +1049,6 @@ fn cursor_mode_value(read mode: CursorMode) -> CInt:
         when CursorMode.Disabled => return 0x00034003
         when CursorMode.Captured => return 0x00034004
     return 0x00034001
-
 fn standard_cursor_value(cursor: StandardCursor) -> CInt:
     select cursor:
         when StandardCursor.Arrow => return 0x00036001
@@ -903,14 +1062,11 @@ fn standard_cursor_value(cursor: StandardCursor) -> CInt:
         when StandardCursor.ResizeAll => return 0x00036009
         when StandardCursor.NotAllowed => return 0x0003600A
     return 0x00036001
-
 pub fn create_standard_cursor(cursor: StandardCursor) -> Option[GlfwCursor]:
     let raw = standard_cursor_value :: cursor :: call
     return glfw_create_standard_cursor :: raw :: call
-
 pub fn window_monitor_spec(monitor: Monitor, pos: Point, size: Size, refresh_rate: CInt) -> WindowMonitorSpec:
     return GlfwWindowMonitorSpec :: monitor, pos, size, refresh_rate :: call
-
 pub fn fullscreen_window_spec(title: Str, read monitor: Monitor) -> Result[WindowSpec, WindowModeError]:
     select monitor.current_video_mode :: :: method:
         when Option.Some(mode) =>
@@ -920,359 +1076,319 @@ pub fn fullscreen_window_spec(title: Str, read monitor: Monitor) -> Result[Windo
             let Result.Ok(_) = spec.fullscreen_using_current_video_mode :: monitor :: method else => return Result.Err :: WindowModeError.MissingVideoMode :: call
             return Result.Ok :: spec :: call
         when Option.None => return Result.Err :: WindowModeError.MissingVideoMode :: call
-
 pub fn fullscreen_window_spec_with_video_mode(title: Str, read monitor: Monitor, read mode: VideoMode) -> Result[WindowSpec, WindowModeError]:
     let spec = window_spec :: title, 1, 1 :: call
     let Result.Ok(_) = spec.fullscreen_with_video_mode :: monitor, mode :: method else => return Result.Err :: WindowModeError.SizeOutOfRange :: call
     return Result.Ok :: spec :: call
-
 pub(package) fn window_from_glfw(take raw: GlfwWindow, id: WindowId) -> Window:
     return Window :: raw, id :: call
-
 pub(package) fn raw_window_id(read window: Window) -> WindowId:
     return window.id
-
 impl WindowSpec:
     fn with_title(take self, take title: Str) -> WindowSpec:
         self.titled :: title :: method
         return self
-
     fn with_size(take self, width: Index, height: Index) -> WindowSpec:
         self.size :: width, height :: method
         return self
-
     fn with_fullscreen_using_current_video_mode(take self, read monitor: Monitor) -> Result[WindowSpec, WindowModeError]:
         select monitor.current_video_mode :: :: method:
             when Option.Some(mode) => return self.with_fullscreen_video_mode :: monitor, mode :: method
             when Option.None => return Result.Err :: WindowModeError.MissingVideoMode :: call
-
     fn with_fullscreen_video_mode(take self, read monitor: Monitor, read mode: VideoMode) -> Result[WindowSpec, WindowModeError]:
         select self.fullscreen_with_video_mode :: monitor, mode :: method:
             when Result.Ok(_) => return Result.Ok :: self :: call
             when Result.Err(error) => return Result.Err :: error :: call
-
     fn as_windowed(take self) -> WindowSpec:
         self.windowed :: :: method
         return self
-
     fn with_windowed(take self) -> WindowSpec:
         return self.as_windowed :: :: method
-
     fn with_shared_context(take self, read window: Window) -> WindowSpec:
         self.share_from :: window :: method
         return self
-
     fn without_shared_context(take self) -> WindowSpec:
         self.no_share :: :: method
         return self
-
     fn with_position(take self, x: CInt, y: CInt) -> WindowSpec:
         self.at :: x, y :: method
         return self
-
     fn with_default_position(take self) -> WindowSpec:
         self.default_position :: :: method
         return self
-
     fn with_visible(take self, visible: Bool) -> WindowSpec:
         self.set_visible :: visible :: method
         return self
-
     fn with_hidden(take self) -> WindowSpec:
         self.hidden :: :: method
         return self
-
     fn with_resizable(take self, resizable: Bool) -> WindowSpec:
         self.set_resizable :: resizable :: method
         return self
-
     fn with_fixed_size(take self) -> WindowSpec:
         self.fixed_size :: :: method
         return self
-
     fn with_decorated(take self, decorated: Bool) -> WindowSpec:
         self.set_decorated :: decorated :: method
         return self
-
     fn with_undecorated(take self) -> WindowSpec:
         self.undecorated :: :: method
         return self
-
     fn with_focused(take self, focused: Bool) -> WindowSpec:
         self.set_focused :: focused :: method
         return self
-
     fn with_unfocused(take self) -> WindowSpec:
         self.unfocused :: :: method
         return self
-
     fn with_auto_iconify(take self, auto_iconify: Bool) -> WindowSpec:
         self.set_auto_iconify :: auto_iconify :: method
         return self
-
     fn without_auto_iconify(take self) -> WindowSpec:
         self.disable_auto_iconify :: :: method
         return self
-
     fn with_floating_enabled(take self, floating: Bool) -> WindowSpec:
         self.set_floating :: floating :: method
         return self
-
     fn with_floating(take self) -> WindowSpec:
         self.floating :: :: method
         return self
-
+    fn with_window_level(take self, read level: WindowLevel) -> WindowSpec:
+        self.set_window_level :: level :: method
+        return self
+    fn with_resize_increments(take self, read increments: Size) -> WindowSpec:
+        self.apply_resize_increments :: increments :: method
+        return self
+    fn without_resize_increments(take self) -> WindowSpec:
+        self.clear_resize_increments :: :: method
+        return self
     fn with_maximized_enabled(take self, maximized: Bool) -> WindowSpec:
         self.set_maximized :: maximized :: method
         return self
-
     fn with_maximized(take self) -> WindowSpec:
         self.maximized :: :: method
         return self
-
     fn with_center_cursor(take self, center_cursor: Bool) -> WindowSpec:
         self.set_center_cursor :: center_cursor :: method
         return self
-
     fn without_center_cursor(take self) -> WindowSpec:
         self.disable_center_cursor :: :: method
         return self
-
     fn with_transparent_framebuffer_enabled(take self, enabled: Bool) -> WindowSpec:
         self.set_transparent_framebuffer :: enabled :: method
         return self
-
     fn with_transparent_framebuffer(take self) -> WindowSpec:
         self.transparent_framebuffer :: :: method
         return self
-
     fn with_focus_on_show(take self, focus_on_show: Bool) -> WindowSpec:
         self.set_focus_on_show :: focus_on_show :: method
         return self
-
     fn without_focus_on_show(take self) -> WindowSpec:
         self.disable_focus_on_show :: :: method
         return self
-
     fn with_mouse_passthrough_enabled(take self, enabled: Bool) -> WindowSpec:
         self.set_mouse_passthrough :: enabled :: method
         return self
-
     fn with_mouse_passthrough(take self) -> WindowSpec:
         self.mouse_passthrough :: :: method
         return self
-
     fn with_scale_to_monitor(take self, enabled: Bool) -> WindowSpec:
         self.set_scale_to_monitor :: enabled :: method
         return self
-
     fn without_scale_to_monitor(take self) -> WindowSpec:
         self.disable_scale_to_monitor :: :: method
         return self
-
+    fn with_win32_skip_taskbar_enabled(take self, enabled: Bool) -> WindowSpec:
+        self.set_win32_skip_taskbar :: enabled :: method
+        return self
+    fn with_win32_skip_taskbar(take self) -> WindowSpec:
+        self.enable_win32_skip_taskbar :: :: method
+        return self
     fn with_win32_keyboard_menu_enabled(take self, enabled: Bool) -> WindowSpec:
         self.set_win32_keyboard_menu :: enabled :: method
         return self
-
     fn with_win32_keyboard_menu(take self) -> WindowSpec:
         self.enable_win32_keyboard_menu :: :: method
         return self
-
     fn with_win32_showdefault_enabled(take self, enabled: Bool) -> WindowSpec:
         self.set_win32_showdefault :: enabled :: method
         return self
-
     fn with_win32_showdefault(take self) -> WindowSpec:
         self.enable_win32_showdefault :: :: method
         return self
-
+    fn with_win32_undecorated_shadow_enabled(take self, enabled: Bool) -> WindowSpec:
+        self.set_win32_undecorated_shadow :: enabled :: method
+        return self
+    fn with_win32_undecorated_shadow(take self) -> WindowSpec:
+        self.enable_win32_undecorated_shadow :: :: method
+        return self
+    fn with_win32_system_backdrop(take self, read backdrop: WindowSystemBackdrop) -> WindowSpec:
+        self.set_win32_system_backdrop :: backdrop :: method
+        return self
+    fn with_win32_border_color(take self, read color: RgbaColor) -> WindowSpec:
+        self.set_win32_border_color :: color :: method
+        return self
+    fn without_win32_border_color(take self) -> WindowSpec:
+        self.clear_win32_border_color :: :: method
+        return self
+    fn with_win32_title_background_color(take self, read color: RgbaColor) -> WindowSpec:
+        self.set_win32_title_background_color :: color :: method
+        return self
+    fn without_win32_title_background_color(take self) -> WindowSpec:
+        self.clear_win32_title_background_color :: :: method
+        return self
+    fn with_win32_title_text_color(take self, read color: RgbaColor) -> WindowSpec:
+        self.set_win32_title_text_color :: color :: method
+        return self
+    fn without_win32_title_text_color(take self) -> WindowSpec:
+        self.clear_win32_title_text_color :: :: method
+        return self
+    fn with_win32_corner_preference(take self, read preference: WindowCornerPreference) -> WindowSpec:
+        self.set_win32_corner_preference :: preference :: method
+        return self
     fn with_cocoa_frame_name(take self, take name: Str) -> WindowSpec:
         self.set_cocoa_frame_name :: name :: method
         return self
-
     fn without_cocoa_frame_name(take self) -> WindowSpec:
         self.clear_cocoa_frame_name :: :: method
         return self
-
     fn with_x11_class_name(take self, take name: Str) -> WindowSpec:
         self.set_x11_class_name :: name :: method
         return self
-
     fn without_x11_class_name(take self) -> WindowSpec:
         self.clear_x11_class_name :: :: method
         return self
-
     fn with_x11_instance_name(take self, take name: Str) -> WindowSpec:
         self.set_x11_instance_name :: name :: method
         return self
-
     fn without_x11_instance_name(take self) -> WindowSpec:
         self.clear_x11_instance_name :: :: method
         return self
-
     fn with_wayland_app_id(take self, take app_id: Str) -> WindowSpec:
         self.set_wayland_app_id :: app_id :: method
         return self
-
     fn without_wayland_app_id(take self) -> WindowSpec:
         self.clear_wayland_app_id :: :: method
         return self
-
     fn with_color_bits(take self, red: CInt, green: CInt, blue: CInt, alpha: CInt) -> WindowSpec:
         self.color_bits :: red, green, blue, alpha :: method
         return self
-
     fn with_depth_stencil_bits(take self, depth: CInt, stencil: CInt) -> WindowSpec:
         self.depth_stencil_bits :: depth, stencil :: method
         return self
-
     fn with_multisampling(take self, samples: CInt) -> WindowSpec:
         self.multisampling :: samples :: method
         return self
-
     fn with_refresh_rate(take self, refresh_rate: CInt) -> WindowSpec:
         self.refresh_rate :: refresh_rate :: method
         return self
-
     fn with_default_refresh_rate(take self) -> WindowSpec:
         self.default_refresh_rate :: :: method
         return self
-
     fn with_srgb(take self) -> WindowSpec:
         self.srgb_capable :: :: method
         return self
-
     fn with_single_buffered(take self) -> WindowSpec:
         self.single_buffered :: :: method
         return self
-
     fn as_single_buffered(take self) -> WindowSpec:
         return self.with_single_buffered :: :: method
-
     fn with_client_api(take self, api: ClientApi) -> WindowSpec:
         self.use_client_api :: api :: method
         return self
-
     fn with_context_creation_api(take self, api: ContextCreationApi) -> WindowSpec:
         self.use_context_creation_api :: api :: method
         return self
-
     fn with_opengl_profile(take self, profile: OpenGlProfile) -> WindowSpec:
         self.use_opengl_profile :: profile :: method
         return self
-
     fn with_no_api(take self) -> WindowSpec:
         self.use_no_api :: :: method
         return self
-
     fn with_vulkan(take self) -> WindowSpec:
         self.use_vulkan :: :: method
         return self
-
     fn with_opengl(take self, major: CInt, minor: CInt) -> WindowSpec:
         self.use_opengl :: major, minor :: method
         return self
-
     fn with_opengl_es(take self, major: CInt, minor: CInt) -> WindowSpec:
         self.use_opengl_es :: major, minor :: method
         return self
-
     fn with_opengl_core(take self, major: CInt, minor: CInt) -> WindowSpec:
         self.use_opengl_core :: major, minor :: method
         return self
-
     fn with_opengl_compat(take self, major: CInt, minor: CInt) -> WindowSpec:
         self.use_opengl_compat :: major, minor :: method
         return self
-
     fn with_egl_opengl(take self, major: CInt, minor: CInt) -> WindowSpec:
         self.use_opengl :: major, minor :: method
         self.use_context_creation_api :: ContextCreationApi.Egl :: method
         return self
-
     fn with_egl_opengl_es(take self, major: CInt, minor: CInt) -> WindowSpec:
         self.use_opengl_es :: major, minor :: method
         self.use_context_creation_api :: ContextCreationApi.Egl :: method
         return self
-
     fn with_osmesa_opengl(take self, major: CInt, minor: CInt) -> WindowSpec:
         self.use_opengl :: major, minor :: method
         self.use_context_creation_api :: ContextCreationApi.OsMesa :: method
         return self
-
     fn with_opengl_forward_compat(take self) -> WindowSpec:
         self.enable_opengl_forward_compat :: :: method
         return self
-
     fn with_opengl_debug_context(take self) -> WindowSpec:
         self.enable_opengl_debug_context :: :: method
         return self
-
     fn with_opengl_debug(take self, major: CInt, minor: CInt) -> WindowSpec:
         self.use_opengl :: major, minor :: method
         self.enable_opengl_debug_context :: :: method
         return self
-
     fn with_opengl_core_debug(take self, major: CInt, minor: CInt) -> WindowSpec:
         self.use_opengl_core :: major, minor :: method
         self.enable_opengl_debug_context :: :: method
         return self
-
     fn with_opengl_compat_debug(take self, major: CInt, minor: CInt) -> WindowSpec:
         self.use_opengl_compat :: major, minor :: method
         self.enable_opengl_debug_context :: :: method
         return self
-
     fn with_opengl_srgb(take self, major: CInt, minor: CInt) -> WindowSpec:
         self.use_opengl :: major, minor :: method
         self.srgb_capable :: :: method
         return self
-
     fn with_opengl_core_srgb(take self, major: CInt, minor: CInt) -> WindowSpec:
         self.use_opengl_core :: major, minor :: method
         self.srgb_capable :: :: method
         return self
-
     fn with_opengl_compat_srgb(take self, major: CInt, minor: CInt) -> WindowSpec:
         self.use_opengl_compat :: major, minor :: method
         self.srgb_capable :: :: method
         return self
-
     fn with_opengl_debug_srgb(take self, major: CInt, minor: CInt) -> WindowSpec:
         self.use_opengl :: major, minor :: method
         self.enable_opengl_debug_context :: :: method
         self.srgb_capable :: :: method
         return self
-
     fn with_opengl_core_debug_srgb(take self, major: CInt, minor: CInt) -> WindowSpec:
         self.use_opengl_core :: major, minor :: method
         self.enable_opengl_debug_context :: :: method
         self.srgb_capable :: :: method
         return self
-
     fn with_opengl_compat_debug_srgb(take self, major: CInt, minor: CInt) -> WindowSpec:
         self.use_opengl_compat :: major, minor :: method
         self.enable_opengl_debug_context :: :: method
         self.srgb_capable :: :: method
         return self
-
     fn with_context_no_error(take self) -> WindowSpec:
         self.enable_context_no_error :: :: method
         return self
-
     fn titled(edit self, take title: Str) -> Unit:
         self.title = title
         return
-
     fn size(edit self, width: Index, height: Index) -> Unit:
         self.width = width
         self.height = height
         return
-
     fn fullscreen_on(edit self, read monitor: Monitor) -> Unit:
         self.monitor = glfw_monitor_raw_handle :: monitor :: call
         return
-
     fn fullscreen_using_current_video_mode(edit self, read monitor: Monitor) -> Result[Unit, WindowModeError]:
         select monitor.current_video_mode :: :: method:
             when Option.Some(mode) =>
@@ -1284,7 +1400,6 @@ impl WindowSpec:
                 self.fullscreen_on :: monitor :: method
                 return Result.Ok :: () :: call
             when Option.None => return Result.Err :: WindowModeError.MissingVideoMode :: call
-
     fn fullscreen_with_video_mode(edit self, read monitor: Monitor, read mode: VideoMode) -> Result[Unit, WindowModeError]:
         let Result.Ok(width) = mode.width as Maybe[Index] else => return Result.Err :: WindowModeError.SizeOutOfRange :: call
         let Result.Ok(height) = mode.height as Maybe[Index] else => return Result.Err :: WindowModeError.SizeOutOfRange :: call
@@ -1293,227 +1408,240 @@ impl WindowSpec:
         self.refresh_rate = mode.refresh_rate
         self.fullscreen_on :: monitor :: method
         return Result.Ok :: () :: call
-
     fn windowed(edit self) -> Unit:
         self.monitor = null
         return
-
     fn share_from(edit self, read window: Window) -> Unit:
         self.share = glfw_window_raw_handle :: window.raw :: call
         return
-
     fn no_share(edit self) -> Unit:
         self.share = null
         return
-
     fn at(edit self, x: CInt, y: CInt) -> Unit:
         self.x = x
         self.y = y
         return
-
     fn default_position(edit self) -> Unit:
         self.x = 0 - 2147483647 - 1
         self.y = 0 - 2147483647 - 1
         return
-
     fn set_visible(edit self, visible: Bool) -> Unit:
         self.visible = visible
         return
-
     fn hidden(edit self) -> Unit:
         self.set_visible :: false :: method
         return
-
     fn set_resizable(edit self, resizable: Bool) -> Unit:
         self.resizable = resizable
         return
-
     fn fixed_size(edit self) -> Unit:
         self.set_resizable :: false :: method
         return
-
     fn set_decorated(edit self, decorated: Bool) -> Unit:
         self.decorated = decorated
         return
-
     fn undecorated(edit self) -> Unit:
         self.set_decorated :: false :: method
         return
-
     fn set_focused(edit self, focused: Bool) -> Unit:
         self.focused = focused
         return
-
     fn unfocused(edit self) -> Unit:
         self.set_focused :: false :: method
         return
-
     fn set_auto_iconify(edit self, auto_iconify: Bool) -> Unit:
         self.auto_iconify = auto_iconify
         return
-
     fn disable_auto_iconify(edit self) -> Unit:
         self.set_auto_iconify :: false :: method
         return
-
     fn set_floating(edit self, floating: Bool) -> Unit:
         self.floating = floating
+        select:
+            when floating => self.window_level = WindowLevel.AlwaysOnTop
+            else =>
+                select self.window_level:
+                    when WindowLevel.AlwaysOnTop => self.window_level = WindowLevel.Normal
+                    else => ()
         return
-
     fn floating(edit self) -> Unit:
         self.set_floating :: true :: method
         return
-
+    fn set_window_level(edit self, read level: WindowLevel) -> Unit:
+        let raw = window_level_raw :: level :: call
+        self.window_level = window_level_from_raw :: raw :: call
+        select raw:
+            when 1 => self.floating = true
+            else => self.floating = false
+        return
+    fn set_resize_increments(edit self, width: CInt, height: CInt) -> Unit:
+        self.resize_increment_width = width
+        self.resize_increment_height = height
+        return
+    fn apply_resize_increments(edit self, read increments: Size) -> Unit:
+        self.set_resize_increments :: increments.width, increments.height :: method
+        return
+    fn clear_resize_increments(edit self) -> Unit:
+        self.set_resize_increments :: 0, 0 :: method
+        return
+    fn always_on_top(edit self) -> Unit:
+        self.set_window_level :: WindowLevel.AlwaysOnTop :: method
+        return
+    fn always_on_bottom(edit self) -> Unit:
+        self.set_window_level :: WindowLevel.AlwaysOnBottom :: method
+        return
     fn set_maximized(edit self, maximized: Bool) -> Unit:
         self.maximized = maximized
         return
-
     fn maximized(edit self) -> Unit:
         self.set_maximized :: true :: method
         return
-
     fn set_center_cursor(edit self, center_cursor: Bool) -> Unit:
         self.center_cursor = center_cursor
         return
-
     fn disable_center_cursor(edit self) -> Unit:
         self.set_center_cursor :: false :: method
         return
-
     fn set_transparent_framebuffer(edit self, enabled: Bool) -> Unit:
         self.transparent_framebuffer = enabled
         return
-
     fn transparent_framebuffer(edit self) -> Unit:
         self.set_transparent_framebuffer :: true :: method
         return
-
     fn set_focus_on_show(edit self, focus_on_show: Bool) -> Unit:
         self.focus_on_show = focus_on_show
         return
-
     fn disable_focus_on_show(edit self) -> Unit:
         self.set_focus_on_show :: false :: method
         return
-
     fn set_mouse_passthrough(edit self, enabled: Bool) -> Unit:
         self.mouse_passthrough = enabled
         return
-
     fn mouse_passthrough(edit self) -> Unit:
         self.set_mouse_passthrough :: true :: method
         return
-
     fn set_scale_to_monitor(edit self, enabled: Bool) -> Unit:
         self.scale_to_monitor = enabled
         return
-
     fn disable_scale_to_monitor(edit self) -> Unit:
         self.set_scale_to_monitor :: false :: method
         return
-
+    fn set_win32_skip_taskbar(edit self, enabled: Bool) -> Unit:
+        self.win32_skip_taskbar = enabled
+        return
+    fn enable_win32_skip_taskbar(edit self) -> Unit:
+        self.set_win32_skip_taskbar :: true :: method
+        return
     fn set_win32_keyboard_menu(edit self, enabled: Bool) -> Unit:
         self.win32_keyboard_menu = enabled
         return
-
     fn enable_win32_keyboard_menu(edit self) -> Unit:
         self.set_win32_keyboard_menu :: true :: method
         return
-
     fn set_win32_showdefault(edit self, enabled: Bool) -> Unit:
         self.win32_showdefault = enabled
         return
-
     fn enable_win32_showdefault(edit self) -> Unit:
         self.set_win32_showdefault :: true :: method
         return
-
+    fn set_win32_undecorated_shadow(edit self, enabled: Bool) -> Unit:
+        self.win32_undecorated_shadow = enabled
+        return
+    fn enable_win32_undecorated_shadow(edit self) -> Unit:
+        self.set_win32_undecorated_shadow :: true :: method
+        return
+    fn set_win32_system_backdrop(edit self, read backdrop: WindowSystemBackdrop) -> Unit:
+        let raw = window_system_backdrop_raw :: backdrop :: call
+        self.win32_system_backdrop = window_system_backdrop_from_raw :: raw :: call
+        return
+    fn set_win32_border_color(edit self, read color: RgbaColor) -> Unit:
+        self.win32_border_color = Option.Some :: color :: call
+        return
+    fn clear_win32_border_color(edit self) -> Unit:
+        self.win32_border_color = Option.None
+        return
+    fn set_win32_title_background_color(edit self, read color: RgbaColor) -> Unit:
+        self.win32_title_background_color = Option.Some :: color :: call
+        return
+    fn clear_win32_title_background_color(edit self) -> Unit:
+        self.win32_title_background_color = Option.None
+        return
+    fn set_win32_title_text_color(edit self, read color: RgbaColor) -> Unit:
+        self.win32_title_text_color = Option.Some :: color :: call
+        return
+    fn clear_win32_title_text_color(edit self) -> Unit:
+        self.win32_title_text_color = Option.None
+        return
+    fn set_win32_corner_preference(edit self, read preference: WindowCornerPreference) -> Unit:
+        let raw = window_corner_preference_raw :: preference :: call
+        self.win32_corner_preference = window_corner_preference_from_raw :: raw :: call
+        return
     fn set_cocoa_frame_name(edit self, take name: Str) -> Unit:
         self.cocoa_frame_name = Option.Some :: name :: call
         return
-
     fn clear_cocoa_frame_name(edit self) -> Unit:
         self.cocoa_frame_name = Option.None
         return
-
     fn set_x11_class_name(edit self, take name: Str) -> Unit:
         self.x11_class_name = Option.Some :: name :: call
         return
-
     fn clear_x11_class_name(edit self) -> Unit:
         self.x11_class_name = Option.None
         return
-
     fn set_x11_instance_name(edit self, take name: Str) -> Unit:
         self.x11_instance_name = Option.Some :: name :: call
         return
-
     fn clear_x11_instance_name(edit self) -> Unit:
         self.x11_instance_name = Option.None
         return
-
     fn set_wayland_app_id(edit self, take app_id: Str) -> Unit:
         self.wayland_app_id = Option.Some :: app_id :: call
         return
-
     fn clear_wayland_app_id(edit self) -> Unit:
         self.wayland_app_id = Option.None
         return
-
     fn color_bits(edit self, red: CInt, green: CInt, blue: CInt, alpha: CInt) -> Unit:
         self.red_bits = red
         self.green_bits = green
         self.blue_bits = blue
         self.alpha_bits = alpha
         return
-
     fn depth_stencil_bits(edit self, depth: CInt, stencil: CInt) -> Unit:
         self.depth_bits = depth
         self.stencil_bits = stencil
         return
-
     fn multisampling(edit self, samples: CInt) -> Unit:
         self.samples = samples
         return
-
     fn refresh_rate(edit self, refresh_rate: CInt) -> Unit:
         self.refresh_rate = refresh_rate
         return
-
     fn default_refresh_rate(edit self) -> Unit:
         self.refresh_rate = 0 - 1
         return
-
     fn srgb_capable(edit self) -> Unit:
         self.srgb_capable = true
         return
-
     fn single_buffered(edit self) -> Unit:
         self.doublebuffer = false
         return
-
     fn use_client_api(edit self, api: ClientApi) -> Unit:
         self.client_api = api
         return
-
     fn use_context_creation_api(edit self, api: ContextCreationApi) -> Unit:
         self.context_creation_api = api
         return
-
     fn use_opengl_profile(edit self, profile: OpenGlProfile) -> Unit:
         self.opengl_profile = profile
         return
-
     fn use_no_api(edit self) -> Unit:
         self.client_api = ClientApi.None
         self.opengl_profile = OpenGlProfile.Any
         self.context_creation_api = ContextCreationApi.Native
         return
-
     fn use_vulkan(edit self) -> Unit:
         self.use_no_api :: :: method
         return
-
     fn use_opengl(edit self, major: CInt, minor: CInt) -> Unit:
         self.client_api = ClientApi.OpenGl
         self.context_version_major = major
@@ -1521,7 +1649,6 @@ impl WindowSpec:
         self.opengl_profile = OpenGlProfile.Any
         self.context_creation_api = ContextCreationApi.Native
         return
-
     fn use_opengl_es(edit self, major: CInt, minor: CInt) -> Unit:
         self.client_api = ClientApi.OpenGlEs
         self.context_version_major = major
@@ -1529,49 +1656,38 @@ impl WindowSpec:
         self.opengl_profile = OpenGlProfile.Any
         self.context_creation_api = ContextCreationApi.Native
         return
-
     fn use_opengl_core(edit self, major: CInt, minor: CInt) -> Unit:
         self.use_opengl :: major, minor :: method
         self.opengl_profile = OpenGlProfile.Core
         return
-
     fn use_opengl_compat(edit self, major: CInt, minor: CInt) -> Unit:
         self.use_opengl :: major, minor :: method
         self.opengl_profile = OpenGlProfile.Compat
         return
-
     fn enable_opengl_forward_compat(edit self) -> Unit:
         self.opengl_forward_compat = true
         return
-
     fn enable_opengl_debug_context(edit self) -> Unit:
         self.opengl_debug_context = true
         return
-
     fn enable_context_no_error(edit self) -> Unit:
         self.context_no_error = true
         return
-
 impl RgbaImage:
     fn width(read self) -> CInt:
         return self.width
-
     fn height(read self) -> CInt:
         return self.height
-
     fn width_index(read self) -> Result[Index, RgbaImageError]:
         let Result.Ok(width) = self.width as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
         return Result.Ok :: width :: call
-
     fn height_index(read self) -> Result[Index, RgbaImageError]:
         let Result.Ok(height) = self.height as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
         return Result.Ok :: height :: call
-
     fn pixel_count(read self) -> Result[Index, RgbaImageError]:
         let raw_pixel_count: CInt = self.width * self.height
         let Result.Ok(pixel_count) = raw_pixel_count as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
         return Result.Ok :: pixel_count :: call
-
     fn pixel(read self, x: Index, y: Index) -> Result[RgbaColor, RgbaImageError]:
         select rgba_checked_offset :: self, x, y :: call:
             when Result.Ok(offset) =>
@@ -1585,7 +1701,6 @@ impl RgbaImage:
                 let color = rgba_color :: red, green, blue, alpha :: call
                 return Result.Ok :: color :: call
             when Result.Err(err) => return Result.Err :: err :: call
-
     fn set_pixel(edit self, x: Index, y: Index, read color: RgbaColor) -> Result[Unit, RgbaImageError]:
         select rgba_checked_offset :: self, x, y :: call:
             when Result.Ok(offset) =>
@@ -1598,7 +1713,6 @@ impl RgbaImage:
                 self.pixels[alpha_index] = color.alpha
                 return Result.Ok :: :: call
             when Result.Err(err) => return Result.Err :: err :: call
-
     fn blend_pixel(edit self, x: Index, y: Index, read source: RgbaColor) -> Result[Unit, RgbaImageError]:
         select self.pixel :: x, y :: method:
             when Result.Ok(dest) =>
@@ -1606,7 +1720,6 @@ impl RgbaImage:
                     when Result.Ok(blended) => return self.set_pixel :: x, y, blended :: method
                     when Result.Err(err) => return Result.Err :: err :: call
             when Result.Err(err) => return Result.Err :: err :: call
-
     fn fill_rect(edit self, x: Index, y: Index, width: Index, height: Index, read fill: RgbaColor) -> Result[Unit, RgbaImageError]:
         select rgba_checked_rect :: self, x, y, width, height :: call:
             when Result.Ok(rect) =>
@@ -1625,13 +1738,10 @@ impl RgbaImage:
                     scan_y = scan_y + 1
                 return Result.Ok :: :: call
             when Result.Err(err) => return Result.Err :: err :: call
-
     fn draw_hline(edit self, x: Index, y: Index, width: Index, read color: RgbaColor) -> Result[Unit, RgbaImageError]:
         return self.fill_rect :: x, y, width, 1, color :: method
-
     fn draw_vline(edit self, x: Index, y: Index, height: Index, read color: RgbaColor) -> Result[Unit, RgbaImageError]:
         return self.fill_rect :: x, y, 1, height, color :: method
-
     fn stroke_rect(edit self, x: Index, y: Index, width: Index, height: Index, read color: RgbaColor) -> Result[Unit, RgbaImageError]:
         select rgba_checked_rect :: self, x, y, width, height :: call:
             when Result.Ok(rect) =>
@@ -1653,7 +1763,6 @@ impl RgbaImage:
                     when Result.Err(err) => return Result.Err :: err :: call
                 return self.draw_vline :: last_x, y, height, color :: method
             when Result.Err(err) => return Result.Err :: err :: call
-
     fn draw_line(edit self, x0: Index, y0: Index, x1: Index, y1: Index, read color: RgbaColor) -> Result[Unit, RgbaImageError]:
         let Result.Ok(raw_x0) = x0 as Maybe[CInt] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
         let Result.Ok(raw_y0) = y0 as Maybe[CInt] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
@@ -1690,7 +1799,6 @@ impl RgbaImage:
                     scan_y = scan_y + step_y
                 else => ()
         return Result.Ok :: :: call
-
     fn blend_image(edit self, x: Index, y: Index, read source: RgbaImage) -> Result[Unit, RgbaImageError]:
         let Result.Ok(source_width) = source.width as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
         let Result.Ok(source_height) = source.height as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
@@ -1716,7 +1824,6 @@ impl RgbaImage:
                     scan_y = scan_y + 1
                 return Result.Ok :: :: call
             when Result.Err(err) => return Result.Err :: err :: call
-
     fn blit_image(edit self, x: Index, y: Index, read source: RgbaImage) -> Result[Unit, RgbaImageError]:
         let Result.Ok(source_width) = source.width as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
         let Result.Ok(source_height) = source.height as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
@@ -1742,22 +1849,18 @@ impl RgbaImage:
                     scan_y = scan_y + 1
                 return Result.Ok :: :: call
             when Result.Err(err) => return Result.Err :: err :: call
-
     fn clear(edit self, read fill: RgbaColor) -> Result[Unit, RgbaImageError]:
         let Result.Ok(width) = self.width as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
         let Result.Ok(height) = self.height as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
         return self.fill_rect :: 0, 0, width, height, fill :: method
-
     fn copy_pixels(read self) -> Result[ByteBuffer, RgbaImageError]:
         return copy_rgba_bytes :: self.pixels :: call
-
     fn copy_image(read self) -> Result[RgbaImage, RgbaImageError]:
         let Result.Ok(width) = self.width as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
         let Result.Ok(height) = self.height as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
         select self.copy_pixels :: :: method:
             when Result.Ok(pixels) => return rgba_image :: width, height, pixels :: call
             when Result.Err(err) => return Result.Err :: err :: call
-
     fn sub_image(read self, x: Index, y: Index, width: Index, height: Index) -> Result[RgbaImage, RgbaImageError]:
         select rgba_checked_rect :: self, x, y, width, height :: call:
             when Result.Ok(rect) =>
@@ -1785,60 +1888,57 @@ impl RgbaImage:
                 let Result.Ok(result_height) = rect.height as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
                 return rgba_image :: result_width, result_height, pixels :: call
             when Result.Err(err) => return Result.Err :: err :: call
-
     fn byte_count(read self) -> Index:
         return self.pixels.byte_count :: :: method
-
     fn take_pixels(take self) -> ByteBuffer:
         return self.pixels
-
     fn raw_image(edit self) -> GlfwImage:
         let bytes_ptr: *edit U8 = #unsafe &raw edit self.pixels[0]
         let bytes_address = #unsafe raw_pointer_address_edit :: bytes_ptr :: call
         let pixels_ptr = #unsafe raw_pointer_from_address_edit[CUnsignedChar] :: bytes_address :: call
         return glfw_image :: self.width, self.height, pixels_ptr :: call
-
     fn raw_image_view(read self) -> GlfwImage:
         let bytes_ptr: *read U8 = #unsafe &raw read self.pixels[0]
         let bytes_address = #unsafe raw_pointer_address_read :: bytes_ptr :: call
         let pixels_ptr = #unsafe raw_pointer_from_address_edit[CUnsignedChar] :: bytes_address :: call
         return glfw_image :: self.width, self.height, pixels_ptr :: call
-
 impl Window:
     fn raw_handle(read self) -> *edit GlfwWindowRaw:
         return glfw_window_raw_handle :: self.raw :: call
-
     fn destroy(take self) -> Unit:
         self.raw.destroy :: :: method
         return
-
     fn should_close(read self) -> Bool:
         return self.raw.should_close :: :: method
-
     fn close(read self) -> Unit:
         self.raw.set_should_close :: true :: method
         return
-
     fn set_should_close(read self, value: Bool) -> Unit:
         self.raw.set_should_close :: value :: method
         return
-
     fn pos(read self) -> Point:
         return self.raw.pos :: :: method
-
+    fn inner_position(read self) -> Point:
+        return self.pos :: :: method
+    fn surface_position(read self) -> Point:
+        let frame = self.frame_size :: :: method
+        return point :: frame.left, frame.top :: call
     fn set_pos(read self, x: CInt, y: CInt) -> Unit:
         self.raw.set_pos :: x, y :: method
         return
-
+    fn set_outer_position(read self, x: CInt, y: CInt) -> Unit:
+        let frame = self.frame_size :: :: method
+        let inner_x = x + frame.left
+        let inner_y = y + frame.top
+        self.raw.set_pos :: inner_x, inner_y :: method
+        return
     fn windowed_placement(read self) -> WindowPlacement:
         let pos = self.pos :: :: method
         let size = self.size :: :: method
         return window_placement :: pos, size :: call
-
     fn restore_windowed_placement(read self, read placement: WindowPlacement) -> Unit:
         self.exit_fullscreen :: placement.pos.x, placement.pos.y, placement.size.width, placement.size.height :: method
         return
-
     fn center_on(read self, read monitor: Monitor) -> Unit:
         let workarea = monitor.workarea :: :: method
         let size = self.size :: :: method
@@ -1846,107 +1946,223 @@ impl Window:
         let y = workarea.y + (workarea.height - size.height) / 2
         self.raw.set_pos :: x, y :: method
         return
-
     fn size(read self) -> Size:
         return self.raw.size :: :: method
-
+    fn inner_size(read self) -> Size:
+        return self.size :: :: method
     fn set_size(read self, width: CInt, height: CInt) -> Unit:
         self.raw.set_size :: width, height :: method
         return
-
+    fn request_inner_size(read self, width: CInt, height: CInt) -> Option[Size]:
+        self.raw.set_size :: width, height :: method
+        let updated = self.size :: :: method
+        return Option.Some :: updated :: call
+    fn apply_inner_size(read self, read requested: Size) -> Option[Size]:
+        return self.request_inner_size :: requested.width, requested.height :: method
+    fn resize_increments(read self) -> Option[Size]:
+        return current_window_resize_increments :: self.raw :: call
+    fn set_resize_increments(read self, read increments: Option[Size]) -> Unit:
+        set_window_resize_increments :: self.raw, increments :: call
+        return
+    fn apply_resize_increments(read self, read increments: Size) -> Unit:
+        let wrapped = Option.Some :: increments :: call
+        self.set_resize_increments :: wrapped :: method
+        return
+    fn clear_resize_increments(read self) -> Unit:
+        let increments: Option[Size] = Option.None
+        self.set_resize_increments :: increments :: method
+        return
     fn set_size_limits(read self, min_width: CInt, min_height: CInt, max_width: CInt, max_height: CInt) -> Unit:
         self.raw.set_size_limits :: min_width, min_height, max_width, max_height :: method
         return
-
     fn apply_size_limits(read self, read limits: WindowSizeLimits) -> Unit:
         self.raw.set_size_limits :: limits.min_width, limits.min_height, limits.max_width, limits.max_height :: method
         return
-
     fn clear_size_limits(read self) -> Unit:
         self.raw.set_size_limits :: 0 - 1, 0 - 1, 0 - 1, 0 - 1 :: method
         return
-
     fn set_aspect_ratio(read self, numerator: CInt, denominator: CInt) -> Unit:
         self.raw.set_aspect_ratio :: numerator, denominator :: method
         return
-
     fn apply_aspect_ratio(read self, read ratio: WindowAspectRatio) -> Unit:
         self.raw.set_aspect_ratio :: ratio.numerator, ratio.denominator :: method
         return
-
     fn clear_aspect_ratio(read self) -> Unit:
         self.raw.set_aspect_ratio :: 0 - 1, 0 - 1 :: method
         return
-
     fn framebuffer_size(read self) -> Size:
         return self.raw.framebuffer_size :: :: method
-
+    fn surface_size(read self) -> Size:
+        return self.framebuffer_size :: :: method
     fn frame_size(read self) -> FrameSize:
         return self.raw.frame_size :: :: method
-
+    fn outer_position(read self) -> Point:
+        let inner = self.pos :: :: method
+        let frame = self.frame_size :: :: method
+        let x = inner.x - frame.left
+        let y = inner.y - frame.top
+        return GlfwPoint :: x, y :: call
+    fn outer_size(read self) -> Size:
+        let inner = self.size :: :: method
+        let frame = self.frame_size :: :: method
+        let width = inner.width + frame.left + frame.right
+        let height = inner.height + frame.top + frame.bottom
+        return GlfwSize :: width, height :: call
+    fn outer_placement(read self) -> WindowPlacement:
+        let pos = self.outer_position :: :: method
+        let size = self.outer_size :: :: method
+        return window_placement :: pos, size :: call
     fn content_scale(read self) -> Scale:
         return self.raw.content_scale :: :: method
-
     fn opacity(read self) -> F32:
         return self.raw.opacity :: :: method
-
     fn set_opacity(read self, opacity: F32) -> Unit:
         self.raw.set_opacity :: opacity :: method
         return
-
     fn iconify(read self) -> Unit:
         self.raw.iconify :: :: method
         return
-
     fn restore(read self) -> Unit:
         self.raw.restore :: :: method
         return
-
     fn maximize(read self) -> Unit:
         self.raw.maximize :: :: method
         return
-
     fn show(read self) -> Unit:
         self.raw.show :: :: method
         return
-
     fn hide(read self) -> Unit:
         self.raw.hide :: :: method
         return
-
     fn focus(read self) -> Unit:
         self.raw.focus :: :: method
         return
-
+    fn focus_window(read self) -> Unit:
+        self.focus :: :: method
+        return
     fn request_attention(read self) -> Unit:
         self.raw.request_attention :: :: method
         return
-
+    fn request_user_attention(read self, read request: Option[UserAttentionType]) -> Result[Unit, WindowControlError]:
+        return request_window_attention :: self.raw, request :: call
+    fn drag_window(read self) -> Result[Unit, WindowControlError]:
+        return drag_window_interaction :: self.raw :: call
+    fn drag_resize_window(read self, read direction: WindowResizeDirection) -> Result[Unit, WindowControlError]:
+        return drag_resize_window_interaction :: self.raw, direction :: call
+    fn show_window_menu(read self, x: CInt, y: CInt) -> Result[Unit, WindowControlError]:
+        let position = GlfwPoint :: x, y :: call
+        return show_window_system_menu :: self.raw, position :: call
+    fn show_window_menu_at(read self, read position: Point) -> Result[Unit, WindowControlError]:
+        return show_window_system_menu :: self.raw, position :: call
+    fn request_redraw(read self) -> Unit:
+        request_window_refresh :: self.raw :: call
+        glfw_post_empty_event :: :: call
+        return
+    fn theme(read self) -> Option[Theme]:
+        return current_window_theme :: self.raw :: call
+    fn set_theme(read self, read theme: Option[Theme]) -> Result[Unit, WindowThemeError]:
+        return set_window_theme :: self.raw, theme :: call
+    fn undecorated_shadow(read self) -> Bool:
+        return current_window_undecorated_shadow :: self.raw :: call
+    fn system_backdrop(read self) -> WindowSystemBackdrop:
+        return current_window_system_backdrop :: self.raw :: call
+    fn border_color(read self) -> Option[RgbaColor]:
+        return current_window_border_color :: self.raw :: call
+    fn title_background_color(read self) -> Option[RgbaColor]:
+        return current_window_title_background_color :: self.raw :: call
+    fn title_text_color(read self) -> Option[RgbaColor]:
+        return current_window_title_text_color :: self.raw :: call
+    fn corner_preference(read self) -> WindowCornerPreference:
+        return current_window_corner_preference :: self.raw :: call
+    fn window_level(read self) -> WindowLevel:
+        return current_window_level :: self.raw :: call
+    fn set_window_level(read self, read level: WindowLevel) -> Result[Unit, WindowControlError]:
+        return set_window_level :: self.raw, level :: call
+    fn enabled_buttons(read self) -> Result[WindowButtons, WindowControlError]:
+        return current_window_buttons :: self.raw :: call
+    fn enabled(read self) -> Result[Bool, WindowControlError]:
+        return current_window_enabled :: self.raw :: call
+    fn skip_taskbar(read self) -> Result[Bool, WindowControlError]:
+        return current_window_skip_taskbar :: self.raw :: call
+    fn content_protected(read self) -> Result[Bool, WindowControlError]:
+        return current_window_content_protected :: self.raw :: call
+    fn ime_allowed(read self) -> Bool:
+        return current_window_ime_allowed :: self.raw :: call
+    fn set_ime_allowed(read self, allowed: Bool) -> Unit:
+        set_window_ime_allowed :: self.raw, allowed :: call
+        return
+    fn ime_cursor_area(read self) -> Option[Rect]:
+        return current_window_ime_cursor_area :: self.raw :: call
+    fn set_ime_cursor_area(read self, x: CInt, y: CInt, width: CInt, height: CInt) -> Unit:
+        let area = GlfwRect :: x, y, width, height :: call
+        set_window_ime_cursor_area :: self.raw, area :: call
+        return
+    fn apply_ime_cursor_area(read self, read area: Rect) -> Unit:
+        set_window_ime_cursor_area :: self.raw, area :: call
+        return
+    fn set_enabled_buttons(read self, read buttons: WindowButtons) -> Result[Unit, WindowControlError]:
+        return set_window_buttons :: self.raw, buttons :: call
+    fn set_enabled(read self, enabled: Bool) -> Result[Unit, WindowControlError]:
+        return set_window_enabled :: self.raw, enabled :: call
+    fn set_skip_taskbar(read self, skip: Bool) -> Result[Unit, WindowControlError]:
+        return set_window_skip_taskbar :: self.raw, skip :: call
+    fn set_content_protected(read self, enabled: Bool) -> Result[Unit, WindowControlError]:
+        return set_window_content_protected :: self.raw, enabled :: call
+    fn set_undecorated_shadow(read self, shadow: Bool) -> Result[Unit, WindowAppearanceError]:
+        return set_window_undecorated_shadow :: self.raw, shadow :: call
+    fn set_system_backdrop(read self, read backdrop: WindowSystemBackdrop) -> Result[Unit, WindowAppearanceError]:
+        return set_window_system_backdrop :: self.raw, backdrop :: call
+    fn set_border_color(read self, read color: Option[RgbaColor]) -> Result[Unit, WindowAppearanceError]:
+        return set_window_border_color :: self.raw, color :: call
+    fn set_title_background_color(read self, read color: Option[RgbaColor]) -> Result[Unit, WindowAppearanceError]:
+        return set_window_title_background_color :: self.raw, color :: call
+    fn set_title_text_color(read self, read color: Option[RgbaColor]) -> Result[Unit, WindowAppearanceError]:
+        return set_window_title_text_color :: self.raw, color :: call
+    fn set_corner_preference(read self, read preference: WindowCornerPreference) -> Result[Unit, WindowAppearanceError]:
+        return set_window_corner_preference :: self.raw, preference :: call
     fn monitor(read self) -> Monitor:
         return self.raw.monitor :: :: method
-
+    fn current_monitor(read self) -> Option[Monitor]:
+        let monitor = self.monitor :: :: method
+        select:
+            when !monitor.is_null :: :: method => return Option.Some :: monitor :: call
+            else => return current_monitor_for_window :: self :: call
+    fn primary_monitor(read self) -> Option[Monitor]:
+        let _ = self
+        let monitor = glfw_primary_monitor :: :: call
+        select:
+            when monitor.is_null :: :: method => return Option.None
+            else => return Option.Some :: monitor :: call
+    fn available_monitors(read self) -> List[Monitor]:
+        let _ = self
+        let available = List[Monitor] :: :: call
+        let monitors = glfw_monitors :: :: call
+        let count = monitors.count :: :: method
+        let scan: CInt = 0
+        repeat while scan < count:
+            let monitor = monitors.at :: scan :: method
+            select:
+                when monitor.available :: :: method => available.push :: monitor :: method
+                else => ()
+            scan = scan + 1
+        return available
     fn fullscreen(read self) -> Bool:
         let monitor = self.monitor :: :: method
         return !monitor.is_null :: :: method
-
     fn set_monitor(read self, read spec: WindowMonitorSpec) -> Unit:
         self.raw.set_monitor :: spec :: method
         return
-
     fn enter_fullscreen_on(read self, read monitor: Monitor) -> Result[Unit, WindowModeError]:
         let Result.Ok(spec) = monitor.fullscreen_spec :: :: method else => return Result.Err :: WindowModeError.MissingVideoMode :: call
         self.raw.set_monitor :: spec :: method
         return Result.Ok :: () :: call
-
     fn enter_fullscreen_with_video_mode(read self, read monitor: Monitor, read mode: VideoMode) -> Result[Unit, WindowModeError]:
         let Result.Ok(spec) = monitor.fullscreen_spec_with_video_mode :: mode :: method else => return Result.Err :: WindowModeError.SizeOutOfRange :: call
         self.raw.set_monitor :: spec :: method
         return Result.Ok :: () :: call
-
     fn exit_fullscreen(read self, x: CInt, y: CInt, width: CInt, height: CInt) -> Unit:
         self.exit_fullscreen_with_refresh_rate :: x, y, width, height, 0 - 1 :: method
         return
-
     fn exit_fullscreen_with_refresh_rate(read self, x: CInt, y: CInt, width: CInt, height: CInt, refresh_rate: CInt) -> Unit:
         let monitor = glfw_monitor_none :: :: call
         let pos = GlfwPoint :: x, y :: call
@@ -1954,143 +2170,132 @@ impl Window:
         let spec = window_monitor_spec :: monitor, pos, size, refresh_rate :: call
         self.raw.set_monitor :: spec :: method
         return
-
     fn client_api_raw(read self) -> CInt:
         return self.raw.attrib :: 0x00022001 :: method
-
     fn client_api(read self) -> ClientApi:
         let raw = self.client_api_raw :: :: method
         return client_api_from_raw :: raw :: call
-
     fn opengl_profile_raw(read self) -> CInt:
         return self.raw.attrib :: 0x00022008 :: method
-
     fn opengl_profile(read self) -> OpenGlProfile:
         let raw = self.opengl_profile_raw :: :: method
         return opengl_profile_from_raw :: raw :: call
-
     fn context_creation_api_raw(read self) -> CInt:
         return self.raw.attrib :: 0x0002200B :: method
-
     fn context_creation_api(read self) -> ContextCreationApi:
         let raw = self.context_creation_api_raw :: :: method
         return context_creation_api_from_raw :: raw :: call
-
     fn context_version_major(read self) -> CInt:
         return self.raw.attrib :: 0x00022002 :: method
-
     fn context_version_minor(read self) -> CInt:
         return self.raw.attrib :: 0x00022003 :: method
-
     fn opengl_forward_compat(read self) -> Bool:
         return self.raw.attrib_bool :: 0x00022006 :: method
-
     fn opengl_debug_context(read self) -> Bool:
         return self.raw.attrib_bool :: 0x00022007 :: method
-
     fn context_no_error(read self) -> Bool:
         return self.raw.attrib_bool :: 0x0002200A :: method
-
     fn srgb_capable(read self) -> Bool:
         return self.raw.attrib_bool :: 0x0002100E :: method
-
     fn doublebuffered(read self) -> Bool:
         return self.raw.attrib_bool :: 0x00021010 :: method
-
     fn visible(read self) -> Bool:
         return self.raw.attrib_bool :: 0x00020004 :: method
-
+    fn set_visible(read self, value: Bool) -> Unit:
+        select:
+            when value => self.show :: :: method
+            else => self.hide :: :: method
+        return
     fn resizable(read self) -> Bool:
         return self.raw.attrib_bool :: 0x00020003 :: method
-
     fn decorated(read self) -> Bool:
         return self.raw.attrib_bool :: 0x00020005 :: method
-
     fn focused(read self) -> Bool:
         return self.raw.attrib_bool :: 0x00020001 :: method
-
+    fn has_focus(read self) -> Bool:
+        return self.focused :: :: method
     fn hovered(read self) -> Bool:
         return self.raw.attrib_bool :: 0x0002000B :: method
-
     fn auto_iconify(read self) -> Bool:
         return self.raw.attrib_bool :: 0x00020006 :: method
-
     fn floating(read self) -> Bool:
         return self.raw.attrib_bool :: 0x00020007 :: method
-
     fn iconified(read self) -> Bool:
         return self.raw.attrib_bool :: 0x00020002 :: method
-
+    fn minimized(read self) -> Bool:
+        return self.iconified :: :: method
+    fn set_minimized(read self, value: Bool) -> Unit:
+        select:
+            when value => self.iconify :: :: method
+            else => self.restore :: :: method
+        return
     fn maximized(read self) -> Bool:
         return self.raw.attrib_bool :: 0x00020008 :: method
-
+    fn set_maximized(read self, value: Bool) -> Unit:
+        select:
+            when value => self.maximize :: :: method
+            else => self.restore :: :: method
+        return
     fn focus_on_show(read self) -> Bool:
         return self.raw.attrib_bool :: 0x0002000C :: method
-
     fn mouse_passthrough(read self) -> Bool:
         return self.raw.attrib_bool :: 0x0002000D :: method
-
+    fn cursor_hittest(read self) -> Bool:
+        return !self.mouse_passthrough :: :: method
     fn set_resizable(read self, value: Bool) -> Unit:
         self.raw.set_attrib_bool :: 0x00020003, value :: method
         return
-
     fn set_decorated(read self, value: Bool) -> Unit:
         self.raw.set_attrib_bool :: 0x00020005, value :: method
         return
-
     fn set_auto_iconify(read self, value: Bool) -> Unit:
         self.raw.set_attrib_bool :: 0x00020006, value :: method
         return
-
     fn set_floating(read self, value: Bool) -> Unit:
         self.raw.set_attrib_bool :: 0x00020007, value :: method
+        sync_window_level_for_floating :: self.raw, value :: call
         return
-
     fn set_focus_on_show(read self, value: Bool) -> Unit:
         self.raw.set_attrib_bool :: 0x0002000C, value :: method
         return
-
     fn set_mouse_passthrough(read self, value: Bool) -> Unit:
         self.raw.set_attrib_bool :: 0x0002000D, value :: method
         return
-
+    fn set_cursor_hittest(read self, enabled: Bool) -> Unit:
+        select:
+            when enabled => self.set_mouse_passthrough :: false :: method
+            else => self.set_mouse_passthrough :: true :: method
+        return
     fn key_state(read self, read key: KeyCode) -> InputAction:
         let raw_key = key_raw :: key :: call
         let raw_state = self.raw.key :: raw_key :: method
         return input_action_from_raw :: raw_state :: call
-
     fn key_pressed(read self, read key: KeyCode) -> Bool:
         select self.key_state :: key :: method:
             when InputAction.Press => return true
             when _ => return false
-
     fn key_repeating(read self, read key: KeyCode) -> Bool:
         select self.key_state :: key :: method:
             when InputAction.Repeat => return true
             when _ => return false
-
     fn key_down(read self, read key: KeyCode) -> Bool:
         select self.key_state :: key :: method:
             when InputAction.Press => return true
             when InputAction.Repeat => return true
             when _ => return false
-
     fn mouse_button_state(read self, read button: MouseButton) -> InputAction:
         let raw_button = mouse_button_raw :: button :: call
         let raw_state = self.raw.mouse_button :: raw_button :: method
         return input_action_from_raw :: raw_state :: call
-
     fn mouse_button_pressed(read self, read button: MouseButton) -> Bool:
         select self.mouse_button_state :: button :: method:
             when InputAction.Press => return true
             when _ => return false
-
     fn mouse_button_down(read self, read button: MouseButton) -> Bool:
         select self.mouse_button_state :: button :: method:
             when InputAction.Press => return true
             when InputAction.Repeat => return true
             when _ => return false
-
     fn keyboard_snapshot(read self) -> KeyboardInputSnapshot:
         let keys_down = List[KeyCode] :: :: call
         let repeating_keys = List[KeyCode] :: :: call
@@ -2114,7 +2319,6 @@ impl Window:
             repeating_keys = repeating_keys
             sticky_keys_enabled = sticky_keys_enabled
             lock_key_mods_enabled = lock_key_mods_enabled
-
     fn mouse_snapshot(read self) -> MouseInputSnapshot:
         let buttons_down = List[MouseButton] :: :: call
         let raw_button = FIRST_MOUSE_BUTTON_RAW
@@ -2137,118 +2341,92 @@ impl Window:
             sticky_mouse_buttons_enabled = sticky_mouse_buttons_enabled
             raw_mouse_motion_supported = raw_mouse_motion_supported
             raw_mouse_motion_enabled = raw_mouse_motion_enabled
-
     fn input_snapshot(read self) -> WindowInputSnapshot:
         let keyboard = self.keyboard_snapshot :: :: method
         let mouse = self.mouse_snapshot :: :: method
         return WindowInputSnapshot :: :: call
             keyboard = keyboard
             mouse = mouse
-
     fn cursor_pos(read self) -> CursorPos:
         return self.raw.cursor_pos :: :: method
-
     fn set_cursor_pos(read self, x: F64, y: F64) -> Unit:
         self.raw.set_cursor_pos :: x, y :: method
         return
-
     fn set_cursor(read self, read cursor: GlfwCursor) -> Unit:
         self.raw.set_cursor :: cursor :: method
         return
-
     fn set_cursor_image(read self, edit image: RgbaImage, xhot: CInt, yhot: CInt) -> Option[GlfwCursor]:
         select create_cursor_image :: image, xhot, yhot :: call:
             when Option.Some(created) =>
                 self.raw.set_cursor :: created :: method
                 return Option.Some :: created :: call
             when Option.None => return Option.None
-
     fn set_standard_cursor(read self, cursor: StandardCursor) -> Option[GlfwCursor]:
         select create_standard_cursor :: cursor :: call:
             when Option.Some(created) =>
                 self.raw.set_cursor :: created :: method
                 return Option.Some :: created :: call
             when Option.None => return Option.None
-
     fn use_default_cursor(read self) -> Unit:
         let cursor = glfw_cursor_none :: :: call
         self.raw.set_cursor :: cursor :: method
         return
-
     fn cursor_mode(read self) -> CursorMode:
         let raw_mode = self.raw.input_mode :: 0x00033001 :: method
         return cursor_mode_from_raw :: raw_mode :: call
-
     fn set_cursor_mode(read self, mode: CursorMode) -> Unit:
         let raw_mode: CInt = cursor_mode_value :: mode :: call
         self.raw.set_input_mode :: 0x00033001, raw_mode :: method
         return
-
     fn use_normal_cursor(read self) -> Unit:
         self.set_cursor_mode :: CursorMode.Normal :: method
         return
-
     fn hide_cursor(read self) -> Unit:
         self.set_cursor_mode :: CursorMode.Hidden :: method
         return
-
     fn disable_cursor(read self) -> Unit:
         self.set_cursor_mode :: CursorMode.Disabled :: method
         return
-
     fn capture_cursor(read self) -> Unit:
         self.set_cursor_mode :: CursorMode.Captured :: method
         return
-
     fn sticky_keys_enabled(read self) -> Bool:
         return self.raw.input_mode :: 0x00033002 :: method != 0
-
     fn set_sticky_keys(read self, enabled: Bool) -> Unit:
         let value: CInt = bool_to_cint :: enabled :: call
         self.raw.set_input_mode :: 0x00033002, value :: method
         return
-
     fn sticky_mouse_buttons_enabled(read self) -> Bool:
         return self.raw.input_mode :: 0x00033003 :: method != 0
-
     fn set_sticky_mouse_buttons(read self, enabled: Bool) -> Unit:
         let value: CInt = bool_to_cint :: enabled :: call
         self.raw.set_input_mode :: 0x00033003, value :: method
         return
-
     fn lock_key_mods_enabled(read self) -> Bool:
         return self.raw.input_mode :: 0x00033004 :: method != 0
-
     fn set_lock_key_mods(read self, enabled: Bool) -> Unit:
         let value: CInt = bool_to_cint :: enabled :: call
         self.raw.set_input_mode :: 0x00033004, value :: method
         return
-
     fn raw_mouse_motion_enabled(read self) -> Bool:
         return self.raw.input_mode :: 0x00033005 :: method != 0
-
     fn raw_mouse_motion_supported(read self) -> Bool:
         let _ = self
         return glfw_raw_mouse_motion_supported :: :: call
-
     fn set_raw_mouse_motion(read self, enabled: Bool) -> Unit:
         let value: CInt = bool_to_cint :: enabled :: call
         self.raw.set_input_mode :: 0x00033005, value :: method
         return
-
     fn title(read self) -> Result[Str, TextDecodeError]:
         let raw_title: *read CChar = self.raw.title :: :: method
         return copy_c_string :: raw_title :: call
-
     fn set_icon(read self, read image: GlfwImage) -> Unit:
         self.raw.set_icon_single :: image :: method
         return
-
     fn set_icon_image(read self, edit image: RgbaImage) -> Unit:
         let raw = image.raw_image :: :: method
         self.raw.set_icon_single :: raw :: method
         return
-
     fn set_icon_images(read self, edit images: List[RgbaImage]) -> Result[Unit, WindowIconError]:
         select:
             when images.is_empty :: :: method =>
@@ -2268,12 +2446,10 @@ impl Window:
         let image_ptr: *read GlfwImage = #unsafe &raw read raw_images[0]
         self.raw.set_icon_array :: image_ptr, raw_count :: method
         return Result.Ok :: () :: call
-
     fn clear_icon(read self) -> Unit:
         let images: *read GlfwImage = null
         self.raw.set_icon_array :: images, 0 :: method
         return
-
     fn set_title(read self, title: Str) -> Result[Unit, TextDecodeError]:
         select maybe_c_string :: title :: call:
             when Result.Ok(text) =>
@@ -2281,11 +2457,9 @@ impl Window:
                 self.raw.set_title :: pointer :: method
                 return Result.Ok :: () :: call
             when Result.Err(err) => return Result.Err :: err :: call
-
     fn clipboard_string(read self) -> Result[Str, TextDecodeError]:
         let raw_text: *read CChar = self.raw.clipboard_string :: :: method
         return copy_c_string :: raw_text :: call
-
     fn set_clipboard_string(read self, text: Str) -> Result[Unit, TextDecodeError]:
         select maybe_c_string :: text :: call:
             when Result.Ok(value) =>
@@ -2293,108 +2467,80 @@ impl Window:
                 self.raw.set_clipboard_string :: pointer :: method
                 return Result.Ok :: () :: call
             when Result.Err(err) => return Result.Err :: err :: call
-
     fn hwnd(read self) -> Win32HWnd:
         return self.raw.win32_window :: :: method
-
     fn scancode(read self, read key: KeyCode) -> ScanCode:
         let _ = self
         return key_scancode :: key :: call
-
     fn make_context_current(read self) -> Unit:
         self.raw.make_context_current :: :: method
         return
-
     fn swap_interval(read self, interval: CInt) -> Unit:
         self.make_context_current :: :: method
         glfw_swap_interval :: interval :: call
         return
-
     fn swap_buffers(read self) -> Unit:
         self.raw.swap_buffers :: :: method
         return
-
 impl KeyboardInputSnapshot:
     fn key_state(read self, read key: KeyCode) -> InputAction:
         select:
             when self.key_repeating :: key :: method => return InputAction.Repeat
             when self.key_down :: key :: method => return InputAction.Press
             else => return InputAction.Release
-
     fn key_pressed(read self, read key: KeyCode) -> Bool:
         select self.key_state :: key :: method:
             when InputAction.Release => return false
             when _ => return true
-
     fn key_down(read self, read key: KeyCode) -> Bool:
         return key_code_list_contains :: self.keys_down, key :: call
-
     fn key_repeating(read self, read key: KeyCode) -> Bool:
         return key_code_list_contains :: self.repeating_keys, key :: call
-
 impl MouseInputSnapshot:
     fn button_state(read self, read button: MouseButton) -> InputAction:
         select:
             when self.button_down :: button :: method => return InputAction.Press
             else => return InputAction.Release
-
     fn button_pressed(read self, read button: MouseButton) -> Bool:
         return self.button_down :: button :: method
-
     fn button_down(read self, read button: MouseButton) -> Bool:
         return mouse_button_list_contains :: self.buttons_down, button :: call
-
 impl WindowInputSnapshot:
     fn key_state(read self, read key: KeyCode) -> InputAction:
         return self.keyboard.key_state :: key :: method
-
     fn key_pressed(read self, read key: KeyCode) -> Bool:
         return self.keyboard.key_pressed :: key :: method
-
     fn key_down(read self, read key: KeyCode) -> Bool:
         return self.keyboard.key_down :: key :: method
-
     fn key_repeating(read self, read key: KeyCode) -> Bool:
         return self.keyboard.key_repeating :: key :: method
-
     fn mouse_button_state(read self, read button: MouseButton) -> InputAction:
         return self.mouse.button_state :: button :: method
-
     fn mouse_button_pressed(read self, read button: MouseButton) -> Bool:
         return self.mouse.button_pressed :: button :: method
-
     fn mouse_button_down(read self, read button: MouseButton) -> Bool:
         return self.mouse.button_down :: button :: method
-
 impl GlfwMonitor:
     fn available(read self) -> Bool:
         return !self.is_null :: :: method
-
     fn primary(read self) -> Bool:
         let primary = glfw_primary_monitor :: :: call
         let left_raw = glfw_monitor_raw_handle :: self :: call
         let right_raw = glfw_monitor_raw_handle :: primary :: call
         return left_raw == right_raw
-
     fn name_text(read self) -> Result[Str, TextDecodeError]:
         let raw_name = self.name :: :: method
         return copy_c_string :: raw_name :: call
-
     fn screen_pos(read self) -> Point:
         return self.pos :: :: method
-
     fn work_rect(read self) -> Rect:
         return self.workarea :: :: method
-
     fn physical_size_mm(read self) -> Size:
         return self.physical_size :: :: method
-
     fn desktop_scale(read self) -> Scale:
         return self.content_scale :: :: method
-
     fn current_video_mode(read self) -> Option[VideoMode]:
         return self.video_mode :: :: method
-
     fn fullscreen_spec(read self) -> Result[WindowMonitorSpec, WindowModeError]:
         select self.current_video_mode :: :: method:
             when Option.Some(mode) =>
@@ -2405,7 +2551,6 @@ impl GlfwMonitor:
                 let spec = window_monitor_spec :: monitor, pos, size, mode.refresh_rate :: call
                 return Result.Ok :: spec :: call
             when Option.None => return Result.Err :: WindowModeError.MissingVideoMode :: call
-
     fn fullscreen_spec_with_video_mode(read self, read mode: VideoMode) -> Result[WindowMonitorSpec, WindowModeError]:
         let pos = self.pos :: :: method
         let size = GlfwSize :: mode.width, mode.height :: call
@@ -2413,18 +2558,14 @@ impl GlfwMonitor:
         let monitor = GlfwMonitor :: monitor_raw :: call
         let spec = window_monitor_spec :: monitor, pos, size, mode.refresh_rate :: call
         return Result.Ok :: spec :: call
-
     fn video_mode_count(read self) -> CInt:
         let modes = self.video_modes :: :: method
         return modes.count :: :: method
-
     fn first_video_mode(read self) -> Option[VideoMode]:
         return self.video_mode_at :: 0 :: method
-
     fn video_mode_at(read self, index: CInt) -> Option[VideoMode]:
         let modes = self.video_modes :: :: method
         return modes.at :: index :: method
-
     fn video_modes_snapshot(read self) -> List[VideoMode]:
         let values = List[VideoMode] :: :: call
         let modes = self.video_modes :: :: method
@@ -2436,7 +2577,6 @@ impl GlfwMonitor:
                 when Option.None => ()
             scan = scan + 1
         return values
-
     fn video_mode_matching(read self, width: CInt, height: CInt, refresh_rate: CInt) -> Option[VideoMode]:
         let modes = self.video_modes :: :: method
         let count = modes.count :: :: method
@@ -2451,7 +2591,6 @@ impl GlfwMonitor:
                 when Option.None => ()
             scan = scan + 1
         return Option.None
-
     fn video_mode_with_max_refresh(read self, width: CInt, height: CInt) -> Option[VideoMode]:
         let modes = self.video_modes :: :: method
         let count = modes.count :: :: method
@@ -2474,12 +2613,10 @@ impl GlfwMonitor:
         select:
             when best_index >= 0 => return modes.at :: best_index :: method
             else => return Option.None
-
     fn supports_video_mode(read self, read mode: VideoMode) -> Bool:
         select self.video_mode_matching :: mode.width, mode.height, mode.refresh_rate :: method:
             when Option.Some(_) => return true
             when Option.None => return false
-
     fn gamma_ramp_snapshot(read self) -> Option[MonitorGammaRamp]:
         select self.gamma_ramp :: :: method:
             when Option.Some(ramp) =>
@@ -2489,18 +2626,15 @@ impl GlfwMonitor:
                 let snapshot = MonitorGammaRamp :: red, green, blue :: call
                 return Option.Some :: snapshot :: call
             when Option.None => return Option.None
-
     fn apply_gamma_ramp(read self, edit ramp: MonitorGammaRamp) -> Result[Unit, MonitorGammaRampError]:
         select ramp.raw_gamma_ramp :: :: method:
             when Result.Ok(raw_ramp) =>
                 self.set_gamma_ramp :: raw_ramp :: method
                 return Result.Ok :: () :: call
             when Result.Err(error) => return Result.Err :: error :: call
-
     fn apply_gamma(read self, gamma: F32) -> Unit:
         self.set_gamma :: gamma :: method
         return
-
 impl MonitorGammaRamp:
     fn raw_gamma_ramp(edit self) -> Result[GlfwGammaRamp, MonitorGammaRampError]:
         select gamma_ramp_channel_count :: self :: call:
@@ -2511,9 +2645,7 @@ impl MonitorGammaRamp:
                 let raw = GlfwGammaRamp :: red_ptr, green_ptr, blue_ptr, size :: call
                 return Result.Ok :: raw :: call
             when Result.Err(error) => return Result.Err :: error :: call
-
     fn size(read self) -> Index:
         return self.red.count :: :: method
-
     fn empty(read self) -> Bool:
         return self.red.is_empty :: :: method

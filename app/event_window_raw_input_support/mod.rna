@@ -1,0 +1,659 @@
+use std.{List, Option}
+use event.{AppEvent, AppEventBatch, JoystickEvent, MonitorEvent}
+use event.{WindowEvent, WindowRawKeyData, WindowRawMouseButtonData, WindowRawMouseMotionData}
+use event.WindowRawMouseWheelData
+use event.UserEvent
+use input.{RawKeyCode, ScanCode, input_action_from_raw, input_action_raw}
+use input.{mouse_button_from_raw, mouse_button_raw}
+use window.WindowId
+
+fn push_window(edit events: List[AppEvent], window_event: WindowEvent) -> Unit:
+    let wrapped = AppEvent.Window :: window_event :: call
+    events.push :: wrapped :: method
+
+fn push_monitor(edit events: List[AppEvent], monitor_event: MonitorEvent) -> Unit:
+    let wrapped = AppEvent.Monitor :: monitor_event :: call
+    events.push :: wrapped :: method
+
+fn push_joystick(edit events: List[AppEvent], joystick_event: JoystickEvent) -> Unit:
+    let wrapped = AppEvent.Joystick :: joystick_event :: call
+    events.push :: wrapped :: method
+
+fn push_user(edit events: List[AppEvent], user_event: UserEvent) -> Unit:
+    let wrapped = AppEvent.User :: user_event :: call
+    events.push :: wrapped :: method
+
+fn build_raw_mouse_motion_window_event(id: WindowId, delta_x: CInt, delta_y: CInt) -> WindowEvent:
+    return WindowEvent.RawMouseMotion :: :: call
+        id = id
+        delta_x = delta_x
+        delta_y = delta_y
+
+fn build_raw_mouse_button_changed_window_event(id: WindowId, raw_button: CInt, raw_action: CInt) -> WindowEvent:
+    return WindowEvent.RawMouseButtonChanged :: :: call
+        id = id
+        button = mouse_button_from_raw :: raw_button :: call
+        action = input_action_from_raw :: raw_action :: call
+
+fn build_raw_mouse_wheel_window_event(id: WindowId, delta_x: CInt, delta_y: CInt) -> WindowEvent:
+    return WindowEvent.RawMouseWheel :: :: call
+        id = id
+        delta_x = delta_x
+        delta_y = delta_y
+
+fn build_raw_key_changed_window_event(id: WindowId, raw_key: RawKeyCode, scancode: ScanCode, raw_action: CInt, extended: Bool) -> WindowEvent:
+    return WindowEvent.RawKeyChanged :: :: call
+        id = id
+        raw_key = raw_key
+        scancode = scancode
+        action = input_action_from_raw :: raw_action :: call
+        extended = extended
+
+fn copy_window_raw_mouse_motion_data(read event: WindowEvent) -> Option[WindowRawMouseMotionData]:
+    select event:
+        when WindowEvent.RawMouseMotion(id = _, delta_x = delta_x, delta_y = delta_y) =>
+            let data = WindowRawMouseMotionData :: :: call
+                delta_x = delta_x
+                delta_y = delta_y
+            return Option.Some :: data :: call
+        when _ => return Option.None
+
+fn copy_window_raw_mouse_wheel_data(read event: WindowEvent) -> Option[WindowRawMouseWheelData]:
+    select event:
+        when WindowEvent.RawMouseWheel(id = _, delta_x = delta_x, delta_y = delta_y) =>
+            let data = WindowRawMouseWheelData :: :: call
+                delta_x = delta_x
+                delta_y = delta_y
+            return Option.Some :: data :: call
+        when _ => return Option.None
+
+impl AppEventBatch:
+    fn raw_key_changed_events(edit self) -> List[WindowEvent]:
+        let events = self.take_raw_key_changed_events :: :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.RawKeyChanged(id = id, raw_key = raw_key, scancode = scancode, action = action, extended = extended) =>
+                    let raw_action = input_action_raw :: action :: call
+                    let copied = build_raw_key_changed_window_event :: id, raw_key, scancode, raw_action, extended :: call
+                    let restored = build_raw_key_changed_window_event :: id, raw_key, scancode, raw_action, extended :: call
+                    matched.push :: copied :: method
+                    push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn raw_key_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = self.take_raw_key_changed_events_for :: id :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.RawKeyChanged(id = event_id, raw_key = raw_key, scancode = scancode, action = action, extended = extended) =>
+                    let raw_action = input_action_raw :: action :: call
+                    let copied = build_raw_key_changed_window_event :: event_id, raw_key, scancode, raw_action, extended :: call
+                    let restored = build_raw_key_changed_window_event :: event_id, raw_key, scancode, raw_action, extended :: call
+                    matched.push :: copied :: method
+                    push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn raw_mouse_motion_events(edit self) -> List[WindowEvent]:
+        let events = self.take_raw_mouse_motion_events :: :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.RawMouseMotion(id = id, delta_x = delta_x, delta_y = delta_y) =>
+                    let copied = build_raw_mouse_motion_window_event :: id, delta_x, delta_y :: call
+                    let restored = build_raw_mouse_motion_window_event :: id, delta_x, delta_y :: call
+                    matched.push :: copied :: method
+                    push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn raw_mouse_motion_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = self.take_raw_mouse_motion_events_for :: id :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.RawMouseMotion(id = event_id, delta_x = delta_x, delta_y = delta_y) =>
+                    let copied = build_raw_mouse_motion_window_event :: event_id, delta_x, delta_y :: call
+                    let restored = build_raw_mouse_motion_window_event :: event_id, delta_x, delta_y :: call
+                    matched.push :: copied :: method
+                    push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn raw_mouse_button_changed_events(edit self) -> List[WindowEvent]:
+        let events = self.take_raw_mouse_button_changed_events :: :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.RawMouseButtonChanged(id = id, button = button, action = action) =>
+                    let raw_button = mouse_button_raw :: button :: call
+                    let raw_action = input_action_raw :: action :: call
+                    let copied = build_raw_mouse_button_changed_window_event :: id, raw_button, raw_action :: call
+                    let restored = build_raw_mouse_button_changed_window_event :: id, raw_button, raw_action :: call
+                    matched.push :: copied :: method
+                    push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn raw_mouse_button_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = self.take_raw_mouse_button_changed_events_for :: id :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.RawMouseButtonChanged(id = event_id, button = button, action = action) =>
+                    let raw_button = mouse_button_raw :: button :: call
+                    let raw_action = input_action_raw :: action :: call
+                    let copied = build_raw_mouse_button_changed_window_event :: event_id, raw_button, raw_action :: call
+                    let restored = build_raw_mouse_button_changed_window_event :: event_id, raw_button, raw_action :: call
+                    matched.push :: copied :: method
+                    push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn raw_mouse_wheel_events(edit self) -> List[WindowEvent]:
+        let events = self.take_raw_mouse_wheel_events :: :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.RawMouseWheel(id = id, delta_x = delta_x, delta_y = delta_y) =>
+                    let copied = build_raw_mouse_wheel_window_event :: id, delta_x, delta_y :: call
+                    let restored = build_raw_mouse_wheel_window_event :: id, delta_x, delta_y :: call
+                    matched.push :: copied :: method
+                    push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn raw_mouse_wheel_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = self.take_raw_mouse_wheel_events_for :: id :: method
+        let matched = List[WindowEvent] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event:
+                when WindowEvent.RawMouseWheel(id = event_id, delta_x = delta_x, delta_y = delta_y) =>
+                    let copied = build_raw_mouse_wheel_window_event :: event_id, delta_x, delta_y :: call
+                    let restored = build_raw_mouse_wheel_window_event :: event_id, delta_x, delta_y :: call
+                    matched.push :: copied :: method
+                    push_window :: self.events, restored :: call
+                when _ => ()
+        return matched
+
+    fn raw_mouse_motion_data(edit self) -> List[WindowRawMouseMotionData]:
+        let matched = List[WindowRawMouseMotionData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select copy_window_raw_mouse_motion_data :: window_event :: call:
+                        when Option.Some(data) => matched.push :: data :: method
+                        when Option.None => ()
+                    push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn raw_mouse_button_data(edit self) -> List[WindowRawMouseButtonData]:
+        let matched = List[WindowRawMouseButtonData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.RawMouseButtonChanged(id = event_id, button = button, action = action) =>
+                            let raw_button = mouse_button_raw :: button :: call
+                            let raw_action = input_action_raw :: action :: call
+                            let data = WindowRawMouseButtonData :: :: call
+                                button = mouse_button_from_raw :: raw_button :: call
+                                action = input_action_from_raw :: raw_action :: call
+                            matched.push :: data :: method
+                            let restored = build_raw_mouse_button_changed_window_event :: event_id, raw_button, raw_action :: call
+                            push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn raw_mouse_wheel_data(edit self) -> List[WindowRawMouseWheelData]:
+        let matched = List[WindowRawMouseWheelData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select copy_window_raw_mouse_wheel_data :: window_event :: call:
+                        when Option.Some(data) => matched.push :: data :: method
+                        when Option.None => ()
+                    push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn raw_key_data(edit self) -> List[WindowRawKeyData]:
+        let matched = List[WindowRawKeyData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.RawKeyChanged(id = event_id, raw_key = raw_key, scancode = scancode, action = action, extended = extended) =>
+                            let raw_action = input_action_raw :: action :: call
+                            let data = WindowRawKeyData :: :: call
+                                raw_key = raw_key
+                                scancode = scancode
+                                action = input_action_from_raw :: raw_action :: call
+                                extended = extended
+                            matched.push :: data :: method
+                            let restored = build_raw_key_changed_window_event :: event_id, raw_key, scancode, raw_action, extended :: call
+                            push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn raw_mouse_motion_data_for(edit self, id: WindowId) -> List[WindowRawMouseMotionData]:
+        let matched = List[WindowRawMouseMotionData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select:
+                        when window_event.window_id :: :: method == id =>
+                            select copy_window_raw_mouse_motion_data :: window_event :: call:
+                                when Option.Some(data) => matched.push :: data :: method
+                                when Option.None => ()
+                        else => ()
+                    push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn raw_mouse_button_data_for(edit self, id: WindowId) -> List[WindowRawMouseButtonData]:
+        let matched = List[WindowRawMouseButtonData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.RawMouseButtonChanged(id = event_id, button = button, action = action) =>
+                            let raw_button = mouse_button_raw :: button :: call
+                            let raw_action = input_action_raw :: action :: call
+                            select:
+                                when event_id == id =>
+                                    let data = WindowRawMouseButtonData :: :: call
+                                        button = mouse_button_from_raw :: raw_button :: call
+                                        action = input_action_from_raw :: raw_action :: call
+                                    matched.push :: data :: method
+                                else => ()
+                            let restored = build_raw_mouse_button_changed_window_event :: event_id, raw_button, raw_action :: call
+                            push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn raw_mouse_wheel_data_for(edit self, id: WindowId) -> List[WindowRawMouseWheelData]:
+        let matched = List[WindowRawMouseWheelData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select:
+                        when window_event.window_id :: :: method == id =>
+                            select copy_window_raw_mouse_wheel_data :: window_event :: call:
+                                when Option.Some(data) => matched.push :: data :: method
+                                when Option.None => ()
+                        else => ()
+                    push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn raw_key_data_for(edit self, id: WindowId) -> List[WindowRawKeyData]:
+        let matched = List[WindowRawKeyData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.RawKeyChanged(id = event_id, raw_key = raw_key, scancode = scancode, action = action, extended = extended) =>
+                            let raw_action = input_action_raw :: action :: call
+                            select:
+                                when event_id == id =>
+                                    let data = WindowRawKeyData :: :: call
+                                        raw_key = raw_key
+                                        scancode = scancode
+                                        action = input_action_from_raw :: raw_action :: call
+                                        extended = extended
+                                    matched.push :: data :: method
+                                else => ()
+                            let restored = build_raw_key_changed_window_event :: event_id, raw_key, scancode, raw_action, extended :: call
+                            push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return matched
+
+    fn take_raw_mouse_motion_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.RawMouseMotion(id = _, delta_x = _, delta_y = _) => events.push :: window_event :: method
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_raw_key_changed_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.RawKeyChanged(id = _, raw_key = _, scancode = _, action = _, extended = _) => events.push :: window_event :: method
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_raw_mouse_button_changed_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.RawMouseButtonChanged(id = _, button = _, action = _) => events.push :: window_event :: method
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_raw_mouse_wheel_events(edit self) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.RawMouseWheel(id = _, delta_x = _, delta_y = _) => events.push :: window_event :: method
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_raw_mouse_motion_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.RawMouseMotion(id = event_id, delta_x = delta_x, delta_y = delta_y) =>
+                            select:
+                                when event_id == id =>
+                                    let copied = build_raw_mouse_motion_window_event :: event_id, delta_x, delta_y :: call
+                                    events.push :: copied :: method
+                                else =>
+                                    let restored = build_raw_mouse_motion_window_event :: event_id, delta_x, delta_y :: call
+                                    push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_raw_key_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.RawKeyChanged(id = event_id, raw_key = raw_key, scancode = scancode, action = action, extended = extended) =>
+                            let raw_action = input_action_raw :: action :: call
+                            select:
+                                when event_id == id =>
+                                    let copied = build_raw_key_changed_window_event :: event_id, raw_key, scancode, raw_action, extended :: call
+                                    events.push :: copied :: method
+                                else =>
+                                    let restored = build_raw_key_changed_window_event :: event_id, raw_key, scancode, raw_action, extended :: call
+                                    push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_raw_mouse_button_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.RawMouseButtonChanged(id = event_id, button = button, action = action) =>
+                            let raw_button = mouse_button_raw :: button :: call
+                            let raw_action = input_action_raw :: action :: call
+                            select:
+                                when event_id == id =>
+                                    let copied = build_raw_mouse_button_changed_window_event :: event_id, raw_button, raw_action :: call
+                                    events.push :: copied :: method
+                                else =>
+                                    let restored = build_raw_mouse_button_changed_window_event :: event_id, raw_button, raw_action :: call
+                                    push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_raw_mouse_wheel_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let events = List[WindowEvent] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.RawMouseWheel(id = event_id, delta_x = delta_x, delta_y = delta_y) =>
+                            select:
+                                when event_id == id =>
+                                    let copied = build_raw_mouse_wheel_window_event :: event_id, delta_x, delta_y :: call
+                                    events.push :: copied :: method
+                                else =>
+                                    let restored = build_raw_mouse_wheel_window_event :: event_id, delta_x, delta_y :: call
+                                    push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return events
+
+    fn take_raw_mouse_motion_data(edit self) -> List[WindowRawMouseMotionData]:
+        let events = self.take_raw_mouse_motion_events :: :: method
+        let data = List[WindowRawMouseMotionData] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.raw_mouse_motion_data :: :: method:
+                when Option.Some(value) => data.push :: value :: method
+                when Option.None => ()
+        return data
+
+    fn take_raw_key_data(edit self) -> List[WindowRawKeyData]:
+        let events = self.take_raw_key_changed_events :: :: method
+        let data = List[WindowRawKeyData] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.raw_key_data :: :: method:
+                when Option.Some(value) => data.push :: value :: method
+                when Option.None => ()
+        return data
+
+    fn take_raw_mouse_button_data(edit self) -> List[WindowRawMouseButtonData]:
+        let events = self.take_raw_mouse_button_changed_events :: :: method
+        let data = List[WindowRawMouseButtonData] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.raw_mouse_button_data :: :: method:
+                when Option.Some(value) => data.push :: value :: method
+                when Option.None => ()
+        return data
+
+    fn take_raw_mouse_wheel_data(edit self) -> List[WindowRawMouseWheelData]:
+        let events = self.take_raw_mouse_wheel_events :: :: method
+        let data = List[WindowRawMouseWheelData] :: :: call
+        repeat while !events.is_empty :: :: method:
+            let event = events.remove :: 0 :: method
+            select event.raw_mouse_wheel_data :: :: method:
+                when Option.Some(value) => data.push :: value :: method
+                when Option.None => ()
+        return data
+
+    fn take_raw_mouse_motion_data_for(edit self, id: WindowId) -> List[WindowRawMouseMotionData]:
+        let data = List[WindowRawMouseMotionData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let event_id = window_event.window_id :: :: method
+                    select:
+                        when event_id == id =>
+                            select window_event.raw_mouse_motion_data :: :: method:
+                                when Option.Some(value) => data.push :: value :: method
+                                when Option.None => push_window :: remaining, window_event :: call
+                        else => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return data
+
+    fn take_raw_key_data_for(edit self, id: WindowId) -> List[WindowRawKeyData]:
+        let data = List[WindowRawKeyData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.RawKeyChanged(id = event_id, raw_key = raw_key, scancode = scancode, action = action, extended = extended) =>
+                            let raw_action = input_action_raw :: action :: call
+                            select:
+                                when event_id == id =>
+                                    let value = WindowRawKeyData :: :: call
+                                        raw_key = raw_key
+                                        scancode = scancode
+                                        action = input_action_from_raw :: raw_action :: call
+                                        extended = extended
+                                    data.push :: value :: method
+                                else =>
+                                    let restored = build_raw_key_changed_window_event :: event_id, raw_key, scancode, raw_action, extended :: call
+                                    push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return data
+
+    fn take_raw_mouse_button_data_for(edit self, id: WindowId) -> List[WindowRawMouseButtonData]:
+        let data = List[WindowRawMouseButtonData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    select window_event:
+                        when WindowEvent.RawMouseButtonChanged(id = event_id, button = button, action = action) =>
+                            let raw_button = mouse_button_raw :: button :: call
+                            let raw_action = input_action_raw :: action :: call
+                            select:
+                                when event_id == id =>
+                                    let value = WindowRawMouseButtonData :: :: call
+                                        button = mouse_button_from_raw :: raw_button :: call
+                                        action = input_action_from_raw :: raw_action :: call
+                                    data.push :: value :: method
+                                else =>
+                                    let restored = build_raw_mouse_button_changed_window_event :: event_id, raw_button, raw_action :: call
+                                    push_window :: remaining, restored :: call
+                        when _ => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return data
+
+    fn take_raw_mouse_wheel_data_for(edit self, id: WindowId) -> List[WindowRawMouseWheelData]:
+        let data = List[WindowRawMouseWheelData] :: :: call
+        let remaining = List[AppEvent] :: :: call
+        repeat while !self.events.is_empty :: :: method:
+            let event = self.events.remove :: 0 :: method
+            select event:
+                when AppEvent.Window(window_event) =>
+                    let event_id = window_event.window_id :: :: method
+                    select:
+                        when event_id == id =>
+                            select window_event.raw_mouse_wheel_data :: :: method:
+                                when Option.Some(value) => data.push :: value :: method
+                                when Option.None => push_window :: remaining, window_event :: call
+                        else => push_window :: remaining, window_event :: call
+                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
+                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
+                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
+        self.events = remaining
+        return data

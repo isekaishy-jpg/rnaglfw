@@ -1,5 +1,5 @@
-use std.Option
-use runa_app.{Monitor, MonitorId, MonitorSnapshot, Window, WindowId, WindowSnapshot}
+use std.{Option, Result}
+use runa_app.{AppError, Monitor, MonitorId, MonitorSnapshot, Window, WindowId, WindowSnapshot}
 use present.VulkanPresentApp
 
 impl VulkanPresentApp:
@@ -29,3 +29,18 @@ impl VulkanPresentApp:
 
     fn primary_monitor_snapshot_option(read self) -> Option[MonitorSnapshot]:
         return self.app.primary_monitor_snapshot_option :: :: method
+
+    fn monitor(read self, id: MonitorId) -> Result[Monitor, AppError]:
+        return self.app.monitor :: id :: method
+
+    fn monitor_snapshot(read self, id: MonitorId) -> Result[MonitorSnapshot, AppError]:
+        return self.app.monitor_snapshot :: id :: method
+
+    fn primary_monitor(read self) -> Result[Monitor, AppError]:
+        return self.app.primary_monitor :: :: method
+
+    fn primary_monitor_id(read self) -> Result[MonitorId, AppError]:
+        return self.app.primary_monitor_id :: :: method
+
+    fn primary_monitor_snapshot(read self) -> Result[MonitorSnapshot, AppError]:
+        return self.app.primary_monitor_snapshot :: :: method

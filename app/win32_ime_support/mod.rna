@@ -1,0 +1,312 @@
+use std.{Option, Result}
+use bridge.bool_to_cint
+use glfw.GlfwWindow
+use mailbox.{WindowMailbox, push_window_composition_committed_utf16}
+use mailbox.{push_window_composition_ended, push_window_composition_started}
+use mailbox.push_window_composition_updated_utf16
+use window.{Rect, Win32HWnd}
+
+const WM_IME_STARTCOMPOSITION: CUInt = 0x010D
+const WM_IME_ENDCOMPOSITION: CUInt = 0x010E
+const WM_IME_COMPOSITION: CUInt = 0x010F
+const GCS_COMPSTR: CUInt = 0x0008
+const GCS_COMPSTR_BITS: USize = 0x0008USize
+const GCS_CURSORPOS: CUInt = 0x0080
+const GCS_RESULTSTR: CUInt = 0x0800
+const GCS_RESULTSTR_BITS: USize = 0x0800USize
+const IME_SUBCLASS_ID: USize = 0x52494D45USize
+const HEAP_ZERO_MEMORY: CUInt = 0x00000008
+const CFS_DEFAULT: CUInt = 0x0000
+const CFS_RECT: CUInt = 0x0001
+
+type Himc = *edit CVoid
+
+#repr[c]
+struct Win32Point:
+    x: CInt
+    y: CInt
+
+#repr[c]
+struct Win32Rect:
+    left: CInt
+    top: CInt
+    right: CInt
+    bottom: CInt
+
+#repr[c]
+struct CompositionForm:
+    style: CUInt
+    current_pos: Win32Point
+    area: Win32Rect
+
+#link[name = "kernel32"]
+#unsafe
+extern["system"] fn GetProcessHeap() -> *edit CVoid
+
+#link[name = "kernel32"]
+#unsafe
+extern["system"] fn HeapAlloc(heap: *edit CVoid, flags: CUInt, bytes: CSize) -> *edit CVoid
+
+#link[name = "kernel32"]
+#unsafe
+extern["system"] fn HeapFree(heap: *edit CVoid, flags: CUInt, memory: *edit CVoid) -> CInt
+
+#link[name = "imm32"]
+#unsafe
+extern["system"] fn ImmGetContext(window: Win32HWnd) -> Himc
+
+#link[name = "imm32"]
+#unsafe
+extern["system"] fn ImmReleaseContext(window: Win32HWnd, himc: Himc) -> CInt
+
+#link[name = "imm32"]
+#unsafe
+extern["system"] fn ImmGetCompositionStringW(himc: Himc, index: CUInt, buffer: *edit CVoid, buffer_bytes: CInt) -> CInt
+
+#link[name = "imm32"]
+#unsafe
+extern["system"] fn ImmGetOpenStatus(himc: Himc) -> CInt
+
+#link[name = "imm32"]
+#unsafe
+extern["system"] fn ImmSetOpenStatus(himc: Himc, open: CInt) -> CInt
+
+#link[name = "imm32"]
+#unsafe
+extern["system"] fn ImmGetCompositionWindow(himc: Himc, form: *edit CompositionForm) -> CInt
+
+#link[name = "imm32"]
+#unsafe
+extern["system"] fn ImmSetCompositionWindow(himc: Himc, form: *edit CompositionForm) -> CInt
+
+#link[name = "comctl32"]
+#unsafe
+extern["system"] fn SetWindowSubclass(window: Win32HWnd, procedure: extern["system"] fn(Win32HWnd, CUInt, USize, ISize, USize, USize) -> ISize, subclass_id: USize, ref_data: USize) -> CInt
+
+#link[name = "comctl32"]
+#unsafe
+extern["system"] fn RemoveWindowSubclass(window: Win32HWnd, procedure: extern["system"] fn(Win32HWnd, CUInt, USize, ISize, USize, USize) -> ISize, subclass_id: USize) -> CInt
+
+#link[name = "comctl32"]
+#unsafe
+extern["system"] fn DefSubclassProc(window: Win32HWnd, message: CUInt, wparam: USize, lparam: ISize) -> ISize
+
+fn ref_data_as_mailbox(ref_data: USize) -> *edit WindowMailbox:
+    return #unsafe raw_pointer_from_address_edit[WindowMailbox] :: ref_data :: call
+
+fn void_as_u16(pointer: *edit CVoid) -> *edit U16:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[U16] :: address :: call
+
+fn edit_as_read_u16(pointer: *edit U16) -> *read U16:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_read[U16] :: address :: call
+
+fn release_himc(window: Win32HWnd, himc: Himc) -> Unit:
+    select:
+        when himc.is_null :: :: method => return
+        else =>
+            let _ = #unsafe ImmReleaseContext :: window, himc :: call
+            return
+
+fn empty_composition_form() -> CompositionForm:
+    let current_pos = Win32Point :: 0, 0 :: call
+    let area = Win32Rect :: 0, 0, 0, 0 :: call
+    return CompositionForm :: CFS_DEFAULT, current_pos, area :: call
+
+fn composition_form_area(read form: CompositionForm) -> Rect:
+    let width: CInt = form.area.right - form.area.left
+    let height: CInt = form.area.bottom - form.area.top
+    return Rect :: form.area.left, form.area.top, width, height :: call
+
+fn composition_form_from_area(read area: Rect) -> CompositionForm:
+    let current_pos = Win32Point :: area.x, area.y :: call
+    let right: CInt = area.x + area.width
+    let bottom: CInt = area.y + area.height
+    let raw_area = Win32Rect :: area.x, area.y, right, bottom :: call
+    return CompositionForm :: CFS_RECT, current_pos, raw_area :: call
+
+fn load_composition_utf16(window: Win32HWnd, index: CUInt) -> Option[(*edit CVoid, CInt)]:
+    let himc = #unsafe ImmGetContext :: window :: call
+    select:
+        when himc.is_null :: :: method => return Option.None
+        else => ()
+    let byte_count = #unsafe ImmGetCompositionStringW :: himc, index, null, 0 :: call
+    select:
+        when byte_count < 0 =>
+            release_himc :: window, himc :: call
+            return Option.None
+        when byte_count == 0 =>
+            release_himc :: window, himc :: call
+            return Option.Some :: (null, 0) :: call
+        else => ()
+    let Result.Ok(payload_bytes) = byte_count as Maybe[CSize] else =>
+        release_himc :: window, himc :: call
+        return Option.None
+    let heap = #unsafe GetProcessHeap :: :: call
+    select:
+        when heap.is_null :: :: method =>
+            release_himc :: window, himc :: call
+            return Option.None
+        else => ()
+    let payload = #unsafe HeapAlloc :: heap, HEAP_ZERO_MEMORY, payload_bytes :: call
+    select:
+        when payload.is_null :: :: method =>
+            release_himc :: window, himc :: call
+            return Option.None
+        else => ()
+    let copied = #unsafe ImmGetCompositionStringW :: himc, index, payload, byte_count :: call
+    release_himc :: window, himc :: call
+    select:
+        when copied < 0 =>
+            let _ = #unsafe HeapFree :: heap, 0, payload :: call
+            return Option.None
+        else => return Option.Some :: (payload, copied) :: call
+
+fn composition_cursor(window: Win32HWnd) -> CInt:
+    let himc = #unsafe ImmGetContext :: window :: call
+    select:
+        when himc.is_null :: :: method => return -1
+        else => ()
+    let cursor = #unsafe ImmGetCompositionStringW :: himc, GCS_CURSORPOS, null, 0 :: call
+    release_himc :: window, himc :: call
+    select:
+        when cursor < 0 => return -1
+        else => return cursor
+
+fn push_result_payload(window: Win32HWnd, mailbox: *edit WindowMailbox) -> Unit:
+    select load_composition_utf16 :: window, GCS_RESULTSTR :: call:
+        when Option.Some((payload, byte_count)) =>
+            let units = byte_count / 2
+            let pointer = void_as_u16 :: payload :: call
+            let view = edit_as_read_u16 :: pointer :: call
+            push_window_composition_committed_utf16 :: mailbox, units, view :: call
+            select:
+                when payload.is_null :: :: method => ()
+                else =>
+                    let heap = #unsafe GetProcessHeap :: :: call
+                    select:
+                        when heap.is_null :: :: method => ()
+                        else => let _ = #unsafe HeapFree :: heap, 0, payload :: call
+        when Option.None => ()
+    return
+
+fn push_preedit_payload(window: Win32HWnd, mailbox: *edit WindowMailbox) -> Unit:
+    let cursor = composition_cursor :: window :: call
+    select load_composition_utf16 :: window, GCS_COMPSTR :: call:
+        when Option.Some((payload, byte_count)) =>
+            let units = byte_count / 2
+            let pointer = void_as_u16 :: payload :: call
+            let view = edit_as_read_u16 :: pointer :: call
+            push_window_composition_updated_utf16 :: mailbox, units, cursor, view :: call
+            select:
+                when payload.is_null :: :: method => ()
+                else =>
+                    let heap = #unsafe GetProcessHeap :: :: call
+                    select:
+                        when heap.is_null :: :: method => ()
+                        else => let _ = #unsafe HeapFree :: heap, 0, payload :: call
+        when Option.None => ()
+    return
+
+#export[name = "runa_app_window_ime_subclass_proc"]
+extern["system"] fn window_ime_subclass_proc(window: Win32HWnd, message: CUInt, wparam: USize, lparam: ISize, subclass_id: USize, ref_data: USize) -> ISize:
+    let _ = subclass_id
+    let _ = wparam
+    select:
+        when ref_data == 0USize => ()
+        else =>
+            let mailbox = ref_data_as_mailbox :: ref_data :: call
+            let Result.Ok(lparam_bits) = lparam as Maybe[USize] else =>
+                return #unsafe DefSubclassProc :: window, message, wparam, lparam :: call
+            select:
+                when message == WM_IME_STARTCOMPOSITION => push_window_composition_started :: mailbox :: call
+                when message == WM_IME_ENDCOMPOSITION => push_window_composition_ended :: mailbox :: call
+                when message == WM_IME_COMPOSITION =>
+                    select:
+                        when (lparam_bits & GCS_RESULTSTR_BITS) != 0USize => push_result_payload :: window, mailbox :: call
+                        else => ()
+                    select:
+                        when (lparam_bits & GCS_COMPSTR_BITS) != 0USize => push_preedit_payload :: window, mailbox :: call
+                        else => ()
+                else => ()
+    return #unsafe DefSubclassProc :: window, message, wparam, lparam :: call
+
+pub(package) fn attach_ime_subclass(read window: GlfwWindow, mailbox: *edit WindowMailbox) -> Bool:
+    let hwnd = window.win32_window :: :: method
+    select:
+        when hwnd.is_null :: :: method => return false
+        when mailbox.is_null :: :: method => return false
+        else => ()
+    let ref_data = #unsafe raw_pointer_address_edit :: mailbox :: call
+    let attached = #unsafe SetWindowSubclass :: hwnd, window_ime_subclass_proc, IME_SUBCLASS_ID, ref_data :: call
+    return attached != 0
+
+pub(package) fn current_window_ime_allowed(read window: GlfwWindow) -> Bool:
+    let hwnd = window.win32_window :: :: method
+    select:
+        when hwnd.is_null :: :: method => return false
+        else => ()
+    let himc = #unsafe ImmGetContext :: hwnd :: call
+    select:
+        when himc.is_null :: :: method => return false
+        else => ()
+    let allowed = #unsafe ImmGetOpenStatus :: himc :: call
+    release_himc :: hwnd, himc :: call
+    return allowed != 0
+
+pub(package) fn set_window_ime_allowed(read window: GlfwWindow, allowed: Bool) -> Unit:
+    let hwnd = window.win32_window :: :: method
+    select:
+        when hwnd.is_null :: :: method => return
+        else => ()
+    let himc = #unsafe ImmGetContext :: hwnd :: call
+    select:
+        when himc.is_null :: :: method => return
+        else => ()
+    let raw_allowed = bool_to_cint :: allowed :: call
+    let _ = #unsafe ImmSetOpenStatus :: himc, raw_allowed :: call
+    release_himc :: hwnd, himc :: call
+    return
+
+pub(package) fn current_window_ime_cursor_area(read window: GlfwWindow) -> Option[Rect]:
+    let hwnd = window.win32_window :: :: method
+    select:
+        when hwnd.is_null :: :: method => return Option.None
+        else => ()
+    let himc = #unsafe ImmGetContext :: hwnd :: call
+    select:
+        when himc.is_null :: :: method => return Option.None
+        else => ()
+    let form = empty_composition_form :: :: call
+    let form_ptr: *edit CompositionForm = #unsafe &raw edit form
+    let status = #unsafe ImmGetCompositionWindow :: himc, form_ptr :: call
+    release_himc :: hwnd, himc :: call
+    select:
+        when status == 0 => return Option.None
+        else =>
+            let area = composition_form_area :: form :: call
+            return Option.Some :: area :: call
+
+pub(package) fn set_window_ime_cursor_area(read window: GlfwWindow, read area: Rect) -> Unit:
+    let hwnd = window.win32_window :: :: method
+    select:
+        when hwnd.is_null :: :: method => return
+        else => ()
+    let himc = #unsafe ImmGetContext :: hwnd :: call
+    select:
+        when himc.is_null :: :: method => return
+        else => ()
+    let form = composition_form_from_area :: area :: call
+    let form_ptr: *edit CompositionForm = #unsafe &raw edit form
+    let _ = #unsafe ImmSetCompositionWindow :: himc, form_ptr :: call
+    release_himc :: hwnd, himc :: call
+    return
+
+pub(package) fn detach_ime_subclass(read window: GlfwWindow) -> Unit:
+    let hwnd = window.win32_window :: :: method
+    select:
+        when hwnd.is_null :: :: method => return
+        else => ()
+    let _ = #unsafe RemoveWindowSubclass :: hwnd, window_ime_subclass_proc, IME_SUBCLASS_ID :: call
+    return

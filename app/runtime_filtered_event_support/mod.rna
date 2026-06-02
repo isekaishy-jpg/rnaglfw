@@ -4,7 +4,7 @@ use event.{UserEvent, UserEventId, WindowCharacterData, WindowCharacterModsData}
 use event.{WindowCursorData, WindowEvent, WindowKeyData, WindowMouseButtonData}
 use event.{WindowMoveData, WindowScaleData, WindowScrollData, WindowSizeData}
 use runtime.{App, AppError}
-use window.WindowId
+use window.{Theme, WindowId}
 
 fn pending_pop_window_event_for(edit pending: List[AppEvent], id: WindowId) -> Option[WindowEvent]:
     let remaining = List[AppEvent] :: :: call
@@ -648,6 +648,12 @@ impl App:
         self.pending = batch.events
         return state
 
+    fn next_theme(edit self) -> Option[Theme]:
+        let batch = self.take_event_batch :: :: method
+        let theme = batch.pop_theme :: :: method
+        self.pending = batch.events
+        return theme
+
     fn next_moved_data_for(edit self, id: WindowId) -> Option[WindowMoveData]:
         let batch = self.take_event_batch :: :: method
         let data = batch.pop_moved_data_for :: id :: method
@@ -695,6 +701,12 @@ impl App:
         let state = batch.pop_cursor_entered_state_for :: id :: method
         self.pending = batch.events
         return state
+
+    fn next_theme_for(edit self, id: WindowId) -> Option[Theme]:
+        let batch = self.take_event_batch :: :: method
+        let theme = batch.pop_theme_for :: id :: method
+        self.pending = batch.events
+        return theme
 
     fn poll_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
         select:
@@ -772,6 +784,12 @@ impl App:
             else => self.pump_poll :: :: method
         return Result.Ok :: self.next_cursor_entered_state :: :: method :: call
 
+    fn poll_next_theme(edit self) -> Result[Option[Theme], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_theme :: :: method :: call
+
     fn poll_next_moved_data_for(edit self, id: WindowId) -> Result[Option[WindowMoveData], AppError]:
         select:
             when self.has_pending_events :: :: method => ()
@@ -819,6 +837,12 @@ impl App:
             when self.has_pending_events :: :: method => ()
             else => self.pump_poll :: :: method
         return Result.Ok :: self.next_cursor_entered_state_for :: id :: method :: call
+
+    fn poll_next_theme_for(edit self, id: WindowId) -> Result[Option[Theme], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_poll :: :: method
+        return Result.Ok :: self.next_theme_for :: id :: method :: call
 
     fn poll_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
         let batch = self.poll_event_batch :: :: method
@@ -962,6 +986,12 @@ impl App:
             else => self.pump_wait :: :: method
         return Result.Ok :: self.next_cursor_entered_state :: :: method :: call
 
+    fn wait_next_theme(edit self) -> Result[Option[Theme], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_theme :: :: method :: call
+
     fn wait_next_moved_data_for(edit self, id: WindowId) -> Result[Option[WindowMoveData], AppError]:
         select:
             when self.has_pending_events :: :: method => ()
@@ -1009,6 +1039,12 @@ impl App:
             when self.has_pending_events :: :: method => ()
             else => self.pump_wait :: :: method
         return Result.Ok :: self.next_cursor_entered_state_for :: id :: method :: call
+
+    fn wait_next_theme_for(edit self, id: WindowId) -> Result[Option[Theme], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait :: :: method
+        return Result.Ok :: self.next_theme_for :: id :: method :: call
 
     fn wait_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
         let batch = self.wait_event_batch :: :: method
@@ -1152,6 +1188,12 @@ impl App:
             else => self.pump_wait_timeout :: timeout :: method
         return Result.Ok :: self.next_cursor_entered_state :: :: method :: call
 
+    fn wait_timeout_next_theme(edit self, timeout: F64) -> Result[Option[Theme], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_theme :: :: method :: call
+
     fn wait_timeout_next_moved_data_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowMoveData], AppError]:
         select:
             when self.has_pending_events :: :: method => ()
@@ -1199,6 +1241,12 @@ impl App:
             when self.has_pending_events :: :: method => ()
             else => self.pump_wait_timeout :: timeout :: method
         return Result.Ok :: self.next_cursor_entered_state_for :: id :: method :: call
+
+    fn wait_timeout_next_theme_for(edit self, id: WindowId, timeout: F64) -> Result[Option[Theme], AppError]:
+        select:
+            when self.has_pending_events :: :: method => ()
+            else => self.pump_wait_timeout :: timeout :: method
+        return Result.Ok :: self.next_theme_for :: id :: method :: call
 
     fn wait_timeout_monitor_events_for(edit self, id: MonitorId, timeout: F64) -> List[MonitorEvent]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
@@ -1266,9 +1314,9 @@ impl App:
         self.pending = batch.events
         return events
 
-    fn pending_refreshed_events(edit self) -> List[WindowEvent]:
+    fn pending_redraw_requested_events(edit self) -> List[WindowEvent]:
         let batch = self.take_event_batch :: :: method
-        let events = batch.refreshed_events :: :: method
+        let events = batch.redraw_requested_events :: :: method
         self.pending = batch.events
         return events
 
@@ -1320,9 +1368,15 @@ impl App:
         self.pending = batch.events
         return events
 
-    fn pending_refreshed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+    fn pending_theme_changed_events(edit self) -> List[WindowEvent]:
         let batch = self.take_event_batch :: :: method
-        let events = batch.refreshed_events_for :: id :: method
+        let events = batch.theme_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn pending_redraw_requested_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.redraw_requested_events_for :: id :: method
         self.pending = batch.events
         return events
 
@@ -1374,6 +1428,12 @@ impl App:
         self.pending = batch.events
         return events
 
+    fn pending_theme_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.take_event_batch :: :: method
+        let events = batch.theme_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
     fn pending_moved_data(edit self) -> List[WindowMoveData]:
         let batch = self.take_event_batch :: :: method
         let data = batch.moved_data :: :: method
@@ -1422,6 +1482,12 @@ impl App:
         self.pending = batch.events
         return states
 
+    fn pending_themes(edit self) -> List[Theme]:
+        let batch = self.take_event_batch :: :: method
+        let themes = batch.themes :: :: method
+        self.pending = batch.events
+        return themes
+
     fn pending_moved_data_for(edit self, id: WindowId) -> List[WindowMoveData]:
         let batch = self.take_event_batch :: :: method
         let data = batch.moved_data_for :: id :: method
@@ -1469,6 +1535,12 @@ impl App:
         let states = batch.cursor_entered_states_for :: id :: method
         self.pending = batch.events
         return states
+
+    fn pending_themes_for(edit self, id: WindowId) -> List[Theme]:
+        let batch = self.take_event_batch :: :: method
+        let themes = batch.themes_for :: id :: method
+        self.pending = batch.events
+        return themes
 
     fn pending_key_changed_events(edit self) -> List[WindowEvent]:
         let batch = self.take_event_batch :: :: method
@@ -1698,9 +1770,9 @@ impl App:
         self.pending = batch.events
         return lists
 
-    fn poll_refreshed_events(edit self) -> List[WindowEvent]:
+    fn poll_redraw_requested_events(edit self) -> List[WindowEvent]:
         let batch = self.poll_event_batch :: :: method
-        let events = batch.take_refreshed_events :: :: method
+        let events = batch.take_redraw_requested_events :: :: method
         self.pending = batch.events
         return events
 
@@ -1752,9 +1824,15 @@ impl App:
         self.pending = batch.events
         return events
 
-    fn poll_refreshed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+    fn poll_theme_changed_events(edit self) -> List[WindowEvent]:
         let batch = self.poll_event_batch :: :: method
-        let events = batch.take_refreshed_events_for :: id :: method
+        let events = batch.take_theme_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn poll_redraw_requested_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_redraw_requested_events_for :: id :: method
         self.pending = batch.events
         return events
 
@@ -1806,6 +1884,12 @@ impl App:
         self.pending = batch.events
         return events
 
+    fn poll_theme_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.poll_event_batch :: :: method
+        let events = batch.take_theme_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
     fn poll_moved_data(edit self) -> List[WindowMoveData]:
         let batch = self.poll_event_batch :: :: method
         let data = batch.take_moved_data :: :: method
@@ -1854,6 +1938,12 @@ impl App:
         self.pending = batch.events
         return states
 
+    fn poll_themes(edit self) -> List[Theme]:
+        let batch = self.poll_event_batch :: :: method
+        let themes = batch.take_themes :: :: method
+        self.pending = batch.events
+        return themes
+
     fn poll_moved_data_for(edit self, id: WindowId) -> List[WindowMoveData]:
         let batch = self.poll_event_batch :: :: method
         let data = batch.take_moved_data_for :: id :: method
@@ -1901,6 +1991,12 @@ impl App:
         let states = batch.take_cursor_entered_states_for :: id :: method
         self.pending = batch.events
         return states
+
+    fn poll_themes_for(edit self, id: WindowId) -> List[Theme]:
+        let batch = self.poll_event_batch :: :: method
+        let themes = batch.take_themes_for :: id :: method
+        self.pending = batch.events
+        return themes
 
     fn poll_key_changed_events(edit self) -> List[WindowEvent]:
         let batch = self.poll_event_batch :: :: method
@@ -2070,9 +2166,9 @@ impl App:
         self.pending = batch.events
         return lists
 
-    fn wait_refreshed_events(edit self) -> List[WindowEvent]:
+    fn wait_redraw_requested_events(edit self) -> List[WindowEvent]:
         let batch = self.wait_event_batch :: :: method
-        let events = batch.take_refreshed_events :: :: method
+        let events = batch.take_redraw_requested_events :: :: method
         self.pending = batch.events
         return events
 
@@ -2124,9 +2220,15 @@ impl App:
         self.pending = batch.events
         return events
 
-    fn wait_refreshed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+    fn wait_theme_changed_events(edit self) -> List[WindowEvent]:
         let batch = self.wait_event_batch :: :: method
-        let events = batch.take_refreshed_events_for :: id :: method
+        let events = batch.take_theme_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_redraw_requested_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_redraw_requested_events_for :: id :: method
         self.pending = batch.events
         return events
 
@@ -2178,6 +2280,12 @@ impl App:
         self.pending = batch.events
         return events
 
+    fn wait_theme_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let batch = self.wait_event_batch :: :: method
+        let events = batch.take_theme_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
     fn wait_moved_data(edit self) -> List[WindowMoveData]:
         let batch = self.wait_event_batch :: :: method
         let data = batch.take_moved_data :: :: method
@@ -2226,6 +2334,12 @@ impl App:
         self.pending = batch.events
         return states
 
+    fn wait_themes(edit self) -> List[Theme]:
+        let batch = self.wait_event_batch :: :: method
+        let themes = batch.take_themes :: :: method
+        self.pending = batch.events
+        return themes
+
     fn wait_moved_data_for(edit self, id: WindowId) -> List[WindowMoveData]:
         let batch = self.wait_event_batch :: :: method
         let data = batch.take_moved_data_for :: id :: method
@@ -2273,6 +2387,12 @@ impl App:
         let states = batch.take_cursor_entered_states_for :: id :: method
         self.pending = batch.events
         return states
+
+    fn wait_themes_for(edit self, id: WindowId) -> List[Theme]:
+        let batch = self.wait_event_batch :: :: method
+        let themes = batch.take_themes_for :: id :: method
+        self.pending = batch.events
+        return themes
 
     fn wait_key_changed_events(edit self) -> List[WindowEvent]:
         let batch = self.wait_event_batch :: :: method
@@ -2442,9 +2562,9 @@ impl App:
         self.pending = batch.events
         return lists
 
-    fn wait_timeout_refreshed_events(edit self, timeout: F64) -> List[WindowEvent]:
+    fn wait_timeout_redraw_requested_events(edit self, timeout: F64) -> List[WindowEvent]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
-        let events = batch.take_refreshed_events :: :: method
+        let events = batch.take_redraw_requested_events :: :: method
         self.pending = batch.events
         return events
 
@@ -2496,9 +2616,15 @@ impl App:
         self.pending = batch.events
         return events
 
-    fn wait_timeout_refreshed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+    fn wait_timeout_theme_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
-        let events = batch.take_refreshed_events_for :: id :: method
+        let events = batch.take_theme_changed_events :: :: method
+        self.pending = batch.events
+        return events
+
+    fn wait_timeout_redraw_requested_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_redraw_requested_events_for :: id :: method
         self.pending = batch.events
         return events
 
@@ -2550,6 +2676,12 @@ impl App:
         self.pending = batch.events
         return events
 
+    fn wait_timeout_theme_changed_events_for(edit self, id: WindowId, timeout: F64) -> List[WindowEvent]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let events = batch.take_theme_changed_events_for :: id :: method
+        self.pending = batch.events
+        return events
+
     fn wait_timeout_moved_data(edit self, timeout: F64) -> List[WindowMoveData]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let data = batch.take_moved_data :: :: method
@@ -2598,6 +2730,12 @@ impl App:
         self.pending = batch.events
         return states
 
+    fn wait_timeout_themes(edit self, timeout: F64) -> List[Theme]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let themes = batch.take_themes :: :: method
+        self.pending = batch.events
+        return themes
+
     fn wait_timeout_moved_data_for(edit self, id: WindowId, timeout: F64) -> List[WindowMoveData]:
         let batch = self.wait_timeout_event_batch :: timeout :: method
         let data = batch.take_moved_data_for :: id :: method
@@ -2645,6 +2783,12 @@ impl App:
         let states = batch.take_cursor_entered_states_for :: id :: method
         self.pending = batch.events
         return states
+
+    fn wait_timeout_themes_for(edit self, id: WindowId, timeout: F64) -> List[Theme]:
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let themes = batch.take_themes_for :: id :: method
+        self.pending = batch.events
+        return themes
 
     fn wait_timeout_key_changed_events(edit self, timeout: F64) -> List[WindowEvent]:
         let batch = self.wait_timeout_event_batch :: timeout :: method

@@ -1,21 +1,27 @@
-use std.{List, Option, Result, Str}
-use bridge.{cint_is_true, copy_edit_c_string, cuint_to_index}
+use std.{ByteBuffer, List, Option, Result, Str}
+use std.text.decode_utf8
+use bridge.{cint_is_true, cint_to_index, copy_edit_c_string, cuint_to_index}
 use event.{AppEvent, WindowEvent}
 use glfw.{GlfwCharCallback, GlfwCharModsCallback, GlfwCursorEnterCallback}
 use glfw.{GlfwCursorPosCallback, GlfwFramebufferSizeCallback, GlfwKeyCallback}
 use glfw.{GlfwDropCallback, GlfwMouseButtonCallback, GlfwScrollCallback}
 use glfw.GlfwWindowContentScaleCallback
 use glfw.{GlfwWindow, GlfwWindowRaw}
+use glfw.glfw_window_raw_handle
 use glfw.{GlfwWindowFocusCallback, GlfwWindowIconifyCallback, GlfwWindowMaximizeCallback}
 use glfw.{GlfwWindowPosCallback, GlfwWindowRefreshCallback, GlfwWindowSizeCallback}
-use input.{input_action_from_raw, key_from_raw, modifiers_from_raw}
+use input.{InputAction, Modifiers, RawKeyCode, ScanCode, TouchPhase}
+use input.{input_action_from_raw, input_action_raw, touch_phase_from_raw, touch_phase_raw}
+use input.key_from_raw
+use input.{modifiers_from_raw, modifiers_raw}
 use input.mouse_button_from_raw
-use window.WindowId
+use window.{Theme, WindowId, theme_from_raw, theme_raw}
 
 pub const WINDOW_MAILBOX_CAPACITY: Index = 128
 const POINTER_OFFSET_STEP: ISize = 1
 type ReadDropPathPointer = *read CChar
 type DropPathPointer = *edit CChar
+type ReadUtf16UnitPointer = *read U16
 
 struct SlotWrite:
     pub kind: CInt
@@ -35,6 +41,16 @@ pub(package) struct WindowMailbox:
     pub read_index: CUInt
     pub write_index: CUInt
     pub overflowed: CInt
+    pub theme_preference: CInt
+    pub window_level_preference: CInt
+    pub resize_increment_width: CInt
+    pub resize_increment_height: CInt
+    pub appearance_undecorated_shadow: CInt
+    pub appearance_system_backdrop: CInt
+    pub appearance_border_color: CUInt
+    pub appearance_title_background_color: CUInt
+    pub appearance_title_text_color: CUInt
+    pub appearance_corner_preference: CInt
     pub kinds: [CInt; 128]
     pub as_: [CInt; 128]
     pub bs: [CInt; 128]
@@ -58,6 +74,10 @@ extern["system"] fn HeapAlloc(heap: *edit CVoid, flags: CUInt, bytes: CSize) -> 
 #link[name = "kernel32"]
 #unsafe
 extern["system"] fn HeapFree(heap: *edit CVoid, flags: CUInt, memory: *edit CVoid) -> CInt
+
+#link[name = "kernel32"]
+#unsafe
+extern["system"] fn WideCharToMultiByte(code_page: CUInt, flags: CUInt, source: *read U16, source_count: CInt, target: *edit CChar, target_count: CInt, default_char: *read CChar, used_default: *edit CInt) -> CInt
 
 #link[name = "glfw3"]
 #unsafe
@@ -92,6 +112,10 @@ fn void_as_drop_path_pointer(pointer: *edit CVoid) -> *edit DropPathPointer:
     let address = #unsafe raw_pointer_address_edit :: pointer :: call
     return #unsafe raw_pointer_from_address_edit[DropPathPointer] :: address :: call
 
+fn void_as_utf16_read_pointer(pointer: *edit CVoid) -> *read U16:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_read[U16] :: address :: call
+
 fn mailbox_as_void(pointer: *edit WindowMailbox) -> *edit CVoid:
     let address = #unsafe raw_pointer_address_edit :: pointer :: call
     return #unsafe raw_pointer_from_address_edit[CVoid] :: address :: call
@@ -104,6 +128,19 @@ fn mailbox_from_window(window: *edit GlfwWindowRaw) -> *edit WindowMailbox:
             return pointer
         else => return void_as_mailbox :: user :: call
 
+fn mailbox_has_pending_refresh(mailbox_ptr: *edit WindowMailbox) -> Bool:
+    select:
+        when mailbox_ptr.is_null :: :: method => return false
+        else => ()
+    let mailbox: WindowMailbox = #unsafe mailbox_ptr.load :: :: method
+    let scan: CUInt = mailbox.read_index
+    repeat while scan != mailbox.write_index:
+        let Result.Ok(slot_index) = cuint_to_index :: scan :: call else => return false
+        select:
+            when mailbox.kinds[slot_index] == 2 => return true
+            else => scan = next_slot :: scan :: call
+    return false
+
 fn input_path_slot_at(base: *read ReadDropPathPointer, index: CInt) -> *read ReadDropPathPointer:
     let slot: *read ReadDropPathPointer = base
     let scan: CInt = 0
@@ -114,6 +151,14 @@ fn input_path_slot_at(base: *read ReadDropPathPointer, index: CInt) -> *read Rea
 
 fn copied_path_slot_at(base: *edit DropPathPointer, index: CInt) -> *edit DropPathPointer:
     let slot: *edit DropPathPointer = base
+    let scan: CInt = 0
+    repeat while scan < index:
+        slot = #unsafe slot.offset :: POINTER_OFFSET_STEP :: method
+        scan = scan + 1
+    return slot
+
+fn utf16_unit_slot_at(base: *read U16, index: CInt) -> *read U16:
+    let slot: *read U16 = base
     let scan: CInt = 0
     repeat while scan < index:
         slot = #unsafe slot.offset :: POINTER_OFFSET_STEP :: method
@@ -189,6 +234,23 @@ fn free_drop_payload(count: CInt, payload: *edit CVoid) -> Unit:
         when heap.is_null :: :: method => return
         else => return free_drop_payload_heap :: heap, count, payload :: call
 
+fn free_hovered_file_payload_heap(heap: *edit CVoid, payload: *edit CVoid) -> Unit:
+    select:
+        when payload.is_null :: :: method => return
+        else => ()
+    let copied = void_as_c_char :: payload :: call
+    free_heap_string :: heap, copied :: call
+    return
+
+fn free_hovered_file_payload(payload: *edit CVoid) -> Unit:
+    select:
+        when payload.is_null :: :: method => return
+        else => ()
+    let heap: *edit CVoid = #unsafe GetProcessHeap :: :: call
+    select:
+        when heap.is_null :: :: method => return
+        else => return free_hovered_file_payload_heap :: heap, payload :: call
+
 fn copy_drop_payload(count: CInt, paths: *read *read CChar) -> *edit CVoid:
     select:
         when count <= 0 =>
@@ -248,10 +310,282 @@ fn take_dropped_paths(count: CInt, payload: *edit CVoid) -> List[Str]:
     free_drop_payload :: count, payload :: call
     return paths
 
+fn free_utf16_payload_heap(heap: *edit CVoid, payload: *edit CVoid) -> Unit:
+    select:
+        when payload.is_null :: :: method => return
+        else =>
+            let _ = #unsafe HeapFree :: heap, 0, payload :: call
+            return
+
+fn free_utf16_payload(payload: *edit CVoid) -> Unit:
+    select:
+        when payload.is_null :: :: method => return
+        else => ()
+    let heap: *edit CVoid = #unsafe GetProcessHeap :: :: call
+    select:
+        when heap.is_null :: :: method => return
+        else => return free_utf16_payload_heap :: heap, payload :: call
+
+fn copy_utf16_payload(count: CInt, units: *read U16) -> *edit CVoid:
+    select:
+        when count <= 0 =>
+            let none: *edit CVoid = null
+            return none
+        when units.is_null :: :: method =>
+            let none: *edit CVoid = null
+            return none
+        else => ()
+    let heap: *edit CVoid = #unsafe GetProcessHeap :: :: call
+    select:
+        when heap.is_null :: :: method =>
+            let none: *edit CVoid = null
+            return none
+        else => ()
+    let Result.Ok(unit_count) = count as Maybe[CSize] else =>
+        let none: *edit CVoid = null
+        return none
+    let payload_bytes: CSize = unit_count * 2
+    let payload: *edit CVoid = #unsafe HeapAlloc :: heap, 0x00000008, payload_bytes :: call
+    select:
+        when payload.is_null :: :: method =>
+            let none: *edit CVoid = null
+            return none
+        else => ()
+    let copied_units = void_as_utf16_read_pointer :: payload :: call
+    let scan: CInt = 0
+    repeat while scan < count:
+        let source_slot = utf16_unit_slot_at :: units, scan :: call
+        let unit = #unsafe source_slot.load :: :: method
+        let dest_slot = utf16_unit_slot_at :: copied_units, scan :: call
+        let dest_address = #unsafe raw_pointer_address_read :: dest_slot :: call
+        let dest_write = #unsafe raw_pointer_from_address_edit[U16] :: dest_address :: call
+        #unsafe dest_write.store :: unit :: method
+        scan = scan + 1
+    return payload
+
+fn take_utf16_text(count: CInt, payload: *edit CVoid) -> Option[Str]:
+    select:
+        when count <= 0 =>
+            free_utf16_payload :: payload :: call
+            return Option.Some :: "" :: call
+        when payload.is_null :: :: method => return Option.None
+        else => ()
+    let units = void_as_utf16_read_pointer :: payload :: call
+    let byte_count = #unsafe WideCharToMultiByte :: 65001, 0, units, count, null, 0, null, null :: call
+    select:
+        when byte_count <= 0 =>
+            free_utf16_payload :: payload :: call
+            return Option.None
+        else => ()
+    let heap: *edit CVoid = #unsafe GetProcessHeap :: :: call
+    select:
+        when heap.is_null :: :: method =>
+            free_utf16_payload :: payload :: call
+            return Option.None
+        else => ()
+    let Result.Ok(payload_bytes) = byte_count as Maybe[CSize] else =>
+        free_utf16_payload :: payload :: call
+        return Option.None
+    let utf8_payload: *edit CVoid = #unsafe HeapAlloc :: heap, 0x00000008, payload_bytes :: call
+    select:
+        when utf8_payload.is_null :: :: method =>
+            free_utf16_payload :: payload :: call
+            return Option.None
+        else => ()
+    let utf8_chars = void_as_c_char :: utf8_payload :: call
+    let written = #unsafe WideCharToMultiByte :: 65001, 0, units, count, utf8_chars, byte_count, null, null :: call
+    select:
+        when written <= 0 =>
+            let _ = #unsafe HeapFree :: heap, 0, utf8_payload :: call
+            free_utf16_payload :: payload :: call
+            return Option.None
+        else => ()
+    let bytes = ByteBuffer :: :: call
+    let utf8_units = void_as_unsigned :: utf8_payload :: call
+    let Result.Ok(scan_limit) = written as Maybe[USize] else =>
+        let _ = #unsafe HeapFree :: heap, 0, utf8_payload :: call
+        free_utf16_payload :: payload :: call
+        return Option.None
+    let scan: USize = 0USize
+    repeat while scan < scan_limit:
+        let Result.Ok(offset) = scan as Maybe[ISize] else =>
+            let _ = #unsafe HeapFree :: heap, 0, utf8_payload :: call
+            free_utf16_payload :: payload :: call
+            return Option.None
+        let slot = #unsafe utf8_units.offset :: offset :: method
+        let raw = #unsafe slot.load :: :: method
+        let Result.Ok(byte) = raw as Maybe[U8] else =>
+            let _ = #unsafe HeapFree :: heap, 0, utf8_payload :: call
+            free_utf16_payload :: payload :: call
+            return Option.None
+        bytes.push :: byte :: method
+        scan = scan + 1USize
+    let _ = #unsafe HeapFree :: heap, 0, utf8_payload :: call
+    free_utf16_payload :: payload :: call
+    let frozen = bytes.freeze :: :: method
+    select decode_utf8 :: frozen :: call:
+        when Result.Ok(text) => return Option.Some :: text :: call
+        when Result.Err(_) => return Option.None
+
 fn free_slot_payload(read slot: SlotWrite) -> Unit:
     select:
         when slot.kind == 17 => free_drop_payload :: slot.a, slot.p :: call
+        when slot.kind == 20 => free_utf16_payload :: slot.p :: call
+        when slot.kind == 21 => free_utf16_payload :: slot.p :: call
+        when slot.kind == 28 => free_hovered_file_payload :: slot.p :: call
         else => return
+
+pub(package) fn push_window_theme_changed(mailbox_ptr: *edit WindowMailbox, read theme: Theme) -> Unit:
+    let slot = make_empty_slot :: :: call
+    slot.kind = 18
+    slot.a = theme_raw :: theme :: call
+    push_slot :: mailbox_ptr, slot :: call
+    return
+
+pub(package) fn push_window_raw_mouse_motion(mailbox_ptr: *edit WindowMailbox, delta_x: CInt, delta_y: CInt) -> Unit:
+    let slot = make_empty_slot :: :: call
+    slot.kind = 23
+    slot.a = delta_x
+    slot.b = delta_y
+    push_slot :: mailbox_ptr, slot :: call
+    return
+
+pub(package) fn push_window_raw_key_changed(mailbox_ptr: *edit WindowMailbox, raw_key: RawKeyCode, scancode: ScanCode, read action: InputAction, extended: Bool) -> Unit:
+    let slot = make_empty_slot :: :: call
+    slot.kind = 24
+    slot.a = raw_key
+    slot.b = scancode
+    slot.c = input_action_raw :: action :: call
+    select:
+        when extended => slot.d = 1
+        else => slot.d = 0
+    push_slot :: mailbox_ptr, slot :: call
+    return
+
+pub(package) fn push_window_raw_mouse_button_changed(mailbox_ptr: *edit WindowMailbox, raw_button: CInt, read action: InputAction) -> Unit:
+    let slot = make_empty_slot :: :: call
+    slot.kind = 25
+    slot.a = raw_button
+    slot.b = input_action_raw :: action :: call
+    push_slot :: mailbox_ptr, slot :: call
+    return
+
+pub(package) fn push_window_raw_mouse_wheel(mailbox_ptr: *edit WindowMailbox, delta_x: CInt, delta_y: CInt) -> Unit:
+    let slot = make_empty_slot :: :: call
+    slot.kind = 26
+    slot.a = delta_x
+    slot.b = delta_y
+    push_slot :: mailbox_ptr, slot :: call
+    return
+
+pub(package) fn push_window_touch(mailbox_ptr: *edit WindowMailbox, touch_id: CUInt, read phase: TouchPhase, x: F64, y: F64) -> Unit:
+    let slot = make_empty_slot :: :: call
+    slot.kind = 27
+    slot.u = touch_id
+    slot.a = touch_phase_raw :: phase :: call
+    slot.x = x
+    slot.y = y
+    push_slot :: mailbox_ptr, slot :: call
+    return
+
+pub(package) fn push_window_dropped_paths_owned(mailbox_ptr: *edit WindowMailbox, count: CInt, payload: *edit CVoid) -> Unit:
+    select:
+        when payload.is_null :: :: method => return
+        else => ()
+    let slot = make_empty_slot :: :: call
+    slot.kind = 17
+    slot.a = count
+    slot.p = payload
+    push_slot :: mailbox_ptr, slot :: call
+    return
+
+pub(package) fn push_window_hovered_file_owned(mailbox_ptr: *edit WindowMailbox, payload: *edit CVoid) -> Unit:
+    select:
+        when payload.is_null :: :: method => return
+        else => ()
+    let slot = make_empty_slot :: :: call
+    slot.kind = 28
+    slot.p = payload
+    push_slot :: mailbox_ptr, slot :: call
+    return
+
+pub(package) fn push_window_hovered_file_copy(mailbox_ptr: *edit WindowMailbox, path: *read CChar) -> Bool:
+    let heap: *edit CVoid = #unsafe GetProcessHeap :: :: call
+    select:
+        when heap.is_null :: :: method => return false
+        else => ()
+    let copied = copy_heap_string :: heap, path :: call
+    select:
+        when copied.is_null :: :: method => return false
+        else =>
+            let payload = c_char_edit_as_void :: copied :: call
+            push_window_hovered_file_owned :: mailbox_ptr, payload :: call
+            return true
+
+pub(package) fn push_window_hovered_file_cancelled(mailbox_ptr: *edit WindowMailbox) -> Unit:
+    let slot = make_empty_slot :: :: call
+    slot.kind = 29
+    push_slot :: mailbox_ptr, slot :: call
+    return
+
+fn copied_modifiers(read mods: Modifiers) -> Modifiers:
+    let raw = modifiers_raw :: mods :: call
+    return modifiers_from_raw :: raw :: call
+
+fn push_modifiers_changed_if_needed(id: WindowId, edit modifier_bits: CInt, read mods: Modifiers, edit pending: List[AppEvent]) -> Unit:
+    let raw = modifiers_raw :: mods :: call
+    select:
+        when raw == modifier_bits => return
+        else => ()
+    modifier_bits = raw
+    let event = WindowEvent.ModifiersChanged :: :: call
+        id = id
+        mods = copied_modifiers :: mods :: call
+    let wrapped = AppEvent.Window :: event :: call
+    pending.push :: wrapped :: method
+    return
+
+fn clear_modifiers_if_needed(id: WindowId, edit modifier_bits: CInt, edit pending: List[AppEvent]) -> Unit:
+    select:
+        when modifier_bits == 0 => return
+        else => ()
+    modifier_bits = 0
+    let cleared = modifiers_from_raw :: 0 :: call
+    let event = WindowEvent.ModifiersChanged :: :: call
+        id = id
+        mods = cleared
+    let wrapped = AppEvent.Window :: event :: call
+    pending.push :: wrapped :: method
+    return
+
+pub(package) fn push_window_composition_started(mailbox_ptr: *edit WindowMailbox) -> Unit:
+    let slot = make_empty_slot :: :: call
+    slot.kind = 19
+    push_slot :: mailbox_ptr, slot :: call
+    return
+
+pub(package) fn push_window_composition_updated_utf16(mailbox_ptr: *edit WindowMailbox, count: CInt, cursor: CInt, units: *read U16) -> Unit:
+    let slot = make_empty_slot :: :: call
+    slot.kind = 20
+    slot.a = count
+    slot.b = cursor
+    slot.p = copy_utf16_payload :: count, units :: call
+    push_slot :: mailbox_ptr, slot :: call
+    return
+
+pub(package) fn push_window_composition_committed_utf16(mailbox_ptr: *edit WindowMailbox, count: CInt, units: *read U16) -> Unit:
+    let slot = make_empty_slot :: :: call
+    slot.kind = 21
+    slot.a = count
+    slot.p = copy_utf16_payload :: count, units :: call
+    push_slot :: mailbox_ptr, slot :: call
+    return
+
+pub(package) fn push_window_composition_ended(mailbox_ptr: *edit WindowMailbox) -> Unit:
+    let slot = make_empty_slot :: :: call
+    slot.kind = 22
+    push_slot :: mailbox_ptr, slot :: call
+    return
 
 fn push_slot(mailbox_ptr: *edit WindowMailbox, read slot: SlotWrite) -> Unit:
     select:
@@ -466,11 +800,7 @@ extern["c"] fn drop_callback(window: *edit GlfwWindowRaw, count: CInt, paths: *r
     select:
         when payload.is_null :: :: method => return
         else => ()
-    let slot = make_empty_slot :: :: call
-    slot.kind = 17
-    slot.a = count
-    slot.p = payload
-    push_slot :: mailbox, slot :: call
+    push_window_dropped_paths_owned :: mailbox, count, payload :: call
     return
 
 pub(package) fn allocate_window_mailbox() -> Option[*edit WindowMailbox]:
@@ -478,11 +808,17 @@ pub(package) fn allocate_window_mailbox() -> Option[*edit WindowMailbox]:
     select:
         when heap.is_null :: :: method => return Option.None
         else =>
-            let memory: *edit CVoid = #unsafe HeapAlloc :: heap, 0x00000008, 7184 :: call
+            let Result.Ok(byte_count) = size_of[WindowMailbox] as Maybe[CSize] else => return Option.None
+            let memory: *edit CVoid = #unsafe HeapAlloc :: heap, 0x00000008, byte_count :: call
             select:
                 when memory.is_null :: :: method => return Option.None
                 else =>
                     let mailbox = void_as_mailbox :: memory :: call
+                    let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+                    stored.appearance_border_color = 0xFFFFFFFF
+                    stored.appearance_title_background_color = 0xFFFFFFFF
+                    stored.appearance_title_text_color = 0xFFFFFFFF
+                    #unsafe mailbox.store :: stored :: method
                     return Option.Some :: mailbox :: call
 
 pub(package) fn free_window_mailbox(mailbox: *edit WindowMailbox) -> Unit:
@@ -502,6 +838,9 @@ pub(package) fn free_window_mailbox(mailbox: *edit WindowMailbox) -> Unit:
                         let payload: *edit CVoid = stored.ps[slot_index]
                         select:
                             when kind == 17 => free_drop_payload_heap :: heap, count, payload :: call
+                            when kind == 20 => free_utf16_payload_heap :: heap, payload :: call
+                            when kind == 21 => free_utf16_payload_heap :: heap, payload :: call
+                            when kind == 28 => free_hovered_file_payload_heap :: heap, payload :: call
                             else => ()
                         slot_scan = slot_scan + 1
                     let memory = mailbox_as_void :: mailbox :: call
@@ -550,6 +889,17 @@ pub(package) fn clear_user_pointer(read window: GlfwWindow) -> Unit:
     window.set_user_pointer :: user :: method
     return
 
+pub(package) fn request_window_refresh(read window: GlfwWindow) -> Unit:
+    let raw_window = glfw_window_raw_handle :: window :: call
+    let mailbox = mailbox_from_window :: raw_window :: call
+    select:
+        when mailbox_has_pending_refresh :: mailbox :: call => return
+        else => ()
+    let slot = make_empty_slot :: :: call
+    slot.kind = 2
+    push_slot :: mailbox, slot :: call
+    return
+
 pub(package) fn mailbox_overflowed(mailbox_ptr: *edit WindowMailbox) -> Bool:
     select:
         when mailbox_ptr.is_null :: :: method => return false
@@ -557,7 +907,7 @@ pub(package) fn mailbox_overflowed(mailbox_ptr: *edit WindowMailbox) -> Bool:
             let mailbox: WindowMailbox = #unsafe mailbox_ptr.load :: :: method
             return cint_is_true :: mailbox.overflowed :: call
 
-pub(package) fn drain_window_mailbox(id: WindowId, mailbox_ptr: *edit WindowMailbox, edit pending: List[AppEvent]) -> Unit:
+pub(package) fn drain_window_mailbox(id: WindowId, mailbox_ptr: *edit WindowMailbox, edit modifier_bits: CInt, edit pending: List[AppEvent]) -> Unit:
     select:
         when mailbox_ptr.is_null :: :: method => return
         else =>
@@ -582,7 +932,7 @@ pub(package) fn drain_window_mailbox(id: WindowId, mailbox_ptr: *edit WindowMail
                         let wrapped = AppEvent.Window :: event :: call
                         pending.push :: wrapped :: method
                     when kind == 2 =>
-                        let event = WindowEvent.Refreshed :: :: call
+                        let event = WindowEvent.RedrawRequested :: :: call
                             id = id
                         let wrapped = AppEvent.Window :: event :: call
                         pending.push :: wrapped :: method
@@ -615,11 +965,15 @@ pub(package) fn drain_window_mailbox(id: WindowId, mailbox_ptr: *edit WindowMail
                         let wrapped = AppEvent.Window :: event :: call
                         pending.push :: wrapped :: method
                     when kind == 7 =>
+                        let focused = cint_is_true :: a :: call
                         let event = WindowEvent.FocusChanged :: :: call
                             id = id
-                            focused = cint_is_true :: a :: call
+                            focused = focused
                         let wrapped = AppEvent.Window :: event :: call
                         pending.push :: wrapped :: method
+                        select:
+                            when focused => ()
+                            else => clear_modifiers_if_needed :: id, modifier_bits, pending :: call
                     when kind == 8 =>
                         let event = WindowEvent.Iconified :: :: call
                             id = id
@@ -642,6 +996,7 @@ pub(package) fn drain_window_mailbox(id: WindowId, mailbox_ptr: *edit WindowMail
                         let action = input_action_from_raw :: c :: call
                         let key = key_from_raw :: a :: call
                         let mods = modifiers_from_raw :: d :: call
+                        push_modifiers_changed_if_needed :: id, modifier_bits, mods, pending :: call
                         let event = WindowEvent.KeyChanged :: :: call
                             id = id
                             key = key
@@ -658,6 +1013,7 @@ pub(package) fn drain_window_mailbox(id: WindowId, mailbox_ptr: *edit WindowMail
                         pending.push :: wrapped :: method
                     when kind == 13 =>
                         let mods = modifiers_from_raw :: a :: call
+                        push_modifiers_changed_if_needed :: id, modifier_bits, mods, pending :: call
                         let event = WindowEvent.CharacterMods :: :: call
                             id = id
                             codepoint = u
@@ -668,6 +1024,7 @@ pub(package) fn drain_window_mailbox(id: WindowId, mailbox_ptr: *edit WindowMail
                         let button = mouse_button_from_raw :: a :: call
                         let action = input_action_from_raw :: b :: call
                         let mods = modifiers_from_raw :: c :: call
+                        push_modifiers_changed_if_needed :: id, modifier_bits, mods, pending :: call
                         let event = WindowEvent.MouseButtonChanged :: :: call
                             id = id
                             button = button
@@ -694,6 +1051,105 @@ pub(package) fn drain_window_mailbox(id: WindowId, mailbox_ptr: *edit WindowMail
                         let event = WindowEvent.DroppedPaths :: :: call
                             id = id
                             paths = paths
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 18 =>
+                        let event = WindowEvent.ThemeChanged :: :: call
+                            id = id
+                            theme = theme_from_raw :: a :: call
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 19 =>
+                        let event = WindowEvent.CompositionStarted :: :: call
+                            id = id
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 20 =>
+                        let cursor: Option[Index] = Option.None
+                        select:
+                            when b < 0 => ()
+                            else =>
+                                select cint_to_index :: b :: call:
+                                    when Result.Ok(index) => cursor = Option.Some :: index :: call
+                                    when Result.Err(_) => ()
+                        select take_utf16_text :: a, p :: call:
+                            when Option.Some(text) =>
+                                let event = WindowEvent.CompositionUpdated :: :: call
+                                    id = id
+                                    text = text
+                                    cursor = cursor
+                                let wrapped = AppEvent.Window :: event :: call
+                                pending.push :: wrapped :: method
+                            when Option.None => ()
+                    when kind == 21 =>
+                        select take_utf16_text :: a, p :: call:
+                            when Option.Some(text) =>
+                                let event = WindowEvent.CompositionCommitted :: :: call
+                                    id = id
+                                    text = text
+                                let wrapped = AppEvent.Window :: event :: call
+                                pending.push :: wrapped :: method
+                            when Option.None => ()
+                    when kind == 22 =>
+                        let event = WindowEvent.CompositionEnded :: :: call
+                            id = id
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 23 =>
+                        let event = WindowEvent.RawMouseMotion :: :: call
+                            id = id
+                            delta_x = a
+                            delta_y = b
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 24 =>
+                        let event = WindowEvent.RawKeyChanged :: :: call
+                            id = id
+                            raw_key = a
+                            scancode = b
+                            action = input_action_from_raw :: c :: call
+                            extended = cint_is_true :: d :: call
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 25 =>
+                        let event = WindowEvent.RawMouseButtonChanged :: :: call
+                            id = id
+                            button = mouse_button_from_raw :: a :: call
+                            action = input_action_from_raw :: b :: call
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 26 =>
+                        let event = WindowEvent.RawMouseWheel :: :: call
+                            id = id
+                            delta_x = a
+                            delta_y = b
+                        let wrapped = AppEvent.Window :: event :: call
+                        pending.push :: wrapped :: method
+                    when kind == 27 =>
+                        select u as Maybe[USize]:
+                            when Result.Ok(touch_id) =>
+                                let event = WindowEvent.Touch :: :: call
+                                    id = id
+                                    touch_id = touch_id
+                                    phase = touch_phase_from_raw :: a :: call
+                                    x = x
+                                    y = y
+                                let wrapped = AppEvent.Window :: event :: call
+                                pending.push :: wrapped :: method
+                            when Result.Err(_) => ()
+                    when kind == 28 =>
+                        select copy_edit_c_string :: void_as_c_char :: p :: call :: call:
+                            when Result.Ok(path) =>
+                                let event = WindowEvent.HoveredFile :: :: call
+                                    id = id
+                                    path = path
+                                let wrapped = AppEvent.Window :: event :: call
+                                pending.push :: wrapped :: method
+                            when Result.Err(_) => ()
+                        free_hovered_file_payload :: p :: call
+                    when kind == 29 =>
+                        let event = WindowEvent.HoveredFileCancelled :: :: call
+                            id = id
                         let wrapped = AppEvent.Window :: event :: call
                         pending.push :: wrapped :: method
                     else => ()

@@ -1,7 +1,7 @@
 use std.{List, Option, Result}
 
 use present.{VkMemoryHeap, VkMemoryType, VkPhysicalDeviceMemoryProperties}
-use present.{VulkanPresentApp, VulkanPresentSnapshot}
+use present.{VulkanPresentApp, VulkanPresentContext, VulkanPresentSnapshot}
 
 const MEMORY_PROPERTY_DEVICE_LOCAL_BIT: CUInt = 1
 const MEMORY_PROPERTY_HOST_VISIBLE_BIT: CUInt = 2
@@ -185,6 +185,61 @@ impl VkPhysicalDeviceMemoryProperties:
             bitmask = bitmask + bitmask
             scan = scan + 1
         return Option.None
+
+impl VulkanPresentContext:
+    fn memory_properties(read self) -> VkPhysicalDeviceMemoryProperties:
+        return self.memory_properties
+
+    fn memory_type_count(read self) -> CUInt:
+        return self.memory_properties.memory_type_count
+
+    fn memory_heap_count(read self) -> CUInt:
+        return self.memory_properties.memory_heap_count
+
+    fn memory_type(read self, index: CUInt) -> Option[VkMemoryType]:
+        return self.memory_properties.memory_type :: index :: method
+
+    fn memory_heap(read self, index: CUInt) -> Option[VkMemoryHeap]:
+        return self.memory_properties.memory_heap :: index :: method
+
+    fn host_visible_memory_type_count(read self) -> CUInt:
+        return self.memory_properties.host_visible_memory_type_count :: :: method
+
+    fn host_coherent_memory_type_count(read self) -> CUInt:
+        return self.memory_properties.host_coherent_memory_type_count :: :: method
+
+    fn staging_memory_type_count(read self) -> CUInt:
+        return self.memory_properties.staging_memory_type_count :: :: method
+
+    fn device_local_memory_type_count(read self) -> CUInt:
+        return self.memory_properties.device_local_memory_type_count :: :: method
+
+    fn device_local_memory_heap_count(read self) -> CUInt:
+        return self.memory_properties.device_local_memory_heap_count :: :: method
+
+    fn has_staging_memory_type(read self) -> Bool:
+        return self.memory_properties.has_staging_memory_type :: :: method
+
+    fn first_staging_memory_type_index(read self) -> Option[CUInt]:
+        return self.memory_properties.first_staging_memory_type_index :: :: method
+
+    fn memory_type_supported(read self, index: CUInt, memory_type_bits: CUInt) -> Bool:
+        return self.memory_properties.memory_type_supported :: index, memory_type_bits :: method
+
+    fn compatible_memory_type_indices(read self, memory_type_bits: CUInt) -> List[CUInt]:
+        return self.memory_properties.compatible_memory_type_indices :: memory_type_bits :: method
+
+    fn host_visible_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
+        return self.memory_properties.host_visible_memory_type_index :: memory_type_bits :: method
+
+    fn host_coherent_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
+        return self.memory_properties.host_coherent_memory_type_index :: memory_type_bits :: method
+
+    fn staging_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
+        return self.memory_properties.staging_memory_type_index :: memory_type_bits :: method
+
+    fn device_local_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
+        return self.memory_properties.device_local_memory_type_index :: memory_type_bits :: method
 
 impl VulkanPresentApp:
     fn memory_properties(read self) -> VkPhysicalDeviceMemoryProperties:

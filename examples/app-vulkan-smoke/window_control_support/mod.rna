@@ -1,0 +1,253 @@
+use std.Result
+
+use runa_app.{WindowButtons, WindowId, WindowLevel, all_window_buttons, no_window_buttons}
+use runa_app_vulkan.VulkanPresentApp
+
+fn buttons_match(read left: WindowButtons, read right: WindowButtons) -> Bool:
+    select:
+        when left.close != right.close => return false
+        when left.minimize != right.minimize => return false
+        when left.maximize != right.maximize => return false
+        else => return true
+
+fn levels_match(read left: WindowLevel, read right: WindowLevel) -> Bool:
+    select left:
+        when WindowLevel.Normal =>
+            select right:
+                when WindowLevel.Normal => return true
+                else => return false
+        when WindowLevel.AlwaysOnTop =>
+            select right:
+                when WindowLevel.AlwaysOnTop => return true
+                else => return false
+        when WindowLevel.AlwaysOnBottom =>
+            select right:
+                when WindowLevel.AlwaysOnBottom => return true
+                else => return false
+    return false
+
+pub fn prove_window_control_runtime(edit present_app: VulkanPresentApp, window_id: WindowId) -> I32:
+    let owned_window = present_app.window :: :: method
+    select:
+        when owned_window.id != window_id => return 3263
+        else => ()
+
+    let initial_visible = present_app.visible :: :: method
+    let initial_focused = present_app.focused :: :: method
+    let initial_minimized = present_app.minimized :: :: method
+    let initial_iconified = present_app.iconified :: :: method
+    let initial_maximized = present_app.maximized :: :: method
+    let initial_hittest = present_app.cursor_hittest :: :: method
+    let initial_window_level = present_app.window_level :: :: method
+    let Result.Ok(initial_enabled) = present_app.enabled :: :: method else => return 3368
+    let Result.Ok(initial_skip_taskbar) = present_app.skip_taskbar :: :: method else => return 3369
+    let Result.Ok(initial_buttons) = present_app.enabled_buttons :: :: method else => return 3264
+    let Result.Ok(initial_content_protected) = present_app.content_protected :: :: method else => return 3331
+
+    select:
+        when initial_minimized != initial_iconified => return 3321
+        when owned_window.minimized :: :: method != owned_window.iconified :: :: method => return 3322
+        when present_app.has_focus :: :: method != initial_focused => return 3349
+        when owned_window.has_focus :: :: method != initial_focused => return 3350
+        else => ()
+
+    select:
+        when initial_focused =>
+            present_app.focus_window :: :: method
+            select:
+                when !present_app.has_focus :: :: method => return 3351
+                when !owned_window.has_focus :: :: method => return 3352
+                else => ()
+        else => ()
+
+    present_app.set_visible :: initial_visible :: method
+    select:
+        when present_app.visible :: :: method != initial_visible => return 3323
+        when owned_window.visible :: :: method != initial_visible => return 3324
+        else => ()
+
+    owned_window.set_minimized :: initial_minimized :: method
+    select:
+        when present_app.minimized :: :: method != initial_minimized => return 3325
+        when owned_window.minimized :: :: method != initial_minimized => return 3326
+        when present_app.iconified :: :: method != initial_minimized => return 3327
+        when owned_window.iconified :: :: method != initial_minimized => return 3328
+        else => ()
+
+    present_app.set_maximized :: initial_maximized :: method
+    select:
+        when present_app.maximized :: :: method != initial_maximized => return 3329
+        when owned_window.maximized :: :: method != initial_maximized => return 3330
+        else => ()
+
+    let toggled_enabled = !initial_enabled
+    select present_app.set_enabled :: toggled_enabled :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3370
+    select present_app.enabled :: :: method:
+        when Result.Ok(value) =>
+            select:
+                when value != toggled_enabled => return 3371
+                else => ()
+        when Result.Err(_) => return 3372
+    select owned_window.enabled :: :: method:
+        when Result.Ok(value) =>
+            select:
+                when value != toggled_enabled => return 3373
+                else => ()
+        when Result.Err(_) => return 3374
+    select owned_window.set_enabled :: initial_enabled :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3375
+    select present_app.enabled :: :: method:
+        when Result.Ok(value) =>
+            select:
+                when value != initial_enabled => return 3376
+                else => ()
+        when Result.Err(_) => return 3377
+
+    let toggled_skip_taskbar = !initial_skip_taskbar
+    select present_app.set_skip_taskbar :: toggled_skip_taskbar :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3378
+    select present_app.skip_taskbar :: :: method:
+        when Result.Ok(value) =>
+            select:
+                when value != toggled_skip_taskbar => return 3379
+                else => ()
+        when Result.Err(_) => return 3380
+    select owned_window.skip_taskbar :: :: method:
+        when Result.Ok(value) =>
+            select:
+                when value != toggled_skip_taskbar => return 3381
+                else => ()
+        when Result.Err(_) => return 3382
+    select owned_window.set_skip_taskbar :: initial_skip_taskbar :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3383
+    select present_app.skip_taskbar :: :: method:
+        when Result.Ok(value) =>
+            select:
+                when value != initial_skip_taskbar => return 3384
+                else => ()
+        when Result.Err(_) => return 3385
+
+    present_app.set_cursor_hittest :: false :: method
+    select:
+        when present_app.cursor_hittest :: :: method => return 3265
+        when owned_window.cursor_hittest :: :: method => return 3266
+        when !present_app.mouse_passthrough :: :: method => return 3267
+        when !owned_window.mouse_passthrough :: :: method => return 3268
+        else => ()
+
+    owned_window.set_cursor_hittest :: true :: method
+    select:
+        when !present_app.cursor_hittest :: :: method => return 3269
+        when !owned_window.cursor_hittest :: :: method => return 3270
+        when present_app.mouse_passthrough :: :: method => return 3271
+        when owned_window.mouse_passthrough :: :: method => return 3272
+        else => ()
+
+    let disabled_buttons = no_window_buttons :: :: call
+    select present_app.set_enabled_buttons :: disabled_buttons :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3273
+    select present_app.enabled_buttons :: :: method:
+        when Result.Ok(buttons) =>
+            select:
+                when buttons.close => return 3274
+                when buttons.minimize => return 3275
+                when buttons.maximize => return 3276
+                else => ()
+        when Result.Err(_) => return 3277
+    select owned_window.enabled_buttons :: :: method:
+        when Result.Ok(buttons) =>
+            select:
+                when buttons.close => return 3278
+                when buttons.minimize => return 3279
+                when buttons.maximize => return 3280
+                else => ()
+        when Result.Err(_) => return 3281
+
+    let enabled_buttons = all_window_buttons :: :: call
+    select owned_window.set_enabled_buttons :: enabled_buttons :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3282
+    select present_app.enabled_buttons :: :: method:
+        when Result.Ok(buttons) =>
+            select:
+                when !buttons.close => return 3283
+                when !buttons.minimize => return 3284
+                when !buttons.maximize => return 3285
+                else => ()
+        when Result.Err(_) => return 3286
+    select owned_window.enabled_buttons :: :: method:
+        when Result.Ok(buttons) =>
+            select:
+                when !buttons_match :: buttons, enabled_buttons :: call => return 3287
+                else => ()
+        when Result.Err(_) => return 3288
+
+    select present_app.set_enabled_buttons :: initial_buttons :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3289
+
+    let toggled_content_protected = !initial_content_protected
+    select present_app.set_content_protected :: toggled_content_protected :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3332
+    select present_app.content_protected :: :: method:
+        when Result.Ok(value) =>
+            select:
+                when value != toggled_content_protected => return 3333
+                else => ()
+        when Result.Err(_) => return 3334
+    select owned_window.content_protected :: :: method:
+        when Result.Ok(value) =>
+            select:
+                when value != toggled_content_protected => return 3335
+                else => ()
+        when Result.Err(_) => return 3336
+    select owned_window.set_content_protected :: initial_content_protected :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3337
+    select present_app.content_protected :: :: method:
+        when Result.Ok(value) =>
+            select:
+                when value != initial_content_protected => return 3338
+                else => ()
+        when Result.Err(_) => return 3339
+
+    select present_app.set_window_level :: WindowLevel.AlwaysOnBottom :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3340
+    let present_bottom_level = present_app.window_level :: :: method
+    let owned_bottom_level = owned_window.window_level :: :: method
+    select:
+        when !levels_match :: present_bottom_level, WindowLevel.AlwaysOnBottom :: call => return 3341
+        when !levels_match :: owned_bottom_level, WindowLevel.AlwaysOnBottom :: call => return 3342
+        else => ()
+
+    select owned_window.set_window_level :: WindowLevel.AlwaysOnTop :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3343
+    let present_top_level = present_app.window_level :: :: method
+    let owned_top_level = owned_window.window_level :: :: method
+    select:
+        when !levels_match :: present_top_level, WindowLevel.AlwaysOnTop :: call => return 3344
+        when !levels_match :: owned_top_level, WindowLevel.AlwaysOnTop :: call => return 3345
+        else => ()
+
+    select present_app.set_window_level :: initial_window_level :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3346
+    let restored_present_level = present_app.window_level :: :: method
+    let restored_owned_level = owned_window.window_level :: :: method
+    select:
+        when !levels_match :: restored_present_level, initial_window_level :: call => return 3347
+        when !levels_match :: restored_owned_level, initial_window_level :: call => return 3348
+        else => ()
+
+    present_app.set_cursor_hittest :: initial_hittest :: method
+
+    return 0

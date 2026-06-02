@@ -1,0 +1,251 @@
+use std.{Option, Result}
+
+use runa_app.{AppError, RgbaColor, WindowCornerPreference, WindowId, WindowSystemBackdrop}
+use runa_app.{hidden_window_spec, rgba_color}
+use runa_app.{window_spec_with_win32_border_color, window_spec_with_win32_corner_preference}
+use runa_app.{window_spec_with_win32_system_backdrop, window_spec_with_win32_title_background_color}
+use runa_app.{window_spec_with_win32_title_text_color, window_spec_with_win32_undecorated_shadow}
+use runa_app_vulkan.VulkanPresentApp
+
+fn colors_match(read left: Option[RgbaColor], read right: Option[RgbaColor]) -> Bool:
+    select left:
+        when Option.Some(left_color) =>
+            select right:
+                when Option.Some(right_color) =>
+                    select:
+                        when left_color.red != right_color.red => return false
+                        when left_color.green != right_color.green => return false
+                        when left_color.blue != right_color.blue => return false
+                        when left_color.alpha != right_color.alpha => return false
+                        else => return true
+                when Option.None => return false
+        when Option.None =>
+            select right:
+                when Option.Some(_) => return false
+                when Option.None => return true
+    return false
+
+fn backdrops_match(read left: WindowSystemBackdrop, read right: WindowSystemBackdrop) -> Bool:
+    select left:
+        when WindowSystemBackdrop.Auto =>
+            select right:
+                when WindowSystemBackdrop.Auto => return true
+                else => return false
+        when WindowSystemBackdrop.None =>
+            select right:
+                when WindowSystemBackdrop.None => return true
+                else => return false
+        when WindowSystemBackdrop.MainWindow =>
+            select right:
+                when WindowSystemBackdrop.MainWindow => return true
+                else => return false
+        when WindowSystemBackdrop.TransientWindow =>
+            select right:
+                when WindowSystemBackdrop.TransientWindow => return true
+                else => return false
+        when WindowSystemBackdrop.TabbedWindow =>
+            select right:
+                when WindowSystemBackdrop.TabbedWindow => return true
+                else => return false
+    return false
+
+fn corners_match(read left: WindowCornerPreference, read right: WindowCornerPreference) -> Bool:
+    select left:
+        when WindowCornerPreference.Default =>
+            select right:
+                when WindowCornerPreference.Default => return true
+                else => return false
+        when WindowCornerPreference.DoNotRound =>
+            select right:
+                when WindowCornerPreference.DoNotRound => return true
+                else => return false
+        when WindowCornerPreference.Round =>
+            select right:
+                when WindowCornerPreference.Round => return true
+                else => return false
+        when WindowCornerPreference.RoundSmall =>
+            select right:
+                when WindowCornerPreference.RoundSmall => return true
+                else => return false
+    return false
+
+pub fn prove_window_appearance_runtime(edit present_app: VulkanPresentApp, window_id: WindowId) -> I32:
+    let owned_window = present_app.window :: :: method
+    select:
+        when owned_window.id != window_id => return 3390
+        else => ()
+
+    let initial_shadow = present_app.undecorated_shadow :: :: method
+    let initial_backdrop = present_app.system_backdrop :: :: method
+    let initial_border_color = present_app.border_color :: :: method
+    let initial_title_background_color = present_app.title_background_color :: :: method
+    let initial_title_text_color = present_app.title_text_color :: :: method
+    let initial_corner_preference = present_app.corner_preference :: :: method
+
+    select:
+        when owned_window.undecorated_shadow :: :: method != initial_shadow => return 3391
+        when !backdrops_match :: owned_window.system_backdrop :: :: method, initial_backdrop :: call => return 3392
+        when !colors_match :: owned_window.border_color :: :: method, initial_border_color :: call => return 3393
+        when !colors_match :: owned_window.title_background_color :: :: method, initial_title_background_color :: call => return 3394
+        when !colors_match :: owned_window.title_text_color :: :: method, initial_title_text_color :: call => return 3395
+        when !corners_match :: owned_window.corner_preference :: :: method, initial_corner_preference :: call => return 3396
+        else => ()
+
+    let updated_border_color = rgba_color :: 24, 48, 96, 255 :: call
+    let updated_title_background_value = rgba_color :: 8, 32, 72, 255 :: call
+    let updated_title_text_value = rgba_color :: 240, 240, 248, 255 :: call
+    let updated_border = Option.Some :: updated_border_color :: call
+    let updated_title_background = Option.Some :: updated_title_background_value :: call
+    let updated_title_text = Option.Some :: updated_title_text_value :: call
+    let shadow_supported = false
+    let backdrop_supported = false
+    let border_color_supported = false
+    let title_background_supported = false
+    let title_text_supported = false
+    let corner_supported = false
+
+    select present_app.set_undecorated_shadow :: true :: method:
+        when Result.Ok(_) => shadow_supported = true
+        when Result.Err(_) => ()
+    select present_app.set_system_backdrop :: WindowSystemBackdrop.MainWindow :: method:
+        when Result.Ok(_) => backdrop_supported = true
+        when Result.Err(_) => ()
+    select present_app.set_border_color :: updated_border :: method:
+        when Result.Ok(_) => border_color_supported = true
+        when Result.Err(_) => ()
+    select present_app.set_title_background_color :: updated_title_background :: method:
+        when Result.Ok(_) => title_background_supported = true
+        when Result.Err(_) => ()
+    select present_app.set_title_text_color :: updated_title_text :: method:
+        when Result.Ok(_) => title_text_supported = true
+        when Result.Err(_) => ()
+    select present_app.set_corner_preference :: WindowCornerPreference.RoundSmall :: method:
+        when Result.Ok(_) => corner_supported = true
+        when Result.Err(_) => ()
+
+    select:
+        when shadow_supported && !present_app.undecorated_shadow :: :: method => return 3403
+        when shadow_supported && !owned_window.undecorated_shadow :: :: method => return 3404
+        when !shadow_supported && present_app.undecorated_shadow :: :: method != initial_shadow => return 3405
+        when !backdrop_supported && !backdrops_match :: present_app.system_backdrop :: :: method, initial_backdrop :: call => return 3406
+        when backdrop_supported && !backdrops_match :: present_app.system_backdrop :: :: method, WindowSystemBackdrop.MainWindow :: call => return 3407
+        when backdrop_supported && !backdrops_match :: owned_window.system_backdrop :: :: method, WindowSystemBackdrop.MainWindow :: call => return 3408
+        when !border_color_supported && !colors_match :: present_app.border_color :: :: method, initial_border_color :: call => return 3409
+        when border_color_supported && !colors_match :: present_app.border_color :: :: method, updated_border :: call => return 3410
+        when border_color_supported && !colors_match :: owned_window.border_color :: :: method, updated_border :: call => return 3411
+        when !title_background_supported && !colors_match :: present_app.title_background_color :: :: method, initial_title_background_color :: call => return 3412
+        when title_background_supported && !colors_match :: present_app.title_background_color :: :: method, updated_title_background :: call => return 3413
+        when title_background_supported && !colors_match :: owned_window.title_background_color :: :: method, updated_title_background :: call => return 3414
+        when !title_text_supported && !colors_match :: present_app.title_text_color :: :: method, initial_title_text_color :: call => return 3415
+        when title_text_supported && !colors_match :: present_app.title_text_color :: :: method, updated_title_text :: call => return 3416
+        when title_text_supported && !colors_match :: owned_window.title_text_color :: :: method, updated_title_text :: call => return 3417
+        when !corner_supported && !corners_match :: present_app.corner_preference :: :: method, initial_corner_preference :: call => return 3418
+        when corner_supported && !corners_match :: present_app.corner_preference :: :: method, WindowCornerPreference.RoundSmall :: call => return 3419
+        when corner_supported && !corners_match :: owned_window.corner_preference :: :: method, WindowCornerPreference.RoundSmall :: call => return 3420
+        else => ()
+
+    select:
+        when shadow_supported =>
+            select owned_window.set_undecorated_shadow :: initial_shadow :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) => return 3421
+        else => ()
+    select:
+        when backdrop_supported =>
+            select owned_window.set_system_backdrop :: initial_backdrop :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) => return 3422
+        else => ()
+    select:
+        when border_color_supported =>
+            select owned_window.set_border_color :: initial_border_color :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) => return 3423
+        else => ()
+    select:
+        when title_background_supported =>
+            select owned_window.set_title_background_color :: initial_title_background_color :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) => return 3424
+        else => ()
+    select:
+        when title_text_supported =>
+            select owned_window.set_title_text_color :: initial_title_text_color :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) => return 3425
+        else => ()
+    select:
+        when corner_supported =>
+            select owned_window.set_corner_preference :: initial_corner_preference :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) => return 3426
+        else => ()
+
+    select:
+        when present_app.undecorated_shadow :: :: method != initial_shadow => return 3427
+        when !backdrops_match :: present_app.system_backdrop :: :: method, initial_backdrop :: call => return 3428
+        when !colors_match :: present_app.border_color :: :: method, initial_border_color :: call => return 3429
+        when !colors_match :: present_app.title_background_color :: :: method, initial_title_background_color :: call => return 3430
+        when !colors_match :: present_app.title_text_color :: :: method, initial_title_text_color :: call => return 3431
+        when !corners_match :: present_app.corner_preference :: :: method, initial_corner_preference :: call => return 3432
+        else => ()
+
+    let aux_title = "runa_app_vulkan_appearance_aux"
+    let aux_border = rgba_color :: 64, 96, 128, 255 :: call
+    let aux_title_background = rgba_color :: 12, 28, 44, 255 :: call
+    let aux_title_text = rgba_color :: 220, 232, 244, 255 :: call
+    let aux_base = hidden_window_spec :: aux_title, 32, 24 :: call
+    let aux_spec = aux_base
+    select:
+        when shadow_supported => aux_spec = window_spec_with_win32_undecorated_shadow :: aux_spec :: call
+        else => ()
+    select:
+        when backdrop_supported => aux_spec = window_spec_with_win32_system_backdrop :: aux_spec, WindowSystemBackdrop.TransientWindow :: call
+        else => ()
+    select:
+        when border_color_supported => aux_spec = window_spec_with_win32_border_color :: aux_spec, aux_border :: call
+        else => ()
+    select:
+        when title_background_supported => aux_spec = window_spec_with_win32_title_background_color :: aux_spec, aux_title_background :: call
+        else => ()
+    select:
+        when title_text_supported => aux_spec = window_spec_with_win32_title_text_color :: aux_spec, aux_title_text :: call
+        else => ()
+    select:
+        when corner_supported => aux_spec = window_spec_with_win32_corner_preference :: aux_spec, WindowCornerPreference.Round :: call
+        else => ()
+
+    select present_app.create_window :: aux_spec :: method:
+        when Result.Ok(aux_window) =>
+            let aux_id = aux_window.id
+            let created_ids = present_app.poll_created_window_ids :: :: method
+            select:
+                when created_ids.count :: :: method != 1 => return 3427
+                when created_ids.remove :: 0 :: method != aux_id => return 3428
+                else => ()
+            select present_app.window_by_id :: aux_id :: method:
+                when Result.Ok(aux_live_window) =>
+                    let aux_border_option = Option.Some :: aux_border :: call
+                    let aux_title_background_option = Option.Some :: aux_title_background :: call
+                    let aux_title_text_option = Option.Some :: aux_title_text :: call
+                    select:
+                        when shadow_supported && !aux_live_window.undecorated_shadow :: :: method => return 3433
+                        when backdrop_supported && !backdrops_match :: aux_live_window.system_backdrop :: :: method, WindowSystemBackdrop.TransientWindow :: call => return 3434
+                        when border_color_supported && !colors_match :: aux_live_window.border_color :: :: method, aux_border_option :: call => return 3435
+                        when title_background_supported && !colors_match :: aux_live_window.title_background_color :: :: method, aux_title_background_option :: call => return 3436
+                        when title_text_supported && !colors_match :: aux_live_window.title_text_color :: :: method, aux_title_text_option :: call => return 3437
+                        when corner_supported && !corners_match :: aux_live_window.corner_preference :: :: method, WindowCornerPreference.Round :: call => return 3438
+                        else => ()
+                when Result.Err(_) => return 3439
+            select present_app.destroy_auxiliary_window_by_id :: aux_id :: method:
+                when Result.Ok(_) => ()
+                when Result.Err(_) => return 3440
+            let destroyed_ids = present_app.poll_destroyed_window_ids :: :: method
+            select:
+                when destroyed_ids.count :: :: method != 1 => return 3441
+                when destroyed_ids.remove :: 0 :: method != aux_id => return 3442
+                else => ()
+        when Result.Err(AppError.WindowAppearanceApplyFailed(_)) => return 3443
+        when Result.Err(_) => return 3444
+
+    return 0

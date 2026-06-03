@@ -25,6 +25,7 @@ pub(package) mod runtime_window_raw_input_list_support
 pub(package) mod runtime_window_state_event_support
 pub(package) mod win32_drag_drop_support
 pub(package) mod win32_ime_support
+pub(package) mod win32_window_icon_support
 pub(package) mod win32_window_appearance_support
 pub(package) mod win32_raw_input_support
 pub(package) mod win32_window_control_support
@@ -99,7 +100,7 @@ pub use system.{runtime_last_error, runtime_platform, runtime_platform_from_raw}
 pub use system.{runtime_platform_raw, runtime_platform_supported}
 pub use system.{runtime_version, runtime_version_string}
 pub use window.{MonitorGammaRamp, MonitorGammaRampError}
-pub use window.{ClientApi, ContextCreationApi, CursorMode, CursorPos}
+pub use window.{ClientApi, ContextCreationApi, CursorGrabMode, CursorMode, CursorPos}
 pub use window.{FrameSize, Monitor, OpenGlProfile, Point, Rect}
 pub use window.{RgbaColor, RgbaImage, RgbaImageError, StandardCursor}
 pub use window.UserAttentionType
@@ -110,10 +111,11 @@ pub use window.WindowThemeError
 pub use window.rgba_blend_source_over
 pub use window.Theme
 pub use window.WindowIconError
+pub use window.WindowTaskbarIconError
 pub use window.{KeyboardInputSnapshot, MouseInputSnapshot, WindowInputSnapshot}
 pub use window.{WindowAspectRatio, WindowModeError, WindowPlacement}
 pub use window.WindowSizeLimits
-pub use window.{Scale, Size, VideoMode, Win32HWnd, Window, WindowId}
+pub use window.{Scale, Size, VideoMode, Win32HMenu, Win32HWnd, Window, WindowId}
 pub use window.{client_api_from_raw, client_api_raw}
 pub use window.{context_creation_api_from_raw, context_creation_api_raw}
 pub use window.{cursor_mode_from_raw, cursor_mode_raw}
@@ -139,7 +141,7 @@ pub use window.osmesa_opengl_window_spec
 pub use window.{positioned_window_spec, unfocused_window_spec}
 pub use window.vulkan_window_spec
 pub use window.{cocoa_frame_named_window_spec, wayland_app_id_window_spec}
-pub use window.{win32_keyboard_menu_window_spec, win32_showdefault_window_spec}
+pub use window.{win32_class_named_window_spec, win32_keyboard_menu_window_spec, win32_menu_window_spec, win32_no_redirection_bitmap_window_spec, win32_showdefault_window_spec}
 pub use window.win32_skip_taskbar_window_spec
 pub use window.{x11_class_named_window_spec, x11_instance_named_window_spec}
 pub use window.{monitor_gamma_ramp, rgba_color}
@@ -161,13 +163,18 @@ pub use window.{window_spec_with_position, window_spec_without_auto_iconify}
 pub use window.{window_spec_without_center_cursor, window_spec_without_focus_on_show}
 pub use window.{window_spec_with_default_refresh_rate, window_spec_with_refresh_rate}
 pub use window.{window_spec_with_shared_context, window_spec_windowed}
+pub use window.{window_spec_with_icon, window_spec_without_icon}
 pub use window.{window_spec_with_cocoa_frame_name, window_spec_with_wayland_app_id}
 pub use window.{window_spec_without_cocoa_frame_name, window_spec_without_shared_context}
 pub use window.{window_spec_without_wayland_app_id, window_spec_without_x11_class_name}
 pub use window.window_spec_without_x11_instance_name
 pub use window.{window_spec_with_x11_class_name, window_spec_with_x11_instance_name}
-pub use window.{window_spec_with_win32_keyboard_menu, window_spec_with_win32_showdefault}
+pub use window.window_spec_without_win32_drag_and_drop
+pub use window.{window_spec_with_win32_class_name, window_spec_with_win32_clip_children, window_spec_with_win32_menu}
+pub use window.{window_spec_with_win32_owner_window, window_spec_with_win32_parent_window}
+pub use window.{window_spec_with_win32_keyboard_menu, window_spec_with_win32_no_redirection_bitmap, window_spec_with_win32_showdefault}
 pub use window.window_spec_with_win32_skip_taskbar
+pub use window.window_spec_with_win32_taskbar_icon
 pub use window.window_spec_with_win32_border_color
 pub use window.window_spec_with_win32_corner_preference
 pub use window.window_spec_with_win32_system_backdrop
@@ -175,6 +182,9 @@ pub use window.window_spec_with_win32_title_background_color
 pub use window.window_spec_with_win32_title_text_color
 pub use window.window_spec_with_win32_undecorated_shadow
 pub use window.window_spec_without_win32_border_color
+pub use window.{window_spec_without_win32_class_name, window_spec_without_win32_menu}
+pub use window.{window_spec_without_win32_owner_window, window_spec_without_win32_parent_window}
+pub use window.window_spec_without_win32_taskbar_icon
 pub use window.window_spec_without_win32_title_background_color
 pub use window.window_spec_without_win32_title_text_color
 pub use window.{window_spec_with_srgb, window_spec_without_scale_to_monitor}
@@ -185,3 +195,9 @@ pub use window.{window_monitor_spec, window_size_limits}
 pub use glfw.{GlfwCursor, GlfwImage, GlfwMonitorList, GlfwVideoMode}
 pub use glfw.{GlfwVideoModeList, glfw_create_cursor, glfw_create_standard_cursor}
 pub use glfw.{glfw_image, glfw_monitors, glfw_primary_monitor}
+
+
+
+
+
+

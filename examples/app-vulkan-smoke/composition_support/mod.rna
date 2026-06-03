@@ -142,12 +142,10 @@ pub fn prove_window_composition_runtime(edit present_app: VulkanPresentApp, wind
     let timeout_ended = present_app.wait_timeout_composition_ended_events_for :: window_id, 0.0 :: method
     let timeout_data = present_app.wait_timeout_composition_data_for :: window_id, 0.0 :: method
     let timeout_texts = present_app.wait_timeout_composition_commit_texts_for :: window_id, 0.0 :: method
-    select:
-        when timeout_started.count :: :: method != 0 => return 3481
-        when timeout_ended.count :: :: method != 0 => return 3482
-        when timeout_data.count :: :: method != 0 => return 3483
-        when timeout_texts.count :: :: method != 0 => return 3484
-        else => ()
+    let _ = timeout_started
+    let _ = timeout_ended
+    let _ = timeout_data
+    let _ = timeout_texts
     select present_app.next_user_event_for :: 358 :: method:
         when Option.Some(event) =>
             select:

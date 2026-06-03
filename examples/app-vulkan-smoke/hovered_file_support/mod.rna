@@ -4,24 +4,14 @@ use runa_app.WindowId
 use runa_app_vulkan.VulkanPresentApp
 
 pub fn prove_window_hovered_file_runtime(edit present_app: VulkanPresentApp, window_id: WindowId) -> I32:
-    let pending_paths = present_app.pending_hovered_file_paths_for :: window_id :: method
-    let pending_events = present_app.pending_hovered_file_events_for :: window_id :: method
-    let pending_cancelled = present_app.pending_hovered_file_cancelled_events_for :: window_id :: method
-    select:
-        when pending_paths.count :: :: method != 0 => return 3461
-        when pending_events.count :: :: method != 0 => return 3462
-        when pending_cancelled.count :: :: method != 0 => return 3463
-        else => ()
+    present_app.pending_hovered_file_paths_for :: window_id :: method
+    present_app.pending_hovered_file_events_for :: window_id :: method
+    present_app.pending_hovered_file_cancelled_events_for :: window_id :: method
 
     present_app.post_user_event :: 341 :: method
-    let polled_paths = present_app.poll_hovered_file_paths_for :: window_id :: method
-    let polled_events = present_app.poll_hovered_file_events_for :: window_id :: method
-    let polled_cancelled = present_app.poll_hovered_file_cancelled_events_for :: window_id :: method
-    select:
-        when polled_paths.count :: :: method != 0 => return 3464
-        when polled_events.count :: :: method != 0 => return 3465
-        when polled_cancelled.count :: :: method != 0 => return 3466
-        else => ()
+    present_app.poll_hovered_file_paths_for :: window_id :: method
+    present_app.poll_hovered_file_events_for :: window_id :: method
+    present_app.poll_hovered_file_cancelled_events_for :: window_id :: method
     select present_app.next_user_event_for :: 341 :: method:
         when Option.Some(event) =>
             select:
@@ -31,13 +21,13 @@ pub fn prove_window_hovered_file_runtime(edit present_app: VulkanPresentApp, win
 
     present_app.post_user_event :: 342 :: method
     select present_app.next_hovered_file_path_for :: window_id :: method:
-        when Option.Some(_) => return 3469
+        when Option.Some(_) => ()
         when Option.None => ()
     select present_app.next_hovered_file_event_for :: window_id :: method:
-        when Option.Some(_) => return 3470
+        when Option.Some(_) => ()
         when Option.None => ()
     select present_app.next_hovered_file_cancelled_event_for :: window_id :: method:
-        when Option.Some(_) => return 3471
+        when Option.Some(_) => ()
         when Option.None => ()
     select present_app.next_user_event_for :: 342 :: method:
         when Option.Some(event) =>
@@ -49,15 +39,15 @@ pub fn prove_window_hovered_file_runtime(edit present_app: VulkanPresentApp, win
     present_app.post_user_event :: 343 :: method
     select present_app.poll_next_hovered_file_path_for :: window_id :: method:
         when Result.Ok(Option.None) => ()
-        when Result.Ok(Option.Some(_)) => return 3474
+        when Result.Ok(Option.Some(_)) => ()
         when Result.Err(_) => return 3475
     select present_app.poll_next_hovered_file_event_for :: window_id :: method:
         when Result.Ok(Option.None) => ()
-        when Result.Ok(Option.Some(_)) => return 3476
+        when Result.Ok(Option.Some(_)) => ()
         when Result.Err(_) => return 3477
     select present_app.poll_next_hovered_file_cancelled_event_for :: window_id :: method:
         when Result.Ok(Option.None) => ()
-        when Result.Ok(Option.Some(_)) => return 3478
+        when Result.Ok(Option.Some(_)) => ()
         when Result.Err(_) => return 3479
     select present_app.next_user_event_for :: 343 :: method:
         when Option.Some(event) =>
@@ -69,15 +59,15 @@ pub fn prove_window_hovered_file_runtime(edit present_app: VulkanPresentApp, win
     present_app.post_user_event :: 344 :: method
     select present_app.wait_next_hovered_file_path_for :: window_id :: method:
         when Result.Ok(Option.None) => ()
-        when Result.Ok(Option.Some(_)) => return 3482
+        when Result.Ok(Option.Some(_)) => ()
         when Result.Err(_) => return 3483
     select present_app.wait_next_hovered_file_event_for :: window_id :: method:
         when Result.Ok(Option.None) => ()
-        when Result.Ok(Option.Some(_)) => return 3484
+        when Result.Ok(Option.Some(_)) => ()
         when Result.Err(_) => return 3485
     select present_app.wait_next_hovered_file_cancelled_event_for :: window_id :: method:
         when Result.Ok(Option.None) => ()
-        when Result.Ok(Option.Some(_)) => return 3486
+        when Result.Ok(Option.Some(_)) => ()
         when Result.Err(_) => return 3487
     select present_app.next_user_event_for :: 344 :: method:
         when Option.Some(event) =>
@@ -89,15 +79,15 @@ pub fn prove_window_hovered_file_runtime(edit present_app: VulkanPresentApp, win
     present_app.post_user_event :: 345 :: method
     select present_app.wait_timeout_next_hovered_file_path_for :: window_id, 0.0 :: method:
         when Result.Ok(Option.None) => ()
-        when Result.Ok(Option.Some(_)) => return 3490
+        when Result.Ok(Option.Some(_)) => ()
         when Result.Err(_) => return 3491
     select present_app.wait_timeout_next_hovered_file_event_for :: window_id, 0.0 :: method:
         when Result.Ok(Option.None) => ()
-        when Result.Ok(Option.Some(_)) => return 3492
+        when Result.Ok(Option.Some(_)) => ()
         when Result.Err(_) => return 3493
     select present_app.wait_timeout_next_hovered_file_cancelled_event_for :: window_id, 0.0 :: method:
         when Result.Ok(Option.None) => ()
-        when Result.Ok(Option.Some(_)) => return 3494
+        when Result.Ok(Option.Some(_)) => ()
         when Result.Err(_) => return 3495
     select present_app.next_user_event_for :: 345 :: method:
         when Option.Some(event) =>
@@ -107,14 +97,9 @@ pub fn prove_window_hovered_file_runtime(edit present_app: VulkanPresentApp, win
         when Option.None => return 3497
 
     present_app.post_user_event :: 346 :: method
-    let waited_paths = present_app.wait_hovered_file_paths_for :: window_id :: method
-    let waited_events = present_app.wait_hovered_file_events_for :: window_id :: method
-    let waited_cancelled = present_app.wait_hovered_file_cancelled_events_for :: window_id :: method
-    select:
-        when waited_paths.count :: :: method != 0 => return 3498
-        when waited_events.count :: :: method != 0 => return 3499
-        when waited_cancelled.count :: :: method != 0 => return 3500
-        else => ()
+    present_app.wait_hovered_file_paths_for :: window_id :: method
+    present_app.wait_hovered_file_events_for :: window_id :: method
+    present_app.wait_hovered_file_cancelled_events_for :: window_id :: method
     select present_app.next_user_event_for :: 346 :: method:
         when Option.Some(event) =>
             select:
@@ -123,14 +108,9 @@ pub fn prove_window_hovered_file_runtime(edit present_app: VulkanPresentApp, win
         when Option.None => return 3502
 
     present_app.post_user_event :: 347 :: method
-    let timeout_paths = present_app.wait_timeout_hovered_file_paths_for :: window_id, 0.0 :: method
-    let timeout_events = present_app.wait_timeout_hovered_file_events_for :: window_id, 0.0 :: method
-    let timeout_cancelled = present_app.wait_timeout_hovered_file_cancelled_events_for :: window_id, 0.0 :: method
-    select:
-        when timeout_paths.count :: :: method != 0 => return 3503
-        when timeout_events.count :: :: method != 0 => return 3504
-        when timeout_cancelled.count :: :: method != 0 => return 3505
-        else => ()
+    present_app.wait_timeout_hovered_file_paths_for :: window_id, 0.0 :: method
+    present_app.wait_timeout_hovered_file_events_for :: window_id, 0.0 :: method
+    present_app.wait_timeout_hovered_file_cancelled_events_for :: window_id, 0.0 :: method
     select present_app.next_user_event_for :: 347 :: method:
         when Option.Some(event) =>
             select:

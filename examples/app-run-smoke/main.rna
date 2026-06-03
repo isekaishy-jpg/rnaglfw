@@ -2647,6 +2647,7 @@ fn main() -> I32:
     let handler = SmokeHandler :: :: call
         window_id = Option.None
         saw_created = false
+        saw_about_to_wait = false
         saw_user = false
     let config = win32_app_init_config :: :: call
     select run_with_config_and_flow :: handler, config, ControlFlow.Poll :: call:

@@ -2,22 +2,26 @@ use std.{ByteBuffer, List, Option, Result, Str}
 use bridge.{TextDecodeError, bool_to_cint, maybe_c_string}
 use bridge.index_to_cint
 use bridge.copy_c_string
-use mailbox.request_window_refresh
+use mailbox.{current_window_size_limits, request_window_refresh, set_window_size_limits}
 use win32_window_appearance_support.{current_window_border_color, current_window_corner_preference}
 use win32_window_appearance_support.{current_window_system_backdrop, current_window_title_background_color}
 use win32_window_appearance_support.{current_window_title_text_color, current_window_undecorated_shadow}
+use win32_drag_drop_support.{current_window_drag_drop_enabled, set_window_drag_drop_enabled}
 use win32_ime_support.{current_window_ime_allowed, current_window_ime_cursor_area}
 use win32_ime_support.{set_window_ime_allowed, set_window_ime_cursor_area}
 use win32_theme_support.{current_window_theme, set_window_theme}
+use win32_window_icon_support.{clear_window_taskbar_icon, set_window_taskbar_icon}
 use win32_window_appearance_support.{set_window_border_color, set_window_corner_preference}
 use win32_window_appearance_support.{set_window_system_backdrop, set_window_title_background_color}
 use win32_window_appearance_support.{set_window_title_text_color, set_window_undecorated_shadow}
 use win32_window_control_support.{current_window_buttons, current_window_content_protected}
-use win32_window_control_support.{current_window_enabled, current_window_skip_taskbar}
+use win32_window_control_support.{current_window_clip_children, current_window_no_redirection_bitmap}
+use win32_window_control_support.{current_window_enabled, current_window_owner_window, current_window_skip_taskbar}
 use win32_window_control_support.current_window_level
 use win32_window_control_support.current_window_resize_increments
 use win32_window_control_support.{drag_resize_window_interaction, set_window_content_protected}
 use win32_window_control_support.{drag_window_interaction, set_window_buttons}
+use win32_window_control_support.set_window_clip_children
 use win32_window_control_support.set_window_resize_increments
 use win32_window_control_support.{set_window_enabled, set_window_skip_taskbar}
 use win32_window_control_support.{set_window_level, sync_window_level_for_floating}
@@ -44,6 +48,7 @@ pub type CursorPos = GlfwCursorPos
 pub type Monitor = GlfwMonitor
 pub type VideoMode = GlfwVideoMode
 pub type Win32HWnd = GlfwWin32HWnd
+pub type Win32HMenu = *edit CVoid
 pub type WindowMonitorSpec = GlfwWindowMonitorSpec
 const POINTER_OFFSET_STEP: ISize = 1
 pub enum CursorMode:
@@ -51,6 +56,10 @@ pub enum CursorMode:
     Hidden
     Disabled
     Captured
+pub enum CursorGrabMode:
+    None
+    Confined
+    Locked
 pub enum Theme:
     Light
     Dark
@@ -113,6 +122,11 @@ pub enum RgbaImageError:
     RectZeroSize
 pub enum WindowIconError:
     CountOutOfRange
+pub enum WindowTaskbarIconError:
+    NativeWindowUnavailable
+    InvalidImage
+    BitmapCreateFailed
+    IconCreateFailed
 pub enum WindowControlError:
     NativeWindowUnavailable
     SystemMenuUnavailable
@@ -120,12 +134,15 @@ pub enum WindowControlError:
     StyleUpdateFailed
     ExStyleQueryFailed
     ExStyleUpdateFailed
+    OwnerWindowQueryFailed
+    OwnerWindowUpdateFailed
     WindowLevelUpdateFailed
     ContentProtectionQueryFailed
     ContentProtectionUpdateFailed
     ScreenPositionFailed
     SystemCommandDispatchFailed
     MenuShowFailed
+    MenuUpdateFailed
     AttentionRequestFailed
 pub enum WindowThemeError:
     NativeWindowUnavailable
@@ -208,9 +225,18 @@ pub struct WindowSpec:
     pub focus_on_show: Bool
     pub mouse_passthrough: Bool
     pub scale_to_monitor: Bool
+    pub win32_drag_and_drop: Bool
+    pub win32_clip_children: Bool
+    pub win32_parent_window: Win32HWnd
+    pub win32_owner_window: Win32HWnd
+    pub win32_menu: Win32HMenu
+    pub icon: Option[RgbaImage]
     pub win32_skip_taskbar: Bool
     pub win32_keyboard_menu: Bool
     pub win32_showdefault: Bool
+    pub win32_no_redirection_bitmap: Bool
+    pub win32_class_name: Option[Str]
+    pub win32_taskbar_icon: Option[RgbaImage]
     pub win32_undecorated_shadow: Bool
     pub win32_system_backdrop: WindowSystemBackdrop
     pub win32_border_color: Option[RgbaColor]
@@ -566,6 +592,11 @@ pub fn cursor_mode_from_raw(raw: CInt) -> CursorMode:
         when raw == 0x00034003 => return CursorMode.Disabled
         when raw == 0x00034004 => return CursorMode.Captured
         else => return CursorMode.Normal
+pub fn cursor_grab_mode_from_cursor_mode(read mode: CursorMode) -> CursorGrabMode:
+    select mode:
+        when CursorMode.Captured => return CursorGrabMode.Confined
+        when CursorMode.Disabled => return CursorGrabMode.Locked
+        when _ => return CursorGrabMode.None
 pub fn cursor_mode_raw(read mode: CursorMode) -> CInt:
     return cursor_mode_value :: mode :: call
 pub fn point(x: CInt, y: CInt) -> Point:
@@ -696,6 +727,22 @@ pub fn window_no_size_limits() -> WindowSizeLimits:
         min_height = 0 - 1
         max_width = 0 - 1
         max_height = 0 - 1
+
+fn min_size_from_limits(read limits: WindowSizeLimits) -> Option[Size]:
+    select:
+        when limits.min_width < 0 => return Option.None
+        when limits.min_height < 0 => return Option.None
+        else =>
+            let size = Size :: limits.min_width, limits.min_height :: call
+            return Option.Some :: size :: call
+
+fn max_size_from_limits(read limits: WindowSizeLimits) -> Option[Size]:
+    select:
+        when limits.max_width < 0 => return Option.None
+        when limits.max_height < 0 => return Option.None
+        else =>
+            let size = Size :: limits.max_width, limits.max_height :: call
+            return Option.Some :: size :: call
 pub fn window_aspect_ratio(numerator: CInt, denominator: CInt) -> WindowAspectRatio:
     return WindowAspectRatio :: numerator, denominator :: call
 pub fn window_aspect_ratio_from_size(read size: Size) -> WindowAspectRatio:
@@ -726,9 +773,18 @@ pub fn window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
         focus_on_show = true
         mouse_passthrough = false
         scale_to_monitor = true
+        win32_drag_and_drop = true
+        win32_clip_children = false
+        win32_parent_window = null
+        win32_owner_window = null
+        win32_menu = null
+        icon = Option.None
         win32_skip_taskbar = false
         win32_keyboard_menu = false
         win32_showdefault = false
+        win32_no_redirection_bitmap = false
+        win32_class_name = Option.None
+        win32_taskbar_icon = Option.None
         win32_undecorated_shadow = false
         win32_system_backdrop = WindowSystemBackdrop.Auto
         win32_border_color = Option.None
@@ -812,6 +868,18 @@ pub fn win32_skip_taskbar_window_spec(title: Str, width: Index, height: Index) -
 pub fn win32_showdefault_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
     let spec = window_spec :: title, width, height :: call
     spec.enable_win32_showdefault :: :: method
+    return spec
+pub fn win32_no_redirection_bitmap_window_spec(title: Str, width: Index, height: Index) -> WindowSpec:
+    let spec = window_spec :: title, width, height :: call
+    spec.enable_win32_no_redirection_bitmap :: :: method
+    return spec
+pub fn win32_class_named_window_spec(title: Str, width: Index, height: Index, name: Str) -> WindowSpec:
+    let spec = window_spec :: title, width, height :: call
+    spec.set_win32_class_name :: name :: method
+    return spec
+pub fn win32_menu_window_spec(title: Str, width: Index, height: Index, menu: Win32HMenu) -> WindowSpec:
+    let spec = window_spec :: title, width, height :: call
+    spec.set_win32_menu :: menu :: method
     return spec
 pub fn window_spec_with_win32_undecorated_shadow(take spec: WindowSpec) -> WindowSpec:
     spec.enable_win32_undecorated_shadow :: :: method
@@ -940,14 +1008,60 @@ pub fn window_spec_with_mouse_passthrough(take spec: WindowSpec) -> WindowSpec:
 pub fn window_spec_without_scale_to_monitor(take spec: WindowSpec) -> WindowSpec:
     spec.disable_scale_to_monitor :: :: method
     return spec
+pub fn window_spec_without_win32_drag_and_drop(take spec: WindowSpec) -> WindowSpec:
+    spec.disable_win32_drag_and_drop :: :: method
+    return spec
+pub fn window_spec_with_win32_clip_children(take spec: WindowSpec) -> WindowSpec:
+    spec.enable_win32_clip_children :: :: method
+    return spec
+pub fn window_spec_with_win32_parent_window(take spec: WindowSpec, parent: Win32HWnd) -> WindowSpec:
+    spec.set_win32_parent_window :: parent :: method
+    return spec
+pub fn window_spec_without_win32_parent_window(take spec: WindowSpec) -> WindowSpec:
+    spec.clear_win32_parent_window :: :: method
+    return spec
+pub fn window_spec_with_win32_owner_window(take spec: WindowSpec, owner: Win32HWnd) -> WindowSpec:
+    spec.set_win32_owner_window :: owner :: method
+    return spec
+pub fn window_spec_without_win32_owner_window(take spec: WindowSpec) -> WindowSpec:
+    spec.clear_win32_owner_window :: :: method
+    return spec
+pub fn window_spec_with_win32_menu(take spec: WindowSpec, menu: Win32HMenu) -> WindowSpec:
+    spec.set_win32_menu :: menu :: method
+    return spec
+pub fn window_spec_without_win32_menu(take spec: WindowSpec) -> WindowSpec:
+    spec.clear_win32_menu :: :: method
+    return spec
+
 pub fn window_spec_with_win32_keyboard_menu(take spec: WindowSpec) -> WindowSpec:
     spec.enable_win32_keyboard_menu :: :: method
+    return spec
+pub fn window_spec_with_icon(take spec: WindowSpec, take image: RgbaImage) -> WindowSpec:
+    spec.set_icon :: image :: method
+    return spec
+pub fn window_spec_without_icon(take spec: WindowSpec) -> WindowSpec:
+    spec.clear_icon :: :: method
     return spec
 pub fn window_spec_with_win32_skip_taskbar(take spec: WindowSpec) -> WindowSpec:
     spec.enable_win32_skip_taskbar :: :: method
     return spec
+pub fn window_spec_with_win32_taskbar_icon(take spec: WindowSpec, take image: RgbaImage) -> WindowSpec:
+    spec.set_win32_taskbar_icon :: image :: method
+    return spec
+pub fn window_spec_without_win32_taskbar_icon(take spec: WindowSpec) -> WindowSpec:
+    spec.clear_win32_taskbar_icon :: :: method
+    return spec
 pub fn window_spec_with_win32_showdefault(take spec: WindowSpec) -> WindowSpec:
     spec.enable_win32_showdefault :: :: method
+    return spec
+pub fn window_spec_with_win32_no_redirection_bitmap(take spec: WindowSpec) -> WindowSpec:
+    spec.enable_win32_no_redirection_bitmap :: :: method
+    return spec
+pub fn window_spec_with_win32_class_name(take spec: WindowSpec, take name: Str) -> WindowSpec:
+    spec.set_win32_class_name :: name :: method
+    return spec
+pub fn window_spec_without_win32_class_name(take spec: WindowSpec) -> WindowSpec:
+    spec.clear_win32_class_name :: :: method
     return spec
 pub fn window_spec_with_cocoa_frame_name(take spec: WindowSpec, take name: Str) -> WindowSpec:
     spec.set_cocoa_frame_name :: name :: method
@@ -1197,11 +1311,54 @@ impl WindowSpec:
     fn without_scale_to_monitor(take self) -> WindowSpec:
         self.disable_scale_to_monitor :: :: method
         return self
+    fn with_win32_drag_and_drop(take self, enabled: Bool) -> WindowSpec:
+        self.set_win32_drag_and_drop :: enabled :: method
+        return self
+    fn without_win32_drag_and_drop(take self) -> WindowSpec:
+        self.disable_win32_drag_and_drop :: :: method
+        return self
+    fn with_win32_clip_children_enabled(take self, enabled: Bool) -> WindowSpec:
+        self.set_win32_clip_children :: enabled :: method
+        return self
+    fn with_win32_clip_children(take self) -> WindowSpec:
+        self.enable_win32_clip_children :: :: method
+        return self
+    fn with_win32_parent_window(take self, parent: Win32HWnd) -> WindowSpec:
+        self.set_win32_parent_window :: parent :: method
+        return self
+    fn without_win32_parent_window(take self) -> WindowSpec:
+        self.clear_win32_parent_window :: :: method
+        return self
+    fn with_win32_owner_window(take self, owner: Win32HWnd) -> WindowSpec:
+        self.set_win32_owner_window :: owner :: method
+        return self
+    fn without_win32_owner_window(take self) -> WindowSpec:
+        self.clear_win32_owner_window :: :: method
+        return self
+    fn with_win32_menu(take self, menu: Win32HMenu) -> WindowSpec:
+        self.set_win32_menu :: menu :: method
+        return self
+    fn without_win32_menu(take self) -> WindowSpec:
+        self.clear_win32_menu :: :: method
+        return self
+
+    fn with_icon(take self, take image: RgbaImage) -> WindowSpec:
+        self.set_icon :: image :: method
+        return self
+    fn without_icon(take self) -> WindowSpec:
+        self.clear_icon :: :: method
+        return self
     fn with_win32_skip_taskbar_enabled(take self, enabled: Bool) -> WindowSpec:
         self.set_win32_skip_taskbar :: enabled :: method
         return self
     fn with_win32_skip_taskbar(take self) -> WindowSpec:
         self.enable_win32_skip_taskbar :: :: method
+        return self
+    fn with_win32_taskbar_icon(take self, take image: RgbaImage) -> WindowSpec:
+        self.set_win32_taskbar_icon :: image :: method
+        return self
+    fn without_win32_taskbar_icon(take self) -> WindowSpec:
+        self.clear_win32_taskbar_icon :: :: method
         return self
     fn with_win32_keyboard_menu_enabled(take self, enabled: Bool) -> WindowSpec:
         self.set_win32_keyboard_menu :: enabled :: method
@@ -1214,6 +1371,18 @@ impl WindowSpec:
         return self
     fn with_win32_showdefault(take self) -> WindowSpec:
         self.enable_win32_showdefault :: :: method
+        return self
+    fn with_win32_no_redirection_bitmap_enabled(take self, enabled: Bool) -> WindowSpec:
+        self.set_win32_no_redirection_bitmap :: enabled :: method
+        return self
+    fn with_win32_no_redirection_bitmap(take self) -> WindowSpec:
+        self.enable_win32_no_redirection_bitmap :: :: method
+        return self
+    fn with_win32_class_name(take self, take name: Str) -> WindowSpec:
+        self.set_win32_class_name :: name :: method
+        return self
+    fn without_win32_class_name(take self) -> WindowSpec:
+        self.clear_win32_class_name :: :: method
         return self
     fn with_win32_undecorated_shadow_enabled(take self, enabled: Bool) -> WindowSpec:
         self.set_win32_undecorated_shadow :: enabled :: method
@@ -1526,11 +1695,57 @@ impl WindowSpec:
     fn disable_scale_to_monitor(edit self) -> Unit:
         self.set_scale_to_monitor :: false :: method
         return
+    fn set_win32_drag_and_drop(edit self, enabled: Bool) -> Unit:
+        self.win32_drag_and_drop = enabled
+        return
+    fn enable_win32_drag_and_drop(edit self) -> Unit:
+        self.set_win32_drag_and_drop :: true :: method
+        return
+    fn disable_win32_drag_and_drop(edit self) -> Unit:
+        self.set_win32_drag_and_drop :: false :: method
+        return
+    fn set_win32_clip_children(edit self, enabled: Bool) -> Unit:
+        self.win32_clip_children = enabled
+        return
+    fn enable_win32_clip_children(edit self) -> Unit:
+        self.set_win32_clip_children :: true :: method
+        return
+    fn set_win32_parent_window(edit self, parent: Win32HWnd) -> Unit:
+        self.win32_parent_window = parent
+        return
+    fn clear_win32_parent_window(edit self) -> Unit:
+        self.win32_parent_window = null
+        return
+    fn set_win32_owner_window(edit self, owner: Win32HWnd) -> Unit:
+        self.win32_owner_window = owner
+        return
+    fn clear_win32_owner_window(edit self) -> Unit:
+        self.win32_owner_window = null
+        return
+    fn set_win32_menu(edit self, menu: Win32HMenu) -> Unit:
+        self.win32_menu = menu
+        return
+    fn clear_win32_menu(edit self) -> Unit:
+        self.win32_menu = null
+        return
+
+    fn set_icon(edit self, take image: RgbaImage) -> Unit:
+        self.icon = Option.Some :: image :: call
+        return
+    fn clear_icon(edit self) -> Unit:
+        self.icon = Option.None
+        return
     fn set_win32_skip_taskbar(edit self, enabled: Bool) -> Unit:
         self.win32_skip_taskbar = enabled
         return
     fn enable_win32_skip_taskbar(edit self) -> Unit:
         self.set_win32_skip_taskbar :: true :: method
+        return
+    fn set_win32_taskbar_icon(edit self, take image: RgbaImage) -> Unit:
+        self.win32_taskbar_icon = Option.Some :: image :: call
+        return
+    fn clear_win32_taskbar_icon(edit self) -> Unit:
+        self.win32_taskbar_icon = Option.None
         return
     fn set_win32_keyboard_menu(edit self, enabled: Bool) -> Unit:
         self.win32_keyboard_menu = enabled
@@ -1543,6 +1758,18 @@ impl WindowSpec:
         return
     fn enable_win32_showdefault(edit self) -> Unit:
         self.set_win32_showdefault :: true :: method
+        return
+    fn set_win32_no_redirection_bitmap(edit self, enabled: Bool) -> Unit:
+        self.win32_no_redirection_bitmap = enabled
+        return
+    fn enable_win32_no_redirection_bitmap(edit self) -> Unit:
+        self.set_win32_no_redirection_bitmap :: true :: method
+        return
+    fn set_win32_class_name(edit self, take name: Str) -> Unit:
+        self.win32_class_name = Option.Some :: name :: call
+        return
+    fn clear_win32_class_name(edit self) -> Unit:
+        self.win32_class_name = Option.None
         return
     fn set_win32_undecorated_shadow(edit self, enabled: Bool) -> Unit:
         self.win32_undecorated_shadow = enabled
@@ -1972,14 +2199,50 @@ impl Window:
         let increments: Option[Size] = Option.None
         self.set_resize_increments :: increments :: method
         return
+    fn size_limits(read self) -> WindowSizeLimits:
+        return current_window_size_limits :: self.raw :: call
+    fn min_inner_size(read self) -> Option[Size]:
+        let limits = self.size_limits :: :: method
+        return min_size_from_limits :: limits :: call
+    fn max_inner_size(read self) -> Option[Size]:
+        let limits = self.size_limits :: :: method
+        return max_size_from_limits :: limits :: call
     fn set_size_limits(read self, min_width: CInt, min_height: CInt, max_width: CInt, max_height: CInt) -> Unit:
-        self.raw.set_size_limits :: min_width, min_height, max_width, max_height :: method
+        let limits = WindowSizeLimits :: :: call
+            min_width = min_width
+            min_height = min_height
+            max_width = max_width
+            max_height = max_height
+        set_window_size_limits :: self.raw, limits :: call
         return
     fn apply_size_limits(read self, read limits: WindowSizeLimits) -> Unit:
-        self.raw.set_size_limits :: limits.min_width, limits.min_height, limits.max_width, limits.max_height :: method
+        set_window_size_limits :: self.raw, limits :: call
         return
     fn clear_size_limits(read self) -> Unit:
-        self.raw.set_size_limits :: 0 - 1, 0 - 1, 0 - 1, 0 - 1 :: method
+        let limits = window_no_size_limits :: :: call
+        self.apply_size_limits :: limits :: method
+        return
+    fn set_min_inner_size(read self, read size: Option[Size]) -> Unit:
+        let limits = self.size_limits :: :: method
+        select size:
+            when Option.Some(value) =>
+                limits.min_width = value.width
+                limits.min_height = value.height
+            when Option.None =>
+                limits.min_width = 0 - 1
+                limits.min_height = 0 - 1
+        self.apply_size_limits :: limits :: method
+        return
+    fn set_max_inner_size(read self, read size: Option[Size]) -> Unit:
+        let limits = self.size_limits :: :: method
+        select size:
+            when Option.Some(value) =>
+                limits.max_width = value.width
+                limits.max_height = value.height
+            when Option.None =>
+                limits.max_width = 0 - 1
+                limits.max_height = 0 - 1
+        self.apply_size_limits :: limits :: method
         return
     fn set_aspect_ratio(read self, numerator: CInt, denominator: CInt) -> Unit:
         self.raw.set_aspect_ratio :: numerator, denominator :: method
@@ -2084,6 +2347,13 @@ impl Window:
         return current_window_enabled :: self.raw :: call
     fn skip_taskbar(read self) -> Result[Bool, WindowControlError]:
         return current_window_skip_taskbar :: self.raw :: call
+    fn owner_window(read self) -> Result[Option[Win32HWnd], WindowControlError]:
+        return current_window_owner_window :: self.raw :: call
+    fn clip_children(read self) -> Result[Bool, WindowControlError]:
+        return current_window_clip_children :: self.raw :: call
+    fn no_redirection_bitmap(read self) -> Result[Bool, WindowControlError]:
+        return current_window_no_redirection_bitmap :: self.raw :: call
+
     fn content_protected(read self) -> Result[Bool, WindowControlError]:
         return current_window_content_protected :: self.raw :: call
     fn ime_allowed(read self) -> Bool:
@@ -2106,6 +2376,9 @@ impl Window:
         return set_window_enabled :: self.raw, enabled :: call
     fn set_skip_taskbar(read self, skip: Bool) -> Result[Unit, WindowControlError]:
         return set_window_skip_taskbar :: self.raw, skip :: call
+    fn set_clip_children(read self, enabled: Bool) -> Result[Unit, WindowControlError]:
+        return set_window_clip_children :: self.raw, enabled :: call
+
     fn set_content_protected(read self, enabled: Bool) -> Result[Unit, WindowControlError]:
         return set_window_content_protected :: self.raw, enabled :: call
     fn set_undecorated_shadow(read self, shadow: Bool) -> Result[Unit, WindowAppearanceError]:
@@ -2127,6 +2400,14 @@ impl Window:
         select:
             when !monitor.is_null :: :: method => return Option.Some :: monitor :: call
             else => return current_monitor_for_window :: self :: call
+    fn drag_and_drop_enabled(read self) -> Bool:
+        return current_window_drag_drop_enabled :: self.raw :: call
+    fn set_drag_and_drop_enabled(read self, enabled: Bool) -> Bool:
+        return set_window_drag_drop_enabled :: self.raw, enabled :: call
+    fn disable_drag_and_drop(read self) -> Bool:
+        return self.set_drag_and_drop_enabled :: false :: method
+    fn enable_drag_and_drop(read self) -> Bool:
+        return self.set_drag_and_drop_enabled :: true :: method
     fn primary_monitor(read self) -> Option[Monitor]:
         let _ = self
         let monitor = glfw_primary_monitor :: :: call
@@ -2349,8 +2630,13 @@ impl Window:
             mouse = mouse
     fn cursor_pos(read self) -> CursorPos:
         return self.raw.cursor_pos :: :: method
+    fn cursor_position(read self) -> CursorPos:
+        return self.cursor_pos :: :: method
     fn set_cursor_pos(read self, x: F64, y: F64) -> Unit:
         self.raw.set_cursor_pos :: x, y :: method
+        return
+    fn set_cursor_position(read self, read pos: CursorPos) -> Unit:
+        self.set_cursor_pos :: pos.x, pos.y :: method
         return
     fn set_cursor(read self, read cursor: GlfwCursor) -> Unit:
         self.raw.set_cursor :: cursor :: method
@@ -2374,9 +2660,35 @@ impl Window:
     fn cursor_mode(read self) -> CursorMode:
         let raw_mode = self.raw.input_mode :: 0x00033001 :: method
         return cursor_mode_from_raw :: raw_mode :: call
+    fn cursor_grab_mode(read self) -> CursorGrabMode:
+        let mode = self.cursor_mode :: :: method
+        return cursor_grab_mode_from_cursor_mode :: mode :: call
+    fn cursor_visible(read self) -> Bool:
+        select self.cursor_mode :: :: method:
+            when CursorMode.Hidden => return false
+            when CursorMode.Disabled => return false
+            when _ => return true
     fn set_cursor_mode(read self, mode: CursorMode) -> Unit:
         let raw_mode: CInt = cursor_mode_value :: mode :: call
         self.raw.set_input_mode :: 0x00033001, raw_mode :: method
+        return
+    fn set_cursor_grab(read self, read mode: CursorGrabMode) -> Unit:
+        select mode:
+            when CursorGrabMode.None => self.set_cursor_mode :: CursorMode.Normal :: method
+            when CursorGrabMode.Confined => self.set_cursor_mode :: CursorMode.Captured :: method
+            when CursorGrabMode.Locked => self.set_cursor_mode :: CursorMode.Disabled :: method
+        return
+    fn set_cursor_visible(read self, visible: Bool) -> Unit:
+        let current = self.cursor_mode :: :: method
+        select:
+            when visible =>
+                select current:
+                    when CursorMode.Hidden => self.set_cursor_mode :: CursorMode.Normal :: method
+                    when _ => ()
+            else =>
+                select current:
+                    when CursorMode.Normal => self.set_cursor_mode :: CursorMode.Hidden :: method
+                    when _ => ()
         return
     fn use_normal_cursor(read self) -> Unit:
         self.set_cursor_mode :: CursorMode.Normal :: method
@@ -2450,6 +2762,13 @@ impl Window:
         let images: *read GlfwImage = null
         self.raw.set_icon_array :: images, 0 :: method
         return
+    fn set_taskbar_icon(read self, read image: GlfwImage) -> Result[Unit, WindowTaskbarIconError]:
+        return set_window_taskbar_icon :: self.raw, image :: call
+    fn set_taskbar_icon_image(read self, edit image: RgbaImage) -> Result[Unit, WindowTaskbarIconError]:
+        let raw = image.raw_image_view :: :: method
+        return self.set_taskbar_icon :: raw :: method
+    fn clear_taskbar_icon(read self) -> Result[Unit, WindowTaskbarIconError]:
+        return clear_window_taskbar_icon :: self.raw :: call
     fn set_title(read self, title: Str) -> Result[Unit, TextDecodeError]:
         select maybe_c_string :: title :: call:
             when Result.Ok(text) =>
@@ -2649,3 +2968,19 @@ impl MonitorGammaRamp:
         return self.red.count :: :: method
     fn empty(read self) -> Bool:
         return self.red.is_empty :: :: method
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

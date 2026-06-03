@@ -74,6 +74,60 @@ pub fn prove_window_geometry_runtime(edit present_app: VulkanPresentApp, window_
         when Option.None => return 3332
     owned_window.set_resize_increments :: initial_resize_increments :: method
 
+    let initial_limits = present_app.size_limits :: :: method
+    let owned_initial_limits = owned_window.size_limits :: :: method
+    select:
+        when owned_initial_limits.min_width != initial_limits.min_width => return 3368
+        when owned_initial_limits.min_height != initial_limits.min_height => return 3369
+        when owned_initial_limits.max_width != initial_limits.max_width => return 3370
+        when owned_initial_limits.max_height != initial_limits.max_height => return 3371
+        else => ()
+
+    let min_limit = Size :: 32, 24 :: call
+    let wrapped_min = Option.Some :: min_limit :: call
+    present_app.set_min_inner_size :: wrapped_min :: method
+    select present_app.min_inner_size :: :: method:
+        when Option.Some(active_min_limit) =>
+            select:
+                when active_min_limit.width != min_limit.width => return 3372
+                when active_min_limit.height != min_limit.height => return 3373
+                else => ()
+        when Option.None => return 3374
+    let min_only_limits = owned_window.size_limits :: :: method
+    select:
+        when min_only_limits.min_width != min_limit.width => return 3375
+        when min_only_limits.min_height != min_limit.height => return 3376
+        when min_only_limits.max_width != initial_limits.max_width => return 3377
+        when min_only_limits.max_height != initial_limits.max_height => return 3378
+        else => ()
+
+    let max_limit = Size :: 512, 384 :: call
+    let wrapped_max = Option.Some :: max_limit :: call
+    present_app.set_max_inner_size :: wrapped_max :: method
+    select present_app.max_inner_size :: :: method:
+        when Option.Some(active_max_limit) =>
+            select:
+                when active_max_limit.width != max_limit.width => return 3379
+                when active_max_limit.height != max_limit.height => return 3380
+                else => ()
+        when Option.None => return 3381
+    let min_max_limits = present_app.size_limits :: :: method
+    select:
+        when min_max_limits.min_width != min_limit.width => return 3382
+        when min_max_limits.min_height != min_limit.height => return 3383
+        when min_max_limits.max_width != max_limit.width => return 3384
+        when min_max_limits.max_height != max_limit.height => return 3385
+        else => ()
+
+    present_app.apply_size_limits :: initial_limits :: method
+    let restored_limits = owned_window.size_limits :: :: method
+    select:
+        when restored_limits.min_width != initial_limits.min_width => return 3386
+        when restored_limits.min_height != initial_limits.min_height => return 3387
+        when restored_limits.max_width != initial_limits.max_width => return 3388
+        when restored_limits.max_height != initial_limits.max_height => return 3389
+        else => ()
+
     let outer_position = present_app.outer_position :: :: method
     let owned_outer_position = owned_window.outer_position :: :: method
     select:

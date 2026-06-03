@@ -12,6 +12,8 @@ use mailbox.{clear_user_pointer, drain_window_mailbox, free_window_mailbox}
 use runtime_snapshot_support.{copy_monitor_snapshot, copy_window_snapshot}
 use runtime_window_appearance_support.{WindowAppearanceSettings, apply_window_appearance}
 use runtime_window_hook_support.{attach_window_platform_support, detach_window_platform_support}
+use win32_window_icon_support.destroy_window_taskbar_icon
+use win32_window_control_support.{set_window_menu, set_window_owner_window}
 use win32_drag_drop_support.{initialize_drag_drop_runtime, uninitialize_drag_drop_runtime}
 use glfw.{GlfwCursorPos, GlfwMonitor, GlfwMonitorRaw, GlfwPoint, GlfwScale}
 use glfw.{GlfwSize, GlfwWindow, GlfwWindowRaw, glfw_create_window_raw}
@@ -25,15 +27,17 @@ use glfw.{glfw_monitor_raw_handle, glfw_monitors, glfw_poll_events}
 use glfw.{glfw_post_empty_event, glfw_terminate, glfw_wait_events}
 use glfw.{glfw_wait_events_timeout, glfw_window_hint, glfw_window_hint_bool}
 use glfw.{glfw_window_hint_no_api, glfw_window_hint_string}
+use glfw.glfw_set_win32_parent_window_hint
 use graphics.Win32MonitorNames
 use system.{Platform, RuntimeErrorInfo, VersionInfo, runtime_last_error}
 use system.{runtime_platform, runtime_platform_raw, runtime_platform_supported}
 use system.runtime_version
 use system.runtime_version_string
 use window.{ClientApi, ContextCreationApi, CursorMode, CursorPos, FrameSize, Monitor}
-use window.{MonitorGammaRamp, OpenGlProfile, Point, Rect, Scale, Size, VideoMode}
+use window.{MonitorGammaRamp, OpenGlProfile, Point, Rect, RgbaImage, Scale, Size, VideoMode}
 use window.{Window, WindowId, Win32HWnd}
 use window.WindowAppearanceError
+use window.WindowTaskbarIconError
 use window.WindowInputSnapshot
 use window.{client_api_raw, context_creation_api_raw}
 use window.opengl_profile_raw
@@ -66,7 +70,11 @@ pub enum AppError:
     MailboxAllocFailed
     WindowCreateFailed
     WindowLevelApplyFailed
+    WindowOwnerApplyFailed
+    WindowMenuApplyFailed
     WindowSkipTaskbarApplyFailed
+    WindowClipChildrenApplyFailed
+    WindowTaskbarIconApplyFailed(WindowTaskbarIconError)
     WindowAppearanceApplyFailed(WindowAppearanceError)
     WindowControlHookInstallFailed
     ImeHookInstallFailed
@@ -95,8 +103,16 @@ impl ControlFlow:
         select self:
             when ControlFlow.Exit => return true
             else => return false
+    fn blocks(read self) -> Bool:
+        select self:
+            when ControlFlow.Poll => return false
+            when ControlFlow.Exit => return false
+            else => return true
 pub trait AppHandler:
     fn started(edit self, edit app: App) -> Result[ControlFlow, AppError]:
+        let _ = app
+        return Result.Ok :: ControlFlow.Wait :: call
+    fn about_to_wait(edit self, edit app: App) -> Result[ControlFlow, AppError]:
         let _ = app
         return Result.Ok :: ControlFlow.Wait :: call
     fn window_event(edit self, edit app: App, event: WindowEvent) -> Result[ControlFlow, AppError]:
@@ -335,6 +351,8 @@ struct WindowRecord:
     pub(package) cursor_pos: CursorPos
 struct RawWindowCreation:
     raw_window: GlfwWindow
+    window_icon: Option[RgbaImage]
+    taskbar_icon: Option[RgbaImage]
     appearance_settings: WindowAppearanceSettings
 struct MonitorRecord:
     pub(package) raw: *edit GlfwMonitorRaw
@@ -806,6 +824,13 @@ fn apply_window_hint_string(hint: CInt, text: Str) -> Result[Unit, AppError]:
             glfw_window_hint_string :: hint, pointer :: call
             return Result.Ok :: () :: call
         when Result.Err(_) => return Result.Err :: AppError.InvalidWindowSpec :: call
+fn invalid_win32_parent_window_spec(read spec: WindowSpec) -> Bool:
+    select:
+        when spec.win32_parent_window.is_null :: :: method => return false
+        when !spec.win32_owner_window.is_null :: :: method => return true
+        when !spec.win32_menu.is_null :: :: method => return true
+        when !spec.monitor.is_null :: :: method => return true
+        else => return false
 fn same_point(read left: Point, read right: Point) -> Bool:
     return left.x == right.x && left.y == right.y
 fn same_size(read left: Size, read right: Size) -> Bool:
@@ -986,6 +1011,7 @@ fn destroy_window_record(edit pending: List[AppEvent], take record: WindowRecord
     let _ = pending
     detach_window_platform_support :: record.window :: call
     clear_user_pointer :: record.window.raw :: call
+    destroy_window_taskbar_icon :: record.mailbox :: call
     free_window_mailbox :: record.mailbox :: call
     record.window.destroy :: :: method
     return
@@ -1000,6 +1026,10 @@ fn destroy_window_record_at(edit app: App, index: Index) -> WindowId:
     push_window_event :: app.pending, event :: call
     return id
 fn create_raw_window_from_spec(take spec: WindowSpec) -> Result[RawWindowCreation, AppError]:
+    select:
+        when invalid_win32_parent_window_spec :: spec :: call =>
+            return Result.Err :: AppError.InvalidWindowSpec :: call
+        else => ()
     glfw_default_window_hints :: :: call
     glfw_window_hint_bool :: 0x00020004, spec.visible :: call
     glfw_window_hint_bool :: 0x00020003, spec.resizable :: call
@@ -1015,6 +1045,9 @@ fn create_raw_window_from_spec(take spec: WindowSpec) -> Result[RawWindowCreatio
     glfw_window_hint_bool :: 0x0002200C, spec.scale_to_monitor :: call
     glfw_window_hint_bool :: 0x00025001, spec.win32_keyboard_menu :: call
     glfw_window_hint_bool :: 0x00025002, spec.win32_showdefault :: call
+    glfw_window_hint_bool :: 0x00025004, spec.win32_no_redirection_bitmap :: call
+    glfw_window_hint_bool :: 0x00025005, spec.win32_clip_children :: call
+    glfw_set_win32_parent_window_hint :: spec.win32_parent_window :: call
     glfw_window_hint :: 0x0002000E, spec.x :: call
     glfw_window_hint :: 0x0002000F, spec.y :: call
     glfw_window_hint :: 0x00021001, spec.red_bits :: call
@@ -1058,6 +1091,12 @@ fn create_raw_window_from_spec(take spec: WindowSpec) -> Result[RawWindowCreatio
                 when Result.Ok(_) => ()
                 when Result.Err(err) => return Result.Err :: err :: call
         when Option.None => ()
+    select spec.win32_class_name:
+        when Option.Some(name) =>
+            select apply_window_hint_string :: 0x00025003, name :: call:
+                when Result.Ok(_) => ()
+                when Result.Err(err) => return Result.Err :: err :: call
+        when Option.None => ()
     select spec.wayland_app_id:
         when Option.Some(name) =>
             select apply_window_hint_string :: 0x00026001, name :: call:
@@ -1082,6 +1121,8 @@ fn create_raw_window_from_spec(take spec: WindowSpec) -> Result[RawWindowCreatio
                         corner_preference = spec.win32_corner_preference
                     let created = RawWindowCreation :: :: call
                         raw_window = raw_window
+                        window_icon = spec.icon
+                        taskbar_icon = spec.win32_taskbar_icon
                         appearance_settings = appearance_settings
                     return Result.Ok :: created :: call
         when Result.Err(_) => return Result.Err :: AppError.InvalidWindowSpec :: call
@@ -1093,57 +1134,106 @@ fn register_created_window(edit app: App, take window: Window, mailbox: *edit Wi
         id = id
     push_window_event :: app.pending, event :: call
     return
+
+fn apply_created_window_taskbar_icon(read window: Window, raw_window: GlfwWindow, mailbox: *edit WindowMailbox, take taskbar_icon: Option[RgbaImage]) -> Result[Unit, AppError]:
+    select taskbar_icon:
+        when Option.Some(image) =>
+            select window.set_taskbar_icon_image :: image :: method:
+                when Result.Ok(_) => return Result.Ok :: () :: call
+                when Result.Err(error) =>
+                    detach_window_platform_support :: window :: call
+                    clear_user_pointer :: raw_window :: call
+                    destroy_window_taskbar_icon :: mailbox :: call
+                    free_window_mailbox :: mailbox :: call
+                    window.destroy :: :: method
+                    let failure = AppError.WindowTaskbarIconApplyFailed :: error :: call
+                    return Result.Err :: failure :: call
+        when Option.None => return Result.Ok :: () :: call
+
+fn destroy_failed_created_window(read window: Window, mailbox: *edit WindowMailbox) -> Unit:
+    detach_window_platform_support :: window :: call
+    clear_user_pointer :: window.raw :: call
+    destroy_window_taskbar_icon :: mailbox :: call
+    free_window_mailbox :: mailbox :: call
+    window.destroy :: :: method
+    return
+
 pub fn app_create_window(edit app: App, take spec: WindowSpec) -> Result[Window, AppError]:
     let raw_window_level = window_level_raw :: spec.window_level :: call
     let resize_increment_width = spec.resize_increment_width
     let resize_increment_height = spec.resize_increment_height
+    let win32_drag_and_drop = spec.win32_drag_and_drop
+    let win32_clip_children = spec.win32_clip_children
+    let win32_owner_window = spec.win32_owner_window
+    let win32_menu = spec.win32_menu
     let win32_skip_taskbar = spec.win32_skip_taskbar
     select create_raw_window_from_spec :: spec :: call:
         when Result.Ok(raw_creation) =>
             let raw_window = raw_creation.raw_window
+            let window_icon = raw_creation.window_icon
+            let taskbar_icon = raw_creation.taskbar_icon
             let appearance_settings = raw_creation.appearance_settings
             let id = next_window_id :: app :: call
             let raw_handle = glfw_window_raw_handle :: raw_window :: call
             let stored_raw = GlfwWindow :: raw_handle :: call
             let window = window_from_glfw :: stored_raw, id :: call
+            select window_icon:
+                when Option.Some(image) => window.set_icon_image :: image :: method
+                when Option.None => ()
             select allocate_window_mailbox :: :: call:
                 when Option.Some(mailbox) =>
                     attach_callbacks :: raw_window, mailbox :: call
-                    select attach_window_platform_support :: window, mailbox :: call:
+                    select attach_window_platform_support :: window, mailbox, win32_drag_and_drop :: call:
                         when Result.Ok(_) => ()
                         when Result.Err(err) => return Result.Err :: err :: call
                     let window_level = window_level_from_raw :: raw_window_level :: call
                     select window.set_window_level :: window_level :: method:
                         when Result.Ok(_) => ()
                         when Result.Err(_) =>
-                            detach_window_platform_support :: window :: call
-                            clear_user_pointer :: raw_window :: call
-                            free_window_mailbox :: mailbox :: call
-                            window.destroy :: :: method
+                            destroy_failed_created_window :: window, mailbox :: call
                             return Result.Err :: AppError.WindowLevelApplyFailed :: call
+                    select:
+                        when !win32_owner_window.is_null :: :: method =>
+                            select set_window_owner_window :: window.raw, win32_owner_window :: call:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) =>
+                                    destroy_failed_created_window :: window, mailbox :: call
+                                    return Result.Err :: AppError.WindowOwnerApplyFailed :: call
+                        else => ()
+                    select:
+                        when !win32_menu.is_null :: :: method =>
+                            select set_window_menu :: window.raw, win32_menu :: call:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) =>
+                                    destroy_failed_created_window :: window, mailbox :: call
+                                    return Result.Err :: AppError.WindowMenuApplyFailed :: call
+                        else => ()
+                    select window.set_clip_children :: win32_clip_children :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) =>
+                            destroy_failed_created_window :: window, mailbox :: call
+                            return Result.Err :: AppError.WindowClipChildrenApplyFailed :: call
                     select:
                         when resize_increment_width > 0 && resize_increment_height > 0 =>
                             let increments = Size :: resize_increment_width, resize_increment_height :: call
                             window.apply_resize_increments :: increments :: method
                         else => ()
+
                     select:
                         when win32_skip_taskbar =>
                             select window.set_skip_taskbar :: true :: method:
                                 when Result.Ok(_) => ()
                                 when Result.Err(_) =>
-                                    detach_window_platform_support :: window :: call
-                                    clear_user_pointer :: raw_window :: call
-                                    free_window_mailbox :: mailbox :: call
-                                    window.destroy :: :: method
+                                    destroy_failed_created_window :: window, mailbox :: call
                                     return Result.Err :: AppError.WindowSkipTaskbarApplyFailed :: call
                         else => ()
+                    select apply_created_window_taskbar_icon :: window, raw_window, mailbox, taskbar_icon :: call:
+                        when Result.Ok(_) => ()
+                        when Result.Err(err) => return Result.Err :: err :: call
                     select apply_window_appearance :: window, appearance_settings :: call:
                         when Result.Ok(_) => ()
                         when Result.Err(error) =>
-                            detach_window_platform_support :: window :: call
-                            clear_user_pointer :: raw_window :: call
-                            free_window_mailbox :: mailbox :: call
-                            window.destroy :: :: method
+                            destroy_failed_created_window :: window, mailbox :: call
                             let failure = AppError.WindowAppearanceApplyFailed :: error :: call
                             return Result.Err :: failure :: call
                     register_created_window :: app, window, mailbox :: call
@@ -2329,7 +2419,9 @@ impl App:
         return
     fn poll_events(edit self) -> List[AppEvent]:
         select:
-            when self.has_pending_events :: :: method => return self.take_pending_events :: :: method
+            when self.has_pending_events :: :: method =>
+                collect_window_events :: self :: call
+                return self.take_pending_events :: :: method
             else => ()
         self.pump_poll :: :: method
         return self.take_pending_events :: :: method
@@ -2418,7 +2510,9 @@ impl App:
         return ids
     fn wait_events(edit self) -> List[AppEvent]:
         select:
-            when self.has_pending_events :: :: method => return self.take_pending_events :: :: method
+            when self.has_pending_events :: :: method =>
+                collect_window_events :: self :: call
+                return self.take_pending_events :: :: method
             else => ()
         self.pump_wait :: :: method
         return self.take_pending_events :: :: method
@@ -2507,7 +2601,9 @@ impl App:
         return ids
     fn wait_timeout_events(edit self, timeout: F64) -> List[AppEvent]:
         select:
-            when self.has_pending_events :: :: method => return self.take_pending_events :: :: method
+            when self.has_pending_events :: :: method =>
+                collect_window_events :: self :: call
+                return self.take_pending_events :: :: method
             else => ()
         self.pump_wait_timeout :: timeout :: method
         return self.take_pending_events :: :: method
@@ -2683,3 +2779,11 @@ impl App:
             else => ()
         glfw_terminate :: :: call
         return
+
+
+
+
+
+
+
+

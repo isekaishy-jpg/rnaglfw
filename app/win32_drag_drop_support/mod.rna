@@ -188,6 +188,24 @@ fn mailbox_from_window(read window: GlfwWindow) -> *edit WindowMailbox:
             let address = #unsafe raw_pointer_address_edit :: user :: call
             return #unsafe raw_pointer_from_address_edit[WindowMailbox] :: address :: call
 
+pub(package) fn set_drag_drop_enabled(mailbox: *edit WindowMailbox, enabled: Bool) -> Unit:
+    select:
+        when mailbox.is_null :: :: method => return
+        else => ()
+    let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+    select:
+        when enabled => stored.drag_drop_enabled = 1
+        else => stored.drag_drop_enabled = 0
+    #unsafe mailbox.store :: stored :: method
+    return
+
+fn drag_drop_enabled(mailbox: *edit WindowMailbox) -> Bool:
+    select:
+        when mailbox.is_null :: :: method => return false
+        else => ()
+    let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+    return stored.drag_drop_enabled != 0
+
 fn copied_path_slot_at(base: *edit DropPathPointer, index: CInt) -> *edit DropPathPointer:
     let slot: *edit DropPathPointer = base
     let scan: CInt = 0
@@ -469,6 +487,11 @@ extern["system"] fn drop_target_drag_enter(self_ptr: *edit CVoid, data_object_pt
         when target.mailbox.is_null :: :: method =>
             set_drop_effect :: effect, DROPEFFECT_NONE :: call
             return S_OK
+        when !drag_drop_enabled :: target.mailbox :: call =>
+            set_hovering :: target, false :: call
+            #unsafe target_ptr.store :: target :: method
+            set_drop_effect :: effect, DROPEFFECT_NONE :: call
+            return S_OK
         else => ()
     let data_object = #unsafe raw_pointer_from_address_edit[DataObject] :: #unsafe raw_pointer_address_edit :: data_object_ptr :: call :: call
     let pushed = push_hovered_files_from_data_object :: target.mailbox, data_object :: call
@@ -485,6 +508,7 @@ extern["system"] fn drop_target_drag_over(self_ptr: *edit CVoid, key_state: CUIn
     let _ = point
     let target = #unsafe (void_as_window_drop_target :: self_ptr :: call).load :: :: method
     select:
+        when !drag_drop_enabled :: target.mailbox :: call => set_drop_effect :: effect, DROPEFFECT_NONE :: call
         when is_hovering :: target :: call => set_drop_effect :: effect, DROPEFFECT_COPY :: call
         else => set_drop_effect :: effect, DROPEFFECT_NONE :: call
     return S_OK
@@ -494,6 +518,10 @@ extern["system"] fn drop_target_drag_leave(self_ptr: *edit CVoid) -> CInt:
     let target_ptr = void_as_window_drop_target :: self_ptr :: call
     let target: WindowDropTarget = #unsafe target_ptr.load :: :: method
     select:
+        when !drag_drop_enabled :: target.mailbox :: call =>
+            set_hovering :: target, false :: call
+            #unsafe target_ptr.store :: target :: method
+            return S_OK
         when is_hovering :: target :: call =>
             push_window_hovered_file_cancelled :: target.mailbox :: call
             set_hovering :: target, false :: call
@@ -507,6 +535,13 @@ extern["system"] fn drop_target_drop(self_ptr: *edit CVoid, data_object_ptr: *ed
     let _ = point
     let target_ptr = void_as_window_drop_target :: self_ptr :: call
     let target: WindowDropTarget = #unsafe target_ptr.load :: :: method
+    select:
+        when !drag_drop_enabled :: target.mailbox :: call =>
+            set_hovering :: target, false :: call
+            #unsafe target_ptr.store :: target :: method
+            set_drop_effect :: effect, DROPEFFECT_NONE :: call
+            return S_OK
+        else => ()
     let data_object = #unsafe raw_pointer_from_address_edit[DataObject] :: #unsafe raw_pointer_address_edit :: data_object_ptr :: call :: call
     let dropped = push_dropped_paths_from_data_object :: target.mailbox, data_object :: call
     set_hovering :: target, false :: call
@@ -586,16 +621,40 @@ pub(package) fn attach_drag_drop_target(read window: GlfwWindow, mailbox: *edit 
         when Option.Some(target_ptr) =>
             let status = #unsafe RegisterDragDrop :: hwnd, window_drop_target_as_void :: target_ptr :: call :: call
             let _ = drop_target_release :: window_drop_target_as_void :: target_ptr :: call :: call
-            return status == S_OK
+            let attached = status == S_OK
+            set_drag_drop_enabled :: mailbox, attached :: call
+            return attached
         when Option.None => return false
 
 pub(package) fn detach_drag_drop_target(read window: GlfwWindow) -> Unit:
     let hwnd = window.win32_window :: :: method
+    let mailbox = mailbox_from_window :: window :: call
+    set_drag_drop_enabled :: mailbox, false :: call
     select:
         when hwnd.is_null :: :: method => return
         else => ()
     let _ = #unsafe RevokeDragDrop :: hwnd :: call
     return
+
+pub(package) fn current_window_drag_drop_enabled(read window: GlfwWindow) -> Bool:
+    let mailbox = mailbox_from_window :: window :: call
+    select:
+        when mailbox.is_null :: :: method => return false
+        else => ()
+    let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+    return stored.drag_drop_enabled != 0
+
+pub fn set_window_drag_drop_enabled(read window: GlfwWindow, enabled: Bool) -> Bool:
+    select:
+        when enabled =>
+            let mailbox = mailbox_from_window :: window :: call
+            select:
+                when mailbox.is_null :: :: method => return false
+                when drag_drop_enabled :: mailbox :: call => return true
+                else => return attach_drag_drop_target :: window, mailbox :: call
+        else =>
+            detach_drag_drop_target :: window :: call
+            return true
 
 pub(package) fn simulate_hovered_file(read window: GlfwWindow, read path: Str) -> Result[Bool, TextDecodeError]:
     let mailbox = mailbox_from_window :: window :: call

@@ -81,6 +81,7 @@ pub use native.{GlfwEglContext, GlfwEglDisplay, GlfwEglSurface}
 pub use native.{GlfwOSMesaColorBuffer, GlfwOSMesaDepthBuffer}
 pub use native.{GlfwOsMesaContext, GlfwWin32HWnd, GlfwWglContext}
 pub use native.glfw_get_egl_display
+pub use native.glfw_set_win32_parent_window_hint
 pub use native.{glfw_osmesa_color_buffer_data, glfw_osmesa_color_buffer_format}
 pub use native.{glfw_osmesa_color_buffer_height, glfw_osmesa_color_buffer_width}
 pub use native.{glfw_osmesa_depth_buffer_bytes_per_value}

@@ -85,6 +85,18 @@ extern["c"] fn glfwGetWin32Window(window: *edit GlfwWindowRaw) -> GlfwWin32HWnd
 
 #link[name = "glfw3"]
 #unsafe
+extern["c"] fn glfwSetWin32ParentWindowHint(parent: GlfwWin32HWnd) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetWin32ClipChildren(window: *edit GlfwWindowRaw) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetWin32ClipChildren(window: *edit GlfwWindowRaw, enabled: CInt) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
 extern["c"] fn glfwGetWGLContext(window: *edit GlfwWindowRaw) -> GlfwWglContext
 
 #link[name = "glfw3"]
@@ -114,6 +126,10 @@ extern["c"] fn glfwGetOSMesaContext(window: *edit GlfwWindowRaw) -> GlfwOsMesaCo
 pub fn glfw_get_egl_display() -> GlfwEglDisplay:
     return #unsafe glfwGetEGLDisplay :: :: call
 
+pub fn glfw_set_win32_parent_window_hint(parent: GlfwWin32HWnd) -> Unit:
+    #unsafe glfwSetWin32ParentWindowHint :: parent :: call
+    return
+
 impl GlfwMonitor:
     fn win32_adapter_name(read self) -> *read CChar:
         return #unsafe glfwGetWin32Adapter :: self.raw :: call
@@ -124,6 +140,18 @@ impl GlfwMonitor:
 impl GlfwWindow:
     fn win32_window(read self) -> GlfwWin32HWnd:
         return #unsafe glfwGetWin32Window :: self.raw :: call
+
+    fn win32_clip_children(read self) -> Bool:
+        let enabled = #unsafe glfwGetWin32ClipChildren :: self.raw :: call
+        return glfw_cint_is_true :: enabled :: call
+
+    fn set_win32_clip_children(read self, enabled: Bool) -> Bool:
+        let raw_enabled: CInt = 0
+        select:
+            when enabled => raw_enabled = 1
+            else => ()
+        let updated = #unsafe glfwSetWin32ClipChildren :: self.raw, raw_enabled :: call
+        return glfw_cint_is_true :: updated :: call
 
     fn wgl_context(read self) -> GlfwWglContext:
         return #unsafe glfwGetWGLContext :: self.raw :: call

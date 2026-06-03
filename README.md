@@ -4,7 +4,7 @@
 
 Current verified scope:
 
-- GLFW function imports covered: `151 / 151`
+- GLFW function imports covered: `152 / 152`
 - GLFW constants covered: `333 / 333`
 - package check status: `runa check` passes
 
@@ -51,7 +51,7 @@ Raw handle boundary:
 
 - Window and monitor handle lookups now return nullable `GlfwWindow` and `GlfwMonitor` wrappers directly.
 - Test handle presence with `.is_null()`.
-- This keeps the low-level wrapper usable on the current compiler while `Option[NominalStruct]` payload extraction is still broken.
+- This is the current low-level wrapper surface for nullable window and monitor handles.
 
 Smoke consumer:
 

@@ -1129,6 +1129,21 @@ extern "C" {
 /*! @brief Win32 specific [window hint](@ref GLFW_WIN32_SHOWDEFAULT_hint).
  */
 #define GLFW_WIN32_SHOWDEFAULT      0x00025002
+/*! @brief Win32 specific [window hint](@ref GLFW_WIN32_CLASS_NAME_hint).
+ *
+ *  Allows specification of the Win32 window class name.
+ */
+#define GLFW_WIN32_CLASS_NAME       0x00025003
+/*! @brief Win32 specific [window hint](@ref GLFW_WIN32_NO_REDIRECTION_BITMAP_hint).
+ *
+ *  Allows enabling the WS_EX_NOREDIRECTIONBITMAP extended style.
+ */
+#define GLFW_WIN32_NO_REDIRECTION_BITMAP 0x00025004
+/*! @brief Win32 specific [window hint](@ref GLFW_WIN32_CLIP_CHILDREN_hint).
+ *
+ *  Allows enabling the WS_CLIPCHILDREN window style.
+ */
+#define GLFW_WIN32_CLIP_CHILDREN    0x00025005
 /*! @brief Wayland specific
  *  [window hint](@ref GLFW_WAYLAND_APP_ID_hint).
  *  

@@ -4,16 +4,20 @@ use std.Option
 
 use mailbox.WindowMailbox
 use window.{Point, Size, UserAttentionType, WindowButtons, WindowControlError}
-use window.{WindowLevel, WindowResizeDirection, Win32HWnd}
+use window.{WindowLevel, WindowResizeDirection, Win32HMenu, Win32HWnd}
 use window.{window_level_from_raw, window_level_raw}
 use glfw.{GlfwPoint, GlfwWindow, GlfwWindowRaw, glfw_window_raw_handle}
 
 const GWL_STYLE: CInt = 0 - 16
 const GWL_EXSTYLE: CInt = 0 - 20
+const GWLP_HWNDPARENT: CInt = 0 - 8
+const GW_OWNER: CUInt = 4
 const WS_MAXIMIZEBOX: ISize = 0x00010000
 const WS_MINIMIZEBOX: ISize = 0x00020000
+const WS_CLIPCHILDREN: ISize = 0x02000000
 const WS_EX_TOOLWINDOW: ISize = 0x00000080
 const WS_EX_APPWINDOW: ISize = 0x00040000
+const WS_EX_NOREDIRECTIONBITMAP: ISize = 0x00200000
 const MF_BYCOMMAND: CUInt = 0x00000000
 const MF_ENABLED: CUInt = 0x00000000
 const MF_GRAYED: CUInt = 0x00000001
@@ -92,6 +96,14 @@ extern["system"] fn GetSystemMenu(window: Win32HWnd, revert: CInt) -> HMenu
 
 #link[name = "user32"]
 #unsafe
+extern["system"] fn GetMenu(window: Win32HWnd) -> HMenu
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn SetMenu(window: Win32HWnd, menu: HMenu) -> CInt
+
+#link[name = "user32"]
+#unsafe
 extern["system"] fn GetMenuState(menu: HMenu, item: CUInt, flags: CUInt) -> CUInt
 
 #link[name = "user32"]
@@ -141,6 +153,10 @@ extern["system"] fn GetWindowLongPtrW(window: Win32HWnd, index: CInt) -> ISize
 #link[name = "user32"]
 #unsafe
 extern["system"] fn SetWindowLongPtrW(window: Win32HWnd, index: CInt, value: ISize) -> ISize
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn GetWindow(window: Win32HWnd, command: CUInt) -> Win32HWnd
 
 #link[name = "user32"]
 #unsafe
@@ -236,6 +252,11 @@ fn set_mailbox_resize_increments(mailbox: *edit WindowMailbox, read increments: 
 
 fn hwnd_bottom() -> Win32HWnd:
     return #unsafe raw_pointer_from_address_edit[CVoid] :: HWND_BOTTOM_ADDRESS :: call
+
+fn owner_window_bits(owner: Win32HWnd) -> Result[ISize, WindowControlError]:
+    let address = #unsafe raw_pointer_address_edit :: owner :: call
+    let Result.Ok(bits) = address as Maybe[ISize] else => return Result.Err :: WindowControlError.OwnerWindowUpdateFailed :: call
+    return Result.Ok :: bits :: call
 
 fn update_window_z_order(hwnd: Win32HWnd, insert_after: Win32HWnd) -> Result[Unit, WindowControlError]:
     let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
@@ -373,6 +394,14 @@ fn update_window_exstyle(hwnd: Win32HWnd, style: ISize) -> Result[Unit, WindowCo
         when previous == 0 && last_error != 0 => return Result.Err :: WindowControlError.ExStyleUpdateFailed :: call
         else => return Result.Ok :: () :: call
 
+fn update_window_style(hwnd: Win32HWnd, style: ISize) -> Result[Unit, WindowControlError]:
+    #unsafe SetLastError :: 0 :: call
+    let previous = #unsafe SetWindowLongPtrW :: hwnd, GWL_STYLE, style :: call
+    let last_error = #unsafe GetLastError :: :: call
+    select:
+        when previous == 0 && last_error != 0 => return Result.Err :: WindowControlError.StyleUpdateFailed :: call
+        else => return Result.Ok :: () :: call
+
 fn menu_item_enabled(menu: HMenu, item: CUInt) -> Result[Bool, WindowControlError]:
     let state = #unsafe GetMenuState :: menu, item, MF_BYCOMMAND :: call
     select:
@@ -392,11 +421,13 @@ fn set_menu_item_enabled(menu: HMenu, item: CUInt, enabled: Bool) -> Result[Unit
         else => return Result.Ok :: () :: call
 
 fn refresh_window_frame(hwnd: Win32HWnd) -> Result[Unit, WindowControlError]:
+    #unsafe SetLastError :: 0 :: call
     let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED
     let changed = #unsafe SetWindowPos :: hwnd, null, 0, 0, 0, 0, flags :: call
     select:
         when changed == 0 => return Result.Err :: WindowControlError.StyleUpdateFailed :: call
         else => ()
+    #unsafe SetLastError :: 0 :: call
     let _ = #unsafe DrawMenuBar :: hwnd :: call
     return Result.Ok :: () :: call
 
@@ -503,6 +534,24 @@ pub(package) fn current_window_skip_taskbar(read window: GlfwWindow) -> Result[B
     let skip = style_has_bits :: style, WS_EX_TOOLWINDOW :: call
     return Result.Ok :: skip :: call
 
+pub(package) fn current_window_owner_window(read window: GlfwWindow) -> Result[Option[Win32HWnd], WindowControlError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+    #unsafe SetLastError :: 0 :: call
+    let owner = #unsafe GetWindow :: hwnd, GW_OWNER :: call
+    let last_error = #unsafe GetLastError :: :: call
+    select:
+        when owner.is_null :: :: method =>
+            select:
+                when last_error != 0 => return Result.Err :: WindowControlError.OwnerWindowQueryFailed :: call
+                else => return Result.Ok :: Option.None :: call
+        else => return Result.Ok :: (Option.Some :: owner :: call) :: call
+
+pub(package) fn current_window_no_redirection_bitmap(read window: GlfwWindow) -> Result[Bool, WindowControlError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+    let Result.Ok(style) = window_exstyle :: hwnd :: call else => return Result.Err :: WindowControlError.ExStyleQueryFailed :: call
+    let enabled = style_has_bits :: style, WS_EX_NOREDIRECTIONBITMAP :: call
+    return Result.Ok :: enabled :: call
+
 pub(package) fn set_window_skip_taskbar(read window: GlfwWindow, skip: Bool) -> Result[Unit, WindowControlError]:
     let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
     let Result.Ok(style) = window_exstyle :: hwnd :: call else => return Result.Err :: WindowControlError.ExStyleQueryFailed :: call
@@ -511,6 +560,41 @@ pub(package) fn set_window_skip_taskbar(read window: GlfwWindow, skip: Bool) -> 
     let Result.Ok(_) = update_window_exstyle :: hwnd, updated :: call else => return Result.Err :: WindowControlError.ExStyleUpdateFailed :: call
     let Result.Ok(_) = refresh_window_frame :: hwnd :: call else => return Result.Err :: WindowControlError.ExStyleUpdateFailed :: call
     return Result.Ok :: () :: call
+
+pub(package) fn set_window_owner_window(read window: GlfwWindow, owner: Win32HWnd) -> Result[Unit, WindowControlError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+    let Result.Ok(bits) = owner_window_bits :: owner :: call else => return Result.Err :: WindowControlError.OwnerWindowUpdateFailed :: call
+    #unsafe SetLastError :: 0 :: call
+    let previous = #unsafe SetWindowLongPtrW :: hwnd, GWLP_HWNDPARENT, bits :: call
+    let last_error = #unsafe GetLastError :: :: call
+    select:
+        when previous == 0 && last_error != 0 => return Result.Err :: WindowControlError.OwnerWindowUpdateFailed :: call
+        else => return Result.Ok :: () :: call
+
+pub(package) fn set_window_menu(read window: GlfwWindow, menu: Win32HMenu) -> Result[Unit, WindowControlError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+    let updated = #unsafe SetMenu :: hwnd, menu :: call
+    select:
+        when updated == 0 => return Result.Err :: WindowControlError.MenuUpdateFailed :: call
+        else => return Result.Ok :: () :: call
+
+pub(package) fn current_window_clip_children(read window: GlfwWindow) -> Result[Bool, WindowControlError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+    let Result.Ok(style) = window_style :: hwnd :: call else => return Result.Err :: WindowControlError.StyleQueryFailed :: call
+    let enabled = style_has_bits :: style, WS_CLIPCHILDREN :: call
+    return Result.Ok :: enabled :: call
+
+pub(package) fn set_window_clip_children(read window: GlfwWindow, enabled: Bool) -> Result[Unit, WindowControlError]:
+    let applied = window.set_win32_clip_children :: enabled :: method
+    select:
+        when !applied => return Result.Err :: WindowControlError.StyleUpdateFailed :: call
+        else => ()
+    select current_window_clip_children :: window :: call:
+        when Result.Ok(value) =>
+            select:
+                when value != enabled => return Result.Err :: WindowControlError.StyleUpdateFailed :: call
+                else => return Result.Ok :: () :: call
+        when Result.Err(err) => return Result.Err :: err :: call
 
 pub(package) fn current_window_content_protected(read window: GlfwWindow) -> Result[Bool, WindowControlError]:
     let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
@@ -674,3 +758,12 @@ pub(package) fn detach_window_control_subclass(read window: GlfwWindow) -> Unit:
         else => ()
     let _ = #unsafe RemoveWindowSubclass :: hwnd, window_control_subclass_proc, WINDOW_CONTROL_SUBCLASS_ID :: call
     return
+
+
+
+
+
+
+
+
+

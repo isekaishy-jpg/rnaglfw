@@ -223,6 +223,53 @@ GLFWAPI const char* glfwGetWin32Monitor(GLFWmonitor* monitor);
  *  @ingroup native
  */
 GLFWAPI HWND glfwGetWin32Window(GLFWwindow* window);
+
+/*! @brief Sets the parent `HWND` used for the next window creation.
+ *
+ *  @param[in] parent The parent `HWND`, or `NULL` for a top-level window.
+ *
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED and @ref
+ *  GLFW_PLATFORM_UNAVAILABLE.
+ *
+ *  @remark A non-`NULL` parent creates a child window with `WS_CHILD`.
+ *
+ *  @thread_safety This function must only be called from the main thread.
+ *
+ *  @ingroup native
+ */
+GLFWAPI void glfwSetWin32ParentWindowHint(HWND parent);
+
+/*! @brief Returns whether `WS_CLIPCHILDREN` is enabled for the specified window.
+ *
+ *  @return `GLFW_TRUE` if the style is enabled, or `GLFW_FALSE` otherwise or
+ *  if an [error](@ref error_handling) occurred.
+ *
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED and @ref
+ *  GLFW_PLATFORM_UNAVAILABLE.
+ *
+ *  @thread_safety This function may be called from any thread.  Access is not
+ *  synchronized.
+ *
+ *  @ingroup native
+ */
+GLFWAPI int glfwGetWin32ClipChildren(GLFWwindow* window);
+
+/*! @brief Enables or disables `WS_CLIPCHILDREN` for the specified window.
+ *
+ *  @param[in] window The window whose style to update.
+ *  @param[in] enabled `GLFW_TRUE` to enable the style, or `GLFW_FALSE` to
+ *  disable it.
+ *  @return `GLFW_TRUE` if the style was applied, or `GLFW_FALSE` if an
+ *  [error](@ref error_handling) occurred.
+ *
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED and @ref
+ *  GLFW_PLATFORM_UNAVAILABLE.
+ *
+ *  @thread_safety This function must only be called from the main thread.
+ *
+ *  @ingroup native
+ */
+GLFWAPI int glfwSetWin32ClipChildren(GLFWwindow* window, int enabled);
 #endif
 
 #if defined(GLFW_EXPOSE_NATIVE_WGL)

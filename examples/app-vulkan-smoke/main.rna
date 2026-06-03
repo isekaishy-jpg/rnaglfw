@@ -22,8 +22,12 @@ mod theme_support
 mod touch_support
 mod transfer_support
 mod window_appearance_support
+mod window_drag_drop_support
+mod window_icon_support
+mod window_taskbar_icon_support
 mod upload_support
 mod window_control_support
+mod window_cursor_support
 mod window_geometry_support
 
 use std.{List, Option, Result, Str}
@@ -74,7 +78,11 @@ use touch_support.prove_window_touch_runtime
 use transfer_support.check_vulkan_transfer_helpers
 use upload_support.check_vulkan_upload_plan_helpers
 use window_appearance_support.prove_window_appearance_runtime
+use window_drag_drop_support.prove_window_drag_drop_runtime
+use window_icon_support.prove_window_icon_runtime
+use window_taskbar_icon_support.prove_window_taskbar_icon_runtime
 use window_control_support.prove_window_control_runtime
+use window_cursor_support.prove_window_cursor_runtime
 use window_geometry_support.prove_window_geometry_runtime
 
 const WINDOW_TITLE: Str = "runa_app_vulkan_smoke"
@@ -1580,6 +1588,15 @@ fn main() -> I32:
             select prove_window_appearance_runtime :: present_app, window_id :: call:
                 when 0 => ()
                 when status => return status
+            select prove_window_drag_drop_runtime :: present_app, window_id :: call:
+                when 0 => ()
+                when status => return status
+            select prove_window_icon_runtime :: present_app, window_id :: call:
+                when 0 => ()
+                when status => return status
+            select prove_window_taskbar_icon_runtime :: present_app, window_id :: call:
+                when 0 => ()
+                when status => return status
             select prove_window_composition_runtime :: present_app, window_id :: call:
                 when 0 => ()
                 when status => return status
@@ -1593,6 +1610,9 @@ fn main() -> I32:
                 when 0 => ()
                 when status => return status
             select prove_window_touch_runtime :: present_app, window_id :: call:
+                when 0 => ()
+                when status => return status
+            select prove_window_cursor_runtime :: present_app, window_id :: call:
                 when 0 => ()
                 when status => return status
             select prove_window_geometry_runtime :: present_app, window_id :: call:
@@ -2781,7 +2801,11 @@ fn main() -> I32:
                         when AppError.MailboxAllocFailed => return 4
                         when AppError.WindowCreateFailed => return 5
                         when AppError.WindowLevelApplyFailed => return 20
+                        when AppError.WindowOwnerApplyFailed => return 26
+                        when AppError.WindowMenuApplyFailed => return 27
+                        when AppError.WindowClipChildrenApplyFailed => return 25
                         when AppError.WindowSkipTaskbarApplyFailed => return 22
+                        when AppError.WindowTaskbarIconApplyFailed(_) => return 24
                         when AppError.WindowAppearanceApplyFailed(_) => return 23
                         when AppError.WindowControlHookInstallFailed => return 21
                         when AppError.ThemeHookInstallFailed => return 14
@@ -2798,3 +2822,5 @@ fn main() -> I32:
                         when AppError.PrimaryMonitorUnavailable => return 13
                 when VulkanPresentAppError.WindowCreate(_) => return 8
                 when VulkanPresentAppError.PresentBootstrap(_) => return 9
+
+

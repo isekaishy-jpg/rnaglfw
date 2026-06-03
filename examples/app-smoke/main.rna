@@ -17,7 +17,7 @@ use runa_app.fullscreen_window_spec_with_video_mode
 use runa_app.{gl_proc_address, key_name_from_key}
 use runa_app.monitor_gamma_ramp
 use runa_app.modifiers_from_raw
-use runa_app.{Platform, opengl_compat_debug_srgb_window_spec, opengl_compat_window_spec}
+use runa_app.{Platform, Win32HMenu, Win32HWnd, opengl_compat_debug_srgb_window_spec, opengl_compat_window_spec}
 use runa_app.{egl_opengl_es_window_spec, egl_opengl_window_spec}
 use runa_app.{opengl_core_debug_srgb_window_spec, opengl_debug_srgb_window_spec}
 use runa_app.{opengl_debug_window_spec, opengl_es_window_spec, opengl_srgb_window_spec}
@@ -51,9 +51,15 @@ use runa_app.{window_spec_with_opengl_debug_context, window_spec_with_shared_con
 use runa_app.{window_spec_with_srgb, window_spec_without_center_cursor}
 use runa_app.{window_spec_windowed, window_spec_without_cocoa_frame_name}
 use runa_app.{window_spec_without_focus_on_show, window_spec_without_scale_to_monitor}
-use runa_app.window_spec_without_shared_context
-use runa_app.{window_spec_with_win32_keyboard_menu, window_spec_with_win32_showdefault}
-use runa_app.{win32_keyboard_menu_window_spec, win32_showdefault_window_spec}
+use runa_app.window_spec_without_win32_drag_and_drop
+use runa_app.{window_spec_without_shared_context, window_spec_without_win32_class_name}
+use runa_app.{window_spec_without_win32_menu, window_spec_without_win32_owner_window}
+use runa_app.window_spec_without_win32_parent_window
+use runa_app.{window_spec_with_win32_class_name, window_spec_with_win32_keyboard_menu}
+use runa_app.{window_spec_with_win32_menu, window_spec_with_win32_no_redirection_bitmap}
+use runa_app.{window_spec_with_win32_owner_window, window_spec_with_win32_parent_window}
+use runa_app.window_spec_with_win32_showdefault
+use runa_app.{win32_class_named_window_spec, win32_keyboard_menu_window_spec, win32_menu_window_spec, win32_no_redirection_bitmap_window_spec, win32_showdefault_window_spec}
 use runa_app.{x11_class_named_window_spec, x11_instance_named_window_spec}
 use runa_app.{window_spec_without_wayland_app_id, window_spec_without_x11_class_name}
 use runa_app.window_spec_without_x11_instance_name
@@ -453,6 +459,24 @@ fn main() -> I32:
                     app.terminate :: :: method
                     return 226
                 else => ()
+            let fake_menu: Win32HMenu = #unsafe raw_pointer_from_address_edit[CVoid] :: 9USize :: call
+            let menu_spec = win32_menu_window_spec :: "menu spec", 64, 64, fake_menu :: call
+            select:
+                when menu_spec.win32_menu != fake_menu =>
+                    app.terminate :: :: method
+                    return 241
+                else => ()
+            let win32_class_spec = win32_class_named_window_spec :: "win32 class spec", 64, 64, "rnaglfw-class" :: call
+            select win32_class_spec.win32_class_name:
+                when Option.Some(name) =>
+                    select:
+                        when name.is_empty :: :: method =>
+                            app.terminate :: :: method
+                            return 242
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 243
             let cocoa_frame_spec = cocoa_frame_named_window_spec :: "cocoa frame spec", 64, 64, "rnaglfw-frame" :: call
             select cocoa_frame_spec.cocoa_frame_name:
                 when Option.Some(name) =>
@@ -689,12 +713,93 @@ fn main() -> I32:
                     app.terminate :: :: method
                     return 930
                 else => ()
+            let no_redirection_spec = win32_no_redirection_bitmap_window_spec :: "no redirection spec", 64, 64 :: call
+            select:
+                when !no_redirection_spec.win32_no_redirection_bitmap =>
+                    app.terminate :: :: method
+                    return 5031
+                else => ()
             let no_scale_to_monitor_base = opengl_window_spec :: "no scale monitor base", 64, 64, 1, 0 :: call
             let no_scale_to_monitor_spec = window_spec_without_scale_to_monitor :: no_scale_to_monitor_base :: call
             select:
                 when no_scale_to_monitor_spec.scale_to_monitor =>
                     app.terminate :: :: method
                     return 931
+                else => ()
+            let no_drag_drop_base = opengl_window_spec :: "no drag drop base", 64, 64, 1, 0 :: call
+            let no_drag_drop_spec = window_spec_without_win32_drag_and_drop :: no_drag_drop_base :: call
+            select:
+                when no_drag_drop_spec.win32_drag_and_drop =>
+                    app.terminate :: :: method
+                    return 5010
+                else => ()
+            let clip_children_spec = window_spec :: "clip children spec", 64, 64 :: call
+            let clip_children_spec = clip_children_spec.with_win32_clip_children :: :: method
+            select:
+                when !clip_children_spec.win32_clip_children =>
+                    app.terminate :: :: method
+                    return 5013
+                else => ()
+            let fake_parent_window: Win32HWnd = #unsafe raw_pointer_from_address_edit[CVoid] :: 11USize :: call
+            let fake_owner_window: Win32HWnd = #unsafe raw_pointer_from_address_edit[CVoid] :: 7USize :: call
+            let fake_menu: Win32HMenu = #unsafe raw_pointer_from_address_edit[CVoid] :: 9USize :: call
+            let parent_spec = window_spec :: "parent spec", 64, 64 :: call
+            let parent_spec = window_spec_with_win32_parent_window :: parent_spec, fake_parent_window :: call
+            select:
+                when parent_spec.win32_parent_window != fake_parent_window =>
+                    app.terminate :: :: method
+                    return 5035
+                else => ()
+            let parent_spec = window_spec_without_win32_parent_window :: parent_spec :: call
+            select:
+                when !parent_spec.win32_parent_window.is_null :: :: method =>
+                    app.terminate :: :: method
+                    return 5036
+                else => ()
+            let owner_spec = window_spec :: "owner spec", 64, 64 :: call
+            let owner_spec = window_spec_with_win32_owner_window :: owner_spec, fake_owner_window :: call
+            select:
+                when owner_spec.win32_owner_window != fake_owner_window =>
+                    app.terminate :: :: method
+                    return 5018
+                else => ()
+            let owner_spec = window_spec_without_win32_owner_window :: owner_spec :: call
+            select:
+                when !owner_spec.win32_owner_window.is_null :: :: method =>
+                    app.terminate :: :: method
+                    return 5019
+                else => ()
+            let menu_base = window_spec :: "menu base", 64, 64 :: call
+            let menu_spec = window_spec_with_win32_menu :: menu_base, fake_menu :: call
+            select:
+                when menu_spec.win32_menu != fake_menu =>
+                    app.terminate :: :: method
+                    return 5022
+                else => ()
+            let menu_spec = window_spec_without_win32_menu :: menu_spec :: call
+            select:
+                when !menu_spec.win32_menu.is_null :: :: method =>
+                    app.terminate :: :: method
+                    return 5023
+                else => ()
+            let class_base = window_spec :: "class base", 64, 64 :: call
+            let class_spec = window_spec_with_win32_class_name :: class_base, "win32-class" :: call
+            select class_spec.win32_class_name:
+                when Option.Some(name) =>
+                    select:
+                        when name.is_empty :: :: method =>
+                            app.terminate :: :: method
+                            return 5026
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 5027
+            let no_redirection_base = window_spec :: "no redirection base", 64, 64 :: call
+            let no_redirection_spec = window_spec_with_win32_no_redirection_bitmap :: no_redirection_base :: call
+            select:
+                when !no_redirection_spec.win32_no_redirection_bitmap =>
+                    app.terminate :: :: method
+                    return 5032
                 else => ()
             let fluent_spec = window_spec :: "fluent base", 64, 48 :: call
             let fluent_spec = fluent_spec.with_title :: "fluent renamed" :: method
@@ -712,8 +817,15 @@ fn main() -> I32:
             let fluent_spec = fluent_spec.without_focus_on_show :: :: method
             let fluent_spec = fluent_spec.with_mouse_passthrough :: :: method
             let fluent_spec = fluent_spec.without_scale_to_monitor :: :: method
+            let fluent_spec = fluent_spec.without_win32_drag_and_drop :: :: method
+            let fluent_spec = fluent_spec.with_win32_clip_children :: :: method
+            let fluent_spec = fluent_spec.with_win32_no_redirection_bitmap :: :: method
+            let fluent_spec = fluent_spec.with_win32_parent_window :: fake_parent_window :: method
+            let fluent_spec = fluent_spec.with_win32_owner_window :: fake_owner_window :: method
+            let fluent_spec = fluent_spec.with_win32_menu :: fake_menu :: method
             let fluent_spec = fluent_spec.with_win32_keyboard_menu :: :: method
             let fluent_spec = fluent_spec.with_win32_showdefault :: :: method
+            let fluent_spec = fluent_spec.with_win32_class_name :: "fluent-win32-class" :: method
             let fluent_spec = fluent_spec.with_cocoa_frame_name :: "fluent-frame" :: method
             let fluent_spec = fluent_spec.with_x11_class_name :: "fluent-class" :: method
             let fluent_spec = fluent_spec.with_x11_instance_name :: "fluent-instance" :: method
@@ -767,6 +879,36 @@ fn main() -> I32:
                 when fluent_spec.scale_to_monitor =>
                     app.terminate :: :: method
                     return 947
+                when fluent_spec.win32_drag_and_drop =>
+                    app.terminate :: :: method
+                    return 5011
+                when !fluent_spec.win32_clip_children =>
+                    app.terminate :: :: method
+                    return 5015
+                when !fluent_spec.win32_no_redirection_bitmap =>
+                    app.terminate :: :: method
+                    return 5033
+                when fluent_spec.win32_parent_window != fake_parent_window =>
+                    app.terminate :: :: method
+                    return 5037
+                when fluent_spec.win32_owner_window != fake_owner_window =>
+                    app.terminate :: :: method
+                    return 5020
+                when fluent_spec.win32_menu != fake_menu =>
+                    app.terminate :: :: method
+                    return 5024
+                else => ()
+            select fluent_spec.win32_class_name:
+                when Option.Some(name) =>
+                    select:
+                        when name.is_empty :: :: method =>
+                            app.terminate :: :: method
+                            return 5028
+                        else => ()
+                when Option.None =>
+                    app.terminate :: :: method
+                    return 5029
+            select:
                 when !fluent_spec.win32_keyboard_menu =>
                     app.terminate :: :: method
                     return 948
@@ -827,8 +969,15 @@ fn main() -> I32:
             let symmetric_spec = symmetric_spec.with_focus_on_show :: false :: method
             let symmetric_spec = symmetric_spec.with_mouse_passthrough_enabled :: true :: method
             let symmetric_spec = symmetric_spec.with_scale_to_monitor :: false :: method
+            let symmetric_spec = symmetric_spec.with_win32_drag_and_drop :: false :: method
+            let symmetric_spec = symmetric_spec.with_win32_clip_children_enabled :: true :: method
+            let symmetric_spec = symmetric_spec.with_win32_no_redirection_bitmap_enabled :: true :: method
+            let symmetric_spec = symmetric_spec.with_win32_parent_window :: fake_parent_window :: method
+            let symmetric_spec = symmetric_spec.with_win32_owner_window :: fake_owner_window :: method
+            let symmetric_spec = symmetric_spec.with_win32_menu :: fake_menu :: method
             let symmetric_spec = symmetric_spec.with_win32_keyboard_menu_enabled :: true :: method
             let symmetric_spec = symmetric_spec.with_win32_showdefault_enabled :: true :: method
+            let symmetric_spec = symmetric_spec.with_win32_class_name :: "temporary-win32-class" :: method
             let symmetric_spec = symmetric_spec.with_cocoa_frame_name :: "temporary-frame" :: method
             let symmetric_spec = symmetric_spec.with_x11_class_name :: "temporary-class" :: method
             let symmetric_spec = symmetric_spec.with_x11_instance_name :: "temporary-instance" :: method
@@ -845,8 +994,15 @@ fn main() -> I32:
             let symmetric_spec = symmetric_spec.with_focus_on_show :: true :: method
             let symmetric_spec = symmetric_spec.with_mouse_passthrough_enabled :: false :: method
             let symmetric_spec = symmetric_spec.with_scale_to_monitor :: true :: method
+            let symmetric_spec = symmetric_spec.with_win32_drag_and_drop :: true :: method
+            let symmetric_spec = symmetric_spec.with_win32_clip_children_enabled :: false :: method
+            let symmetric_spec = symmetric_spec.with_win32_no_redirection_bitmap_enabled :: false :: method
+            let symmetric_spec = symmetric_spec.without_win32_parent_window :: :: method
+            let symmetric_spec = symmetric_spec.without_win32_owner_window :: :: method
+            let symmetric_spec = symmetric_spec.without_win32_menu :: :: method
             let symmetric_spec = symmetric_spec.with_win32_keyboard_menu_enabled :: false :: method
             let symmetric_spec = symmetric_spec.with_win32_showdefault_enabled :: false :: method
+            let symmetric_spec = symmetric_spec.without_win32_class_name :: :: method
             let symmetric_spec = symmetric_spec.without_cocoa_frame_name :: :: method
             let symmetric_spec = symmetric_spec.without_x11_class_name :: :: method
             let symmetric_spec = symmetric_spec.without_x11_instance_name :: :: method
@@ -888,6 +1044,25 @@ fn main() -> I32:
                 when !symmetric_spec.scale_to_monitor =>
                     app.terminate :: :: method
                     return 986
+                when !symmetric_spec.win32_drag_and_drop =>
+                    app.terminate :: :: method
+                    return 5012
+                when symmetric_spec.win32_clip_children =>
+                    app.terminate :: :: method
+                    return 5017
+                when symmetric_spec.win32_no_redirection_bitmap =>
+                    app.terminate :: :: method
+                    return 5034
+                when !symmetric_spec.win32_parent_window.is_null :: :: method =>
+                    app.terminate :: :: method
+                    return 5038
+                when !symmetric_spec.win32_owner_window.is_null :: :: method =>
+                    app.terminate :: :: method
+                    return 5021
+                when !symmetric_spec.win32_menu.is_null :: :: method =>
+                    app.terminate :: :: method
+                    return 5025
+
                 when symmetric_spec.win32_keyboard_menu =>
                     app.terminate :: :: method
                     return 987
@@ -900,6 +1075,11 @@ fn main() -> I32:
                 when _ =>
                     app.terminate :: :: method
                     return 989
+            select symmetric_spec.win32_class_name:
+                when Option.None => ()
+                when _ =>
+                    app.terminate :: :: method
+                    return 5030
             select symmetric_spec.x11_class_name:
                 when Option.None => ()
                 when _ =>
@@ -2385,14 +2565,6 @@ fn main() -> I32:
                                 when Result.Err(_) =>
                                     app.terminate :: :: method
                                     return 1276
-                            select app_snapshot.last_error:
-                                when Result.Ok(Option.None) => ()
-                                when Result.Ok(Option.Some(_)) =>
-                                    app.terminate :: :: method
-                                    return 1277
-                                when Result.Err(_) =>
-                                    app.terminate :: :: method
-                                    return 1278
                             let saw_primary = false
                             repeat while !monitor_ids.is_empty :: :: method:
                                 let id = monitor_ids.remove :: 0 :: method
@@ -2791,3 +2963,22 @@ fn main() -> I32:
                     app.terminate :: :: method
                     return 1
         when Result.Err(_) => return 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

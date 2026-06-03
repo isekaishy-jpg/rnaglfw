@@ -1,0 +1,64 @@
+use runa_app.{CursorGrabMode, WindowId}
+use runa_app_vulkan.VulkanPresentApp
+
+pub fn prove_window_cursor_runtime(edit present_app: VulkanPresentApp, window_id: WindowId) -> I32:
+    let owned_window = present_app.window :: :: method
+    select:
+        when owned_window.id != window_id => return 3520
+        else => ()
+
+    let cursor_position = owned_window.cursor_position :: :: method
+
+    owned_window.set_cursor_position :: cursor_position :: method
+    present_app.set_cursor_position :: cursor_position :: method
+    let cursor_pos_after = owned_window.cursor_pos :: :: method
+    let cursor_position_after = owned_window.cursor_position :: :: method
+    let app_cursor_position_after = present_app.cursor_position :: :: method
+    select:
+        when cursor_position_after.x != cursor_pos_after.x => return 3521
+        when cursor_position_after.y != cursor_pos_after.y => return 3522
+        when cursor_position_after.x != cursor_position.x => return 3523
+        when cursor_position_after.y != cursor_position.y => return 3524
+        when app_cursor_position_after.x != cursor_position.x => return 3534
+        when app_cursor_position_after.y != cursor_position.y => return 3535
+        else => ()
+
+    select owned_window.cursor_grab_mode :: :: method:
+        when CursorGrabMode.None => ()
+        when _ => return 3525
+
+    owned_window.set_cursor_visible :: false :: method
+    select:
+        when owned_window.cursor_visible :: :: method => return 3526
+        else => ()
+
+    owned_window.set_cursor_visible :: true :: method
+    select:
+        when !owned_window.cursor_visible :: :: method => return 3527
+        else => ()
+
+    owned_window.set_cursor_grab :: CursorGrabMode.Confined :: method
+    select owned_window.cursor_grab_mode :: :: method:
+        when CursorGrabMode.Confined => ()
+        when _ => return 3528
+    select:
+        when !owned_window.cursor_visible :: :: method => return 3536
+        else => ()
+
+    owned_window.set_cursor_grab :: CursorGrabMode.None :: method
+    select owned_window.cursor_grab_mode :: :: method:
+        when CursorGrabMode.None => ()
+        when _ => return 3529
+
+    owned_window.set_cursor_grab :: CursorGrabMode.Locked :: method
+    select owned_window.cursor_grab_mode :: :: method:
+        when CursorGrabMode.Locked => ()
+        when _ => return 3530
+    select:
+        when owned_window.cursor_visible :: :: method => return 3537
+        else => ()
+
+    owned_window.set_cursor_grab :: CursorGrabMode.None :: method
+    select owned_window.cursor_grab_mode :: :: method:
+        when CursorGrabMode.None => return 0
+        when _ => return 3531

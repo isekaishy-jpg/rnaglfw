@@ -18,7 +18,7 @@ pub(package) fn detach_window_platform_support(read window: Window) -> Unit:
     detach_theme_subclass :: window.raw :: call
     return
 
-pub(package) fn attach_window_platform_support(read window: Window, mailbox: *edit WindowMailbox) -> Result[Unit, AppError]:
+pub(package) fn attach_window_platform_support(read window: Window, mailbox: *edit WindowMailbox, drag_drop_enabled: Bool) -> Result[Unit, AppError]:
     select:
         when attach_window_control_subclass :: window.raw, mailbox :: call => ()
         else =>
@@ -66,15 +66,18 @@ pub(package) fn attach_window_platform_support(read window: Window, mailbox: *ed
             window.destroy :: :: method
             return Result.Err :: AppError.TouchHookInstallFailed :: call
     select:
-        when attach_drag_drop_target :: window.raw, mailbox :: call => ()
-        else =>
-            detach_touch_subclass :: window.raw :: call
-            detach_ime_subclass :: window.raw :: call
-            detach_raw_input_subclass :: window.raw :: call
-            detach_theme_subclass :: window.raw :: call
-            detach_window_control_subclass :: window.raw :: call
-            clear_user_pointer :: window.raw :: call
-            free_window_mailbox :: mailbox :: call
-            window.destroy :: :: method
-            return Result.Err :: AppError.DragDropHookInstallFailed :: call
+        when drag_drop_enabled =>
+            select:
+                when attach_drag_drop_target :: window.raw, mailbox :: call => ()
+                else =>
+                    detach_touch_subclass :: window.raw :: call
+                    detach_ime_subclass :: window.raw :: call
+                    detach_raw_input_subclass :: window.raw :: call
+                    detach_theme_subclass :: window.raw :: call
+                    detach_window_control_subclass :: window.raw :: call
+                    clear_user_pointer :: window.raw :: call
+                    free_window_mailbox :: mailbox :: call
+                    window.destroy :: :: method
+                    return Result.Err :: AppError.DragDropHookInstallFailed :: call
+        else => ()
     return Result.Ok :: () :: call

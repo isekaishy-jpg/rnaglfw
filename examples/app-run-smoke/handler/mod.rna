@@ -13,6 +13,7 @@ const WINDOW_TITLE: Str = "runa_app run smoke"
 pub struct SmokeHandler:
     pub window_id: Option[WindowId]
     pub saw_created: Bool
+    pub saw_about_to_wait: Bool
     pub saw_user: Bool
 
 impl SmokeHandler:
@@ -34,9 +35,17 @@ impl AppHandler for SmokeHandler:
                 let _ = app.monitor_snapshots :: :: method
                 let _ = app.connected_joystick_count :: :: method
                 let _ = app.joystick_snapshots :: :: method
-                app.post_user_event :: 11 :: method
                 return Result.Ok :: ControlFlow.Wait :: call
             when Result.Err(err) => return Result.Err :: err :: call
+
+    fn about_to_wait(edit self, edit app: App) -> Result[ControlFlow, AppError]:
+        select:
+            when !self.saw_created => return Result.Err :: AppError.WindowNotFound :: call
+            when self.saw_about_to_wait => return Result.Ok :: ControlFlow.Wait :: call
+            else => ()
+        self.saw_about_to_wait = true
+        app.post_user_event :: 11 :: method
+        return Result.Ok :: ControlFlow.Wait :: call
 
     fn window_event(edit self, edit app: App, event: WindowEvent) -> Result[ControlFlow, AppError]:
         select event:
@@ -202,7 +211,7 @@ impl AppHandler for SmokeHandler:
             when UserEvent.Signaled(id = id) =>
                 let Result.Ok(expected) = self.expected_window_id :: :: method else => return Result.Err :: AppError.WindowNotFound :: call
                 select:
-                    when id == 11 && self.saw_created =>
+                    when id == 11 && self.saw_created && self.saw_about_to_wait =>
                         self.saw_user = true
                         return Result.Ok :: ControlFlow.Exit :: call
                     when id == 11 =>

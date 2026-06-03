@@ -2,7 +2,7 @@
 name = "runa_app"
 version = "2026.0.01"
 edition = "2026"
-lang_version = "2026.0.01"
+lang_version = "2026.0.02"
 
 [[products]]
 kind = "lib"

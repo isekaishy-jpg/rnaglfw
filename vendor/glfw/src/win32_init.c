@@ -716,6 +716,15 @@ void _glfwTerminateWin32(void)
         UnregisterClassW(MAKEINTATOM(_glfw.win32.helperWindowClass), _glfw.win32.instance);
     if (_glfw.win32.mainWindowClass)
         UnregisterClassW(MAKEINTATOM(_glfw.win32.mainWindowClass), _glfw.win32.instance);
+    while (_glfw.win32.customWindowClasses)
+    {
+        _GLFWwindowClassWin32* entry = _glfw.win32.customWindowClasses;
+        _glfw.win32.customWindowClasses = entry->next;
+
+        UnregisterClassW(entry->name, _glfw.win32.instance);
+        _glfw_free(entry->name);
+        _glfw_free(entry);
+    }
 
     _glfw_free(_glfw.win32.clipboardString);
     _glfw_free(_glfw.win32.rawInput);

@@ -276,6 +276,7 @@ void glfwDefaultWindowHints(void)
     _glfw.hints.window.xpos         = GLFW_ANY_POSITION;
     _glfw.hints.window.ypos         = GLFW_ANY_POSITION;
     _glfw.hints.window.scaleFramebuffer = GLFW_TRUE;
+    _glfw.hints.window.win32.clipChildren = GLFW_TRUE;
 
     // The default is 24 bits of color, 24 bits of depth and 8 bits of stencil,
     // double buffered
@@ -379,6 +380,12 @@ GLFWAPI void glfwWindowHint(int hint, int value)
         case GLFW_WIN32_SHOWDEFAULT:
             _glfw.hints.window.win32.showDefault = value ? GLFW_TRUE : GLFW_FALSE;
             return;
+        case GLFW_WIN32_NO_REDIRECTION_BITMAP:
+            _glfw.hints.window.win32.noRedirectionBitmap = value ? GLFW_TRUE : GLFW_FALSE;
+            return;
+        case GLFW_WIN32_CLIP_CHILDREN:
+            _glfw.hints.window.win32.clipChildren = value ? GLFW_TRUE : GLFW_FALSE;
+            return;
         case GLFW_COCOA_GRAPHICS_SWITCHING:
             _glfw.hints.context.nsgl.offline = value ? GLFW_TRUE : GLFW_FALSE;
             return;
@@ -459,6 +466,10 @@ GLFWAPI void glfwWindowHintString(int hint, const char* value)
         case GLFW_WAYLAND_APP_ID:
             strncpy(_glfw.hints.window.wl.appId, value,
                     sizeof(_glfw.hints.window.wl.appId) - 1);
+            return;
+        case GLFW_WIN32_CLASS_NAME:
+            strncpy(_glfw.hints.window.win32.className, value,
+                    sizeof(_glfw.hints.window.win32.className) - 1);
             return;
     }
 

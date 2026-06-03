@@ -1,12 +1,13 @@
 use std.{List, Option, Result, Str}
 
 use present.VulkanPresentApp
-use runa_app.{ClientApi, ContextCreationApi, CursorMode, CursorPos, FrameSize, GlfwCursor}
+use runa_app.{ClientApi, ContextCreationApi, CursorGrabMode, CursorMode, CursorPos, FrameSize, GlfwCursor}
 use runa_app.GlfwImage
 use runa_app.{GlfwEglContext, GlfwEglSurface, GlfwOSMesaColorBuffer, GlfwOSMesaDepthBuffer, GlfwOsMesaContext, GlfwWglContext}
 use runa_app.{InputAction, KeyboardInputSnapshot, KeyCode, Monitor, MouseButton, MouseInputSnapshot}
 use runa_app.{OpenGlProfile, Point, Rect, RgbaColor, RgbaImage, Scale, ScanCode, Size, StandardCursor, Theme}
 use runa_app.{TextDecodeError, VideoMode, Win32HWnd, Window, WindowAspectRatio, WindowIconError}
+use runa_app.WindowTaskbarIconError
 use runa_app.{WindowAppearanceError, WindowCornerPreference, WindowSystemBackdrop}
 use runa_app.{UserAttentionType, WindowButtons, WindowControlError, WindowResizeDirection}
 use runa_app.WindowLevel
@@ -40,9 +41,18 @@ impl VulkanPresentApp:
     fn clear_icon(read self) -> Unit:
         self.window.clear_icon :: :: method
         return
+    fn set_taskbar_icon(read self, read image: GlfwImage) -> Result[Unit, WindowTaskbarIconError]:
+        return self.window.set_taskbar_icon :: image :: method
+    fn set_taskbar_icon_image(read self, edit image: RgbaImage) -> Result[Unit, WindowTaskbarIconError]:
+        return self.window.set_taskbar_icon_image :: image :: method
+    fn clear_taskbar_icon(read self) -> Result[Unit, WindowTaskbarIconError]:
+        return self.window.clear_taskbar_icon :: :: method
 
     fn hwnd(read self) -> Win32HWnd:
         return self.window.hwnd :: :: method
+
+    fn owner_window(read self) -> Result[Option[Win32HWnd], WindowControlError]:
+        return self.window.owner_window :: :: method
 
     fn pos(read self) -> Point:
         return self.window.pos :: :: method
@@ -122,6 +132,23 @@ impl VulkanPresentApp:
         self.window.clear_size_limits :: :: method
         return
 
+    fn size_limits(read self) -> WindowSizeLimits:
+        return self.window.size_limits :: :: method
+
+    fn min_inner_size(read self) -> Option[Size]:
+        return self.window.min_inner_size :: :: method
+
+    fn max_inner_size(read self) -> Option[Size]:
+        return self.window.max_inner_size :: :: method
+
+    fn set_min_inner_size(read self, read size: Option[Size]) -> Unit:
+        self.window.set_min_inner_size :: size :: method
+        return
+
+    fn set_max_inner_size(read self, read size: Option[Size]) -> Unit:
+        self.window.set_max_inner_size :: size :: method
+        return
+
     fn set_aspect_ratio(read self, numerator: CInt, denominator: CInt) -> Unit:
         self.window.set_aspect_ratio :: numerator, denominator :: method
         return
@@ -194,6 +221,12 @@ impl VulkanPresentApp:
     fn skip_taskbar(read self) -> Result[Bool, WindowControlError]:
         return self.window.skip_taskbar :: :: method
 
+    fn clip_children(read self) -> Result[Bool, WindowControlError]:
+        return self.window.clip_children :: :: method
+
+    fn no_redirection_bitmap(read self) -> Result[Bool, WindowControlError]:
+        return self.window.no_redirection_bitmap :: :: method
+
     fn content_protected(read self) -> Result[Bool, WindowControlError]:
         return self.window.content_protected :: :: method
 
@@ -223,6 +256,11 @@ impl VulkanPresentApp:
 
     fn set_skip_taskbar(read self, skip: Bool) -> Result[Unit, WindowControlError]:
         return self.window.set_skip_taskbar :: skip :: method
+
+    fn set_clip_children(read self, enabled: Bool) -> Result[Unit, WindowControlError]:
+        return self.window.set_clip_children :: enabled :: method
+
+
 
     fn set_content_protected(read self, enabled: Bool) -> Result[Unit, WindowControlError]:
         return self.window.set_content_protected :: enabled :: method
@@ -260,8 +298,15 @@ impl VulkanPresentApp:
     fn cursor_pos(read self) -> CursorPos:
         return self.window.cursor_pos :: :: method
 
+    fn cursor_position(read self) -> CursorPos:
+        return self.window.cursor_position :: :: method
+
     fn set_cursor_pos(read self, x: F64, y: F64) -> Unit:
         self.window.set_cursor_pos :: x, y :: method
+        return
+
+    fn set_cursor_position(read self, read pos: CursorPos) -> Unit:
+        self.window.set_cursor_position :: pos :: method
         return
 
     fn set_cursor(read self, read cursor: GlfwCursor) -> Unit:
@@ -415,6 +460,14 @@ impl VulkanPresentApp:
 
     fn current_monitor(read self) -> Option[Monitor]:
         return self.window.current_monitor :: :: method
+    fn drag_and_drop_enabled(read self) -> Bool:
+        return self.window.drag_and_drop_enabled :: :: method
+    fn set_drag_and_drop_enabled(read self, enabled: Bool) -> Bool:
+        return self.window.set_drag_and_drop_enabled :: enabled :: method
+    fn disable_drag_and_drop(read self) -> Bool:
+        return self.window.disable_drag_and_drop :: :: method
+    fn enable_drag_and_drop(read self) -> Bool:
+        return self.window.enable_drag_and_drop :: :: method
 
     fn fullscreen(read self) -> Bool:
         return self.window.fullscreen :: :: method
@@ -482,8 +535,22 @@ impl VulkanPresentApp:
     fn cursor_mode(read self) -> CursorMode:
         return self.window.cursor_mode :: :: method
 
+    fn cursor_grab_mode(read self) -> CursorGrabMode:
+        return self.window.cursor_grab_mode :: :: method
+
+    fn cursor_visible(read self) -> Bool:
+        return self.window.cursor_visible :: :: method
+
     fn set_cursor_mode(read self, mode: CursorMode) -> Unit:
         self.window.set_cursor_mode :: mode :: method
+        return
+
+    fn set_cursor_grab(read self, read mode: CursorGrabMode) -> Unit:
+        self.window.set_cursor_grab :: mode :: method
+        return
+
+    fn set_cursor_visible(read self, visible: Bool) -> Unit:
+        self.window.set_cursor_visible :: visible :: method
         return
 
     fn use_normal_cursor(read self) -> Unit:
@@ -590,3 +657,4 @@ impl VulkanPresentApp:
 
     fn close_requested(read self) -> Bool:
         return self.window.should_close :: :: method
+

@@ -35,11 +35,21 @@
 #include <windowsx.h>
 #include <shellapi.h>
 
+#ifndef WS_EX_NOREDIRECTIONBITMAP
+#define WS_EX_NOREDIRECTIONBITMAP 0x00200000L
+#endif
+
 // Returns the window style for the specified window
 //
 static DWORD getWindowStyle(const _GLFWwindow* window)
 {
-    DWORD style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+    DWORD style = WS_CLIPSIBLINGS;
+
+    if (window->win32.clipChildren)
+        style |= WS_CLIPCHILDREN;
+
+    if (window->win32.parentWindow)
+        return style | WS_CHILD;
 
     if (window->monitor)
         style |= WS_POPUP;
@@ -65,10 +75,16 @@ static DWORD getWindowStyle(const _GLFWwindow* window)
 //
 static DWORD getWindowExStyle(const _GLFWwindow* window)
 {
-    DWORD style = WS_EX_APPWINDOW;
+    DWORD style = 0;
+
+    if (!window->win32.parentWindow)
+        style |= WS_EX_APPWINDOW;
 
     if (window->monitor || window->floating)
         style |= WS_EX_TOPMOST;
+
+    if (window->win32.noRedirectionBitmap)
+        style |= WS_EX_NOREDIRECTIONBITMAP;
 
     return style;
 }
@@ -343,7 +359,7 @@ static void updateWindowStyles(const _GLFWwindow* window)
 {
     RECT rect;
     DWORD style = GetWindowLongW(window->win32.handle, GWL_STYLE);
-    style &= ~(WS_OVERLAPPEDWINDOW | WS_POPUP);
+    style &= ~(WS_OVERLAPPEDWINDOW | WS_POPUP | WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN);
     style |= getWindowStyle(window);
 
     GetClientRect(window->win32.handle, &rect);
@@ -1272,14 +1288,127 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 
 // Creates the GLFW window
 //
+static const WCHAR* getMainWindowClassNameWin32(void)
+{
+#if defined(_GLFW_WNDCLASSNAME)
+    return _GLFW_WNDCLASSNAME;
+#else
+    return L"GLFW30";
+#endif
+}
+
+static void setWindowClassWin32(WNDCLASSEXW* wc, const WCHAR* className)
+{
+    wc->style         = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    wc->lpfnWndProc   = windowProc;
+    wc->hInstance     = _glfw.win32.instance;
+    wc->hCursor       = LoadCursorW(NULL, IDC_ARROW);
+    wc->lpszClassName = className;
+
+    wc->hIcon = LoadImageW(GetModuleHandleW(NULL),
+                           L"GLFW_ICON", IMAGE_ICON,
+                           0, 0, LR_DEFAULTSIZE | LR_SHARED);
+    if (!wc->hIcon)
+    {
+        wc->hIcon = LoadImageW(NULL,
+                               IDI_APPLICATION, IMAGE_ICON,
+                               0, 0, LR_DEFAULTSIZE | LR_SHARED);
+    }
+}
+
+static int ensureWindowClassWin32(const WCHAR* className)
+{
+    WNDCLASSEXW existing = { sizeof(existing) };
+
+    if (GetClassInfoExW(_glfw.win32.instance, className, &existing))
+    {
+        if (existing.lpfnWndProc != windowProc)
+        {
+            _glfwInputError(GLFW_PLATFORM_ERROR,
+                            "Win32: Requested window class name is already registered with a different window procedure");
+            return GLFW_FALSE;
+        }
+
+        return GLFW_TRUE;
+    }
+
+    {
+        WNDCLASSEXW wc = { sizeof(wc) };
+        setWindowClassWin32(&wc, className);
+
+        if (!RegisterClassExW(&wc))
+        {
+            _glfwInputErrorWin32(GLFW_PLATFORM_ERROR,
+                                 "Win32: Failed to register window class");
+            return GLFW_FALSE;
+        }
+    }
+
+    return GLFW_TRUE;
+}
+
+static int ensureCustomWindowClassWin32(const WCHAR* className)
+{
+    _GLFWwindowClassWin32* entry = _glfw.win32.customWindowClasses;
+
+    if (!lstrcmpW(className, getMainWindowClassNameWin32()))
+        return GLFW_TRUE;
+
+    while (entry)
+    {
+        if (!lstrcmpW(entry->name, className))
+            return GLFW_TRUE;
+
+        entry = entry->next;
+    }
+
+    if (!ensureWindowClassWin32(className))
+        return GLFW_FALSE;
+
+    entry = _glfw_calloc(1, sizeof(_GLFWwindowClassWin32));
+    if (!entry)
+    {
+        UnregisterClassW(className, _glfw.win32.instance);
+        _glfwInputError(GLFW_OUT_OF_MEMORY, "Win32: Failed to record window class name");
+        return GLFW_FALSE;
+    }
+
+    {
+        const int length = lstrlenW(className) + 1;
+        entry->name = _glfw_calloc(length, sizeof(WCHAR));
+        if (!entry->name)
+        {
+            _glfw_free(entry);
+            UnregisterClassW(className, _glfw.win32.instance);
+            _glfwInputError(GLFW_OUT_OF_MEMORY, "Win32: Failed to copy window class name");
+            return GLFW_FALSE;
+        }
+
+        memcpy(entry->name, className, length * sizeof(WCHAR));
+    }
+
+    entry->next = _glfw.win32.customWindowClasses;
+    _glfw.win32.customWindowClasses = entry;
+    return GLFW_TRUE;
+}
+
 static int createNativeWindow(_GLFWwindow* window,
                               const _GLFWwndconfig* wndconfig,
                               const _GLFWfbconfig* fbconfig)
 {
     int frameX, frameY, frameWidth, frameHeight;
+    const WCHAR* className;
+    WCHAR* wideClassName = NULL;
     WCHAR* wideTitle;
-    DWORD style = getWindowStyle(window);
-    DWORD exStyle = getWindowExStyle(window);
+    DWORD style;
+    DWORD exStyle;
+    HWND parentWindow = (HWND) wndconfig->win32.parentWindow;
+
+    window->win32.noRedirectionBitmap = wndconfig->win32.noRedirectionBitmap;
+    window->win32.clipChildren = wndconfig->win32.clipChildren;
+    window->win32.parentWindow = parentWindow;
+    style = getWindowStyle(window);
+    exStyle = getWindowExStyle(window);
 
     if (!_glfw.win32.mainWindowClass)
     {
@@ -1312,6 +1441,22 @@ static int createNativeWindow(_GLFWwindow* window,
                                  "Win32: Failed to register window class");
             return GLFW_FALSE;
         }
+    }
+
+    className = MAKEINTATOM(_glfw.win32.mainWindowClass);
+    if (strlen(wndconfig->win32.className))
+    {
+        wideClassName = _glfwCreateWideStringFromUTF8Win32(wndconfig->win32.className);
+        if (!wideClassName)
+            return GLFW_FALSE;
+
+        if (!ensureCustomWindowClassWin32(wideClassName))
+        {
+            _glfw_free(wideClassName);
+            return GLFW_FALSE;
+        }
+
+        className = wideClassName;
     }
 
     if (GetSystemMetrics(SM_REMOTESESSION))
@@ -1365,7 +1510,19 @@ static int createNativeWindow(_GLFWwindow* window,
 
         AdjustWindowRectEx(&rect, style, FALSE, exStyle);
 
-        if (wndconfig->xpos == GLFW_ANY_POSITION && wndconfig->ypos == GLFW_ANY_POSITION)
+        if (parentWindow)
+        {
+            if (wndconfig->xpos == GLFW_ANY_POSITION)
+                frameX = 0;
+            else
+                frameX = wndconfig->xpos + rect.left;
+
+            if (wndconfig->ypos == GLFW_ANY_POSITION)
+                frameY = 0;
+            else
+                frameY = wndconfig->ypos + rect.top;
+        }
+        else if (wndconfig->xpos == GLFW_ANY_POSITION && wndconfig->ypos == GLFW_ANY_POSITION)
         {
             frameX = CW_USEDEFAULT;
             frameY = CW_USEDEFAULT;
@@ -1385,16 +1542,17 @@ static int createNativeWindow(_GLFWwindow* window,
         return GLFW_FALSE;
 
     window->win32.handle = CreateWindowExW(exStyle,
-                                           MAKEINTATOM(_glfw.win32.mainWindowClass),
+                                           className,
                                            wideTitle,
                                            style,
                                            frameX, frameY,
                                            frameWidth, frameHeight,
-                                           NULL, // No parent window
+                                           parentWindow,
                                            NULL, // No window menu
                                            _glfw.win32.instance,
                                            (LPVOID) wndconfig);
 
+    _glfw_free(wideClassName);
     _glfw_free(wideTitle);
 
     if (!window->win32.handle)
@@ -2587,6 +2745,52 @@ GLFWAPI HWND glfwGetWin32Window(GLFWwindow* handle)
     }
 
     return window->win32.handle;
+}
+
+GLFWAPI void glfwSetWin32ParentWindowHint(HWND parent)
+{
+    _GLFW_REQUIRE_INIT();
+
+    if (_glfw.platform.platformID != GLFW_PLATFORM_WIN32)
+    {
+        _glfwInputError(GLFW_PLATFORM_UNAVAILABLE,
+                        "Win32: Platform not initialized");
+        return;
+    }
+
+    _glfw.hints.window.win32.parentWindow = parent;
+}
+
+GLFWAPI int glfwGetWin32ClipChildren(GLFWwindow* handle)
+{
+    _GLFWwindow* window = (_GLFWwindow*) handle;
+    _GLFW_REQUIRE_INIT_OR_RETURN(GLFW_FALSE);
+
+    if (_glfw.platform.platformID != GLFW_PLATFORM_WIN32)
+    {
+        _glfwInputError(GLFW_PLATFORM_UNAVAILABLE,
+                        "Win32: Platform not initialized");
+        return GLFW_FALSE;
+    }
+
+    return window->win32.clipChildren;
+}
+
+GLFWAPI int glfwSetWin32ClipChildren(GLFWwindow* handle, int enabled)
+{
+    _GLFWwindow* window = (_GLFWwindow*) handle;
+    _GLFW_REQUIRE_INIT_OR_RETURN(GLFW_FALSE);
+
+    if (_glfw.platform.platformID != GLFW_PLATFORM_WIN32)
+    {
+        _glfwInputError(GLFW_PLATFORM_UNAVAILABLE,
+                        "Win32: Platform not initialized");
+        return GLFW_FALSE;
+    }
+
+    window->win32.clipChildren = enabled ? GLFW_TRUE : GLFW_FALSE;
+    updateWindowStyles(window);
+    return GLFW_TRUE;
 }
 
 #endif // _GLFW_WIN32

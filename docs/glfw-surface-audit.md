@@ -7,9 +7,9 @@ Authoritative sources:
 
 - `glfw3.h` macro count: `333`
 - `glfw3.h` function count: `124`
-- `glfw3native.h` function count: `27`
+- `glfw3native.h` function count: `28`
 - wrapped `GLFW_*` constants in `constants/mod.rna`: `333`
-- imported foreign GLFW functions in `rnaglfw`: `151`
+- imported foreign GLFW functions in `rnaglfw`: `152`
 
 Coverage result:
 
@@ -70,5 +70,5 @@ Nullable handle-wrapper status:
 - raw window and monitor handle queries now return `GlfwWindow` or `GlfwMonitor`
 - missing handles are represented by null wrapped handles
 - low-level consumers should use `.is_null()` on those wrappers
-- this is a temporary package-level workaround for the live `Option[NominalStruct]`
-  extraction bug recorded in `../RunaLang/compiler-issues.md`
+- this is the current low-level package surface for nullable window and monitor
+  handles

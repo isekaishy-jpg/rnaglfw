@@ -48,8 +48,8 @@ pub use runa_app.{KeyboardInputSnapshot, MouseInputSnapshot, WindowInputSnapshot
 pub use runa_app.{WindowSnapshot, MonitorSnapshot, JoystickSnapshot}
 pub use runa_app.{ClientApi, ContextCreationApi, OpenGlProfile}
 pub use runa_app.WindowSpec
-pub use runa_app.{CursorMode, CursorPos, FrameSize, Point, Rect, Scale, Size}
-pub use runa_app.{VideoMode, Win32HWnd, create_cursor_image}
+pub use runa_app.{CursorGrabMode, CursorMode, CursorPos, FrameSize, Point, Rect, Scale, Size}
+pub use runa_app.{VideoMode, Win32HMenu, Win32HWnd, create_cursor_image}
 pub use runa_app.{client_api_from_raw, client_api_raw}
 pub use runa_app.{context_creation_api_from_raw, context_creation_api_raw}
 pub use runa_app.{cursor_mode_from_raw, cursor_mode_raw}
@@ -92,7 +92,7 @@ pub use runa_app.{egl_opengl_es_window_spec, egl_opengl_window_spec}
 pub use runa_app.osmesa_opengl_window_spec
 pub use runa_app.{positioned_window_spec, unfocused_window_spec}
 pub use runa_app.{cocoa_frame_named_window_spec, wayland_app_id_window_spec}
-pub use runa_app.{win32_keyboard_menu_window_spec, win32_showdefault_window_spec}
+pub use runa_app.{win32_class_named_window_spec, win32_keyboard_menu_window_spec, win32_menu_window_spec, win32_no_redirection_bitmap_window_spec, win32_showdefault_window_spec}
 pub use runa_app.{x11_class_named_window_spec, x11_instance_named_window_spec}
 pub use runa_app.{transparent_window_spec, undecorated_window_spec}
 pub use runa_app.{window_max_size_limits, window_min_size_limits, window_no_size_limits}
@@ -104,17 +104,30 @@ pub use runa_app.{window_spec_floating, window_spec_maximized, window_spec_unfoc
 pub use runa_app.{window_spec_with_multisampling, window_spec_with_opengl_debug_context}
 pub use runa_app.window_spec_with_opengl_profile
 pub use runa_app.{window_spec_with_default_position, window_spec_with_mouse_passthrough}
+pub use runa_app.{window_spec_with_icon, window_spec_without_icon}
 pub use runa_app.{window_spec_with_opengl_forward_compat, window_spec_with_refresh_rate}
 pub use runa_app.{window_spec_with_position, window_spec_with_shared_context}
 pub use runa_app.{window_spec_with_cocoa_frame_name, window_spec_with_wayland_app_id}
 pub use runa_app.{window_spec_with_srgb, window_spec_without_auto_iconify}
 pub use runa_app.{window_spec_without_center_cursor, window_spec_without_focus_on_show}
 pub use runa_app.{window_spec_with_x11_class_name, window_spec_with_x11_instance_name}
-pub use runa_app.{window_spec_with_win32_keyboard_menu, window_spec_with_win32_showdefault}
-pub use runa_app.window_spec_without_scale_to_monitor
+pub use runa_app.window_spec_without_win32_drag_and_drop
+pub use runa_app.{window_spec_with_win32_class_name, window_spec_with_win32_clip_children}
+pub use runa_app.{window_spec_with_win32_menu, window_spec_with_win32_owner_window}
+pub use runa_app.window_spec_with_win32_parent_window
+pub use runa_app.{window_spec_with_win32_keyboard_menu, window_spec_with_win32_no_redirection_bitmap, window_spec_with_win32_showdefault}
+pub use runa_app.{window_spec_without_scale_to_monitor, window_spec_without_win32_class_name}
+pub use runa_app.{window_spec_without_win32_menu, window_spec_without_win32_owner_window}
+pub use runa_app.window_spec_without_win32_parent_window
 pub use runa_app.{vulkan_required_instance_extensions, vulkan_supported, vulkan_window_support_report}
 pub use runa_app.{window_monitor_spec, window_size_limits, window_spec}
 pub use runa_app.{GlfwCursor, GlfwImage, GlfwMonitorList, GlfwVideoMode}
 pub use runa_app.{GlfwVideoModeList, glfw_create_cursor}
 pub use runa_app.{glfw_create_standard_cursor, glfw_monitors, glfw_primary_monitor}
 pub use runner.{run, run_with_config, run_with_config_and_flow, run_with_flow}
+
+
+
+
+
+

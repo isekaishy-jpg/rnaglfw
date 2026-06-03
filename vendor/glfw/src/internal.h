@@ -414,8 +414,12 @@ struct _GLFWwndconfig
         char      instanceName[256];
     } x11;
     struct {
+        char      className[256];
+        void*     parentWindow;
         GLFWbool  keymenu;
         GLFWbool  showDefault;
+        GLFWbool  noRedirectionBitmap;
+        GLFWbool  clipChildren;
     } win32;
     struct {
         char      appId[256];

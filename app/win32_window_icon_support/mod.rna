@@ -1,0 +1,320 @@
+use std.Result
+
+use mailbox.WindowMailbox
+use glfw.{GlfwImage, GlfwWindow, GlfwWindowRaw, glfw_window_raw_handle}
+use window.{Win32HWnd, WindowTaskbarIconError}
+
+const BYTE_STEP: ISize = 1
+const PIXEL_STEP: ISize = 4
+const DIB_RGB_COLORS: CUInt = 0
+const BI_BITFIELDS: CUInt = 3
+const WM_SETICON: CUInt = 0x0080
+const ICON_BIG: USize = 1USize
+const SRCCOPY: CUInt = 0x00CC0020
+const RED_MASK: CUInt = 0x00FF0000
+const GREEN_MASK: CUInt = 0x0000FF00
+const BLUE_MASK: CUInt = 0x000000FF
+const ALPHA_MASK: CUInt = 0xFF000000
+
+type HBitmap = *edit CVoid
+type HIcon = *edit CVoid
+type Hdc = *edit CVoid
+
+#repr[c]
+struct BitmapV5Header:
+    size: CUInt
+    width: CInt
+    height: CInt
+    planes: CUShort
+    bit_count: CUShort
+    compression: CUInt
+    size_image: CUInt
+    x_pels_per_meter: CInt
+    y_pels_per_meter: CInt
+    clr_used: CUInt
+    clr_important: CUInt
+    red_mask: CUInt
+    green_mask: CUInt
+    blue_mask: CUInt
+    alpha_mask: CUInt
+    cs_type: CUInt
+    endpoints: [CInt; 9]
+    gamma_red: CUInt
+    gamma_green: CUInt
+    gamma_blue: CUInt
+    intent: CUInt
+    profile_data: CUInt
+    profile_size: CUInt
+    reserved: CUInt
+
+#repr[c]
+struct IconInfo:
+    icon: CInt
+    x_hotspot: CUInt
+    y_hotspot: CUInt
+    mask: HBitmap
+    color: HBitmap
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn CreateIconIndirect(info: *read IconInfo) -> HIcon
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn DestroyIcon(icon: HIcon) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn SendMessageW(window: Win32HWnd, message: CUInt, wparam: USize, lparam: USize) -> ISize
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn GetDC(window: Win32HWnd) -> Hdc
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn ReleaseDC(window: Win32HWnd, hdc: Hdc) -> CInt
+
+#link[name = "gdi32"]
+#unsafe
+extern["system"] fn CreateBitmap(width: CInt, height: CInt, planes: CUInt, bits_per_pixel: CUInt, bits: *read CVoid) -> HBitmap
+
+#link[name = "gdi32"]
+#unsafe
+extern["system"] fn CreateDIBSection(hdc: Hdc, info: *read BitmapV5Header, usage: CUInt, bits: *edit *edit CVoid, section: *edit CVoid, offset: CUInt) -> HBitmap
+
+#link[name = "gdi32"]
+#unsafe
+extern["system"] fn DeleteObject(object: *edit CVoid) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetWindowUserPointer(window: *edit GlfwWindowRaw) -> *edit CVoid
+
+fn void_as_mailbox(pointer: *edit CVoid) -> *edit WindowMailbox:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[WindowMailbox] :: address :: call
+
+fn void_as_unsigned(pointer: *edit CVoid) -> *edit CUnsignedChar:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[CUnsignedChar] :: address :: call
+
+fn icon_handle_as_void(icon: HIcon) -> *edit CVoid:
+    let address = #unsafe raw_pointer_address_edit :: icon :: call
+    return #unsafe raw_pointer_from_address_edit[CVoid] :: address :: call
+
+fn icon_handle_from_void(pointer: *edit CVoid) -> HIcon:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[CVoid] :: address :: call
+
+fn icon_handle_bits(icon: HIcon) -> USize:
+    return #unsafe raw_pointer_address_edit :: icon :: call
+
+fn zero_bitmap_header() -> BitmapV5Header:
+    return BitmapV5Header :: :: call
+        size = 0
+        width = 0
+        height = 0
+        planes = 0
+        bit_count = 0
+        compression = 0
+        size_image = 0
+        x_pels_per_meter = 0
+        y_pels_per_meter = 0
+        clr_used = 0
+        clr_important = 0
+        red_mask = 0
+        green_mask = 0
+        blue_mask = 0
+        alpha_mask = 0
+        cs_type = 0
+        endpoints = [0; 9]
+        gamma_red = 0
+        gamma_green = 0
+        gamma_blue = 0
+        intent = 0
+        profile_data = 0
+        profile_size = 0
+        reserved = 0
+
+fn window_mailbox(read window: GlfwWindow) -> *edit WindowMailbox:
+    let raw = glfw_window_raw_handle :: window :: call
+    let user = #unsafe glfwGetWindowUserPointer :: raw :: call
+    select:
+        when user.is_null :: :: method =>
+            let none: *edit WindowMailbox = null
+            return none
+        else => return void_as_mailbox :: user :: call
+
+fn mailbox_taskbar_icon(mailbox: *edit WindowMailbox) -> HIcon:
+    select:
+        when mailbox.is_null :: :: method =>
+            let none: HIcon = null
+            return none
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            return icon_handle_from_void :: stored.taskbar_icon_handle :: call
+
+fn set_mailbox_taskbar_icon(mailbox: *edit WindowMailbox, icon: HIcon) -> Unit:
+    select:
+        when mailbox.is_null :: :: method => return
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            stored.taskbar_icon_handle = icon_handle_as_void :: icon :: call
+            #unsafe mailbox.store :: stored :: method
+            return
+
+fn destroy_bitmap(bitmap: HBitmap) -> Unit:
+    select:
+        when bitmap.is_null :: :: method => return
+        else =>
+            let object = icon_handle_as_void :: bitmap :: call
+            let _ = #unsafe DeleteObject :: object :: call
+            return
+
+fn destroy_icon_handle(icon: HIcon) -> Unit:
+    select:
+        when icon.is_null :: :: method => return
+        else =>
+            let _ = #unsafe DestroyIcon :: icon :: call
+            return
+
+fn destroy_mailbox_taskbar_icon(mailbox: *edit WindowMailbox) -> Unit:
+    let icon = mailbox_taskbar_icon :: mailbox :: call
+    destroy_icon_handle :: icon :: call
+    let none: HIcon = null
+    set_mailbox_taskbar_icon :: mailbox, none :: call
+    return
+
+fn window_handle(read window: GlfwWindow) -> Result[Win32HWnd, WindowTaskbarIconError]:
+    let hwnd = window.win32_window :: :: method
+    select:
+        when hwnd.is_null :: :: method => return Result.Err :: WindowTaskbarIconError.NativeWindowUnavailable :: call
+        else => return Result.Ok :: hwnd :: call
+
+fn validate_glfw_image(read image: GlfwImage) -> Result[Unit, WindowTaskbarIconError]:
+    select:
+        when image.width <= 0 => return Result.Err :: WindowTaskbarIconError.InvalidImage :: call
+        when image.height <= 0 => return Result.Err :: WindowTaskbarIconError.InvalidImage :: call
+        when image.pixels.is_null :: :: method => return Result.Err :: WindowTaskbarIconError.InvalidImage :: call
+        else => return Result.Ok :: () :: call
+
+fn copy_glfw_image_bgra(read image: GlfwImage, bits: *edit CVoid) -> Result[Unit, WindowTaskbarIconError]:
+    select:
+        when bits.is_null :: :: method => return Result.Err :: WindowTaskbarIconError.BitmapCreateFailed :: call
+        else => ()
+    let source = image.pixels
+    let target = void_as_unsigned :: bits :: call
+    let scan_y: CInt = 0
+    let source_pixel: *edit CUnsignedChar = source
+    let target_pixel: *edit CUnsignedChar = target
+    repeat while scan_y < image.height:
+        let scan_x: CInt = 0
+        repeat while scan_x < image.width:
+            let source_red = #unsafe source_pixel.load :: :: method
+            let source_green_ptr = #unsafe source_pixel.offset :: BYTE_STEP :: method
+            let source_blue_ptr = #unsafe source_green_ptr.offset :: BYTE_STEP :: method
+            let source_alpha_ptr = #unsafe source_blue_ptr.offset :: BYTE_STEP :: method
+            let source_green = #unsafe source_green_ptr.load :: :: method
+            let source_blue = #unsafe source_blue_ptr.load :: :: method
+            let source_alpha = #unsafe source_alpha_ptr.load :: :: method
+            let target_green_ptr = #unsafe target_pixel.offset :: BYTE_STEP :: method
+            let target_red_ptr = #unsafe target_green_ptr.offset :: BYTE_STEP :: method
+            let target_alpha_ptr = #unsafe target_red_ptr.offset :: BYTE_STEP :: method
+            #unsafe target_pixel.store :: source_blue :: method
+            #unsafe target_green_ptr.store :: source_green :: method
+            #unsafe target_red_ptr.store :: source_red :: method
+            #unsafe target_alpha_ptr.store :: source_alpha :: method
+            source_pixel = #unsafe source_pixel.offset :: PIXEL_STEP :: method
+            target_pixel = #unsafe target_pixel.offset :: PIXEL_STEP :: method
+            scan_x = scan_x + 1
+        scan_y = scan_y + 1
+    return Result.Ok :: () :: call
+
+fn taskbar_bitmap_header(read image: GlfwImage) -> Result[BitmapV5Header, WindowTaskbarIconError]:
+    let Result.Ok(size) = size_of[BitmapV5Header] as Maybe[CUInt] else => return Result.Err :: WindowTaskbarIconError.BitmapCreateFailed :: call
+    let zero_height: CInt = 0
+    let height = zero_height - image.height
+    let header = zero_bitmap_header :: :: call
+    header.size = size
+    header.width = image.width
+    header.height = height
+    header.planes = 1
+    header.bit_count = 32
+    header.compression = BI_BITFIELDS
+    header.red_mask = RED_MASK
+    header.green_mask = GREEN_MASK
+    header.blue_mask = BLUE_MASK
+    header.alpha_mask = ALPHA_MASK
+    return Result.Ok :: header :: call
+
+fn create_color_bitmap(read image: GlfwImage) -> Result[HBitmap, WindowTaskbarIconError]:
+    let Result.Ok(header) = taskbar_bitmap_header :: image :: call else => return Result.Err :: WindowTaskbarIconError.BitmapCreateFailed :: call
+    let screen: Win32HWnd = null
+    let hdc = #unsafe GetDC :: screen :: call
+    let bits: *edit CVoid = null
+    let bits_ptr: *edit *edit CVoid = #unsafe &raw edit bits
+    let section: *edit CVoid = null
+    let bitmap = #unsafe CreateDIBSection :: hdc, (#unsafe &raw read header), DIB_RGB_COLORS, bits_ptr, section, 0 :: call
+    let _ = #unsafe ReleaseDC :: screen, hdc :: call
+    select:
+        when bitmap.is_null :: :: method => return Result.Err :: WindowTaskbarIconError.BitmapCreateFailed :: call
+        else => ()
+    select copy_glfw_image_bgra :: image, bits :: call:
+        when Result.Ok(_) => return Result.Ok :: bitmap :: call
+        when Result.Err(err) =>
+            destroy_bitmap :: bitmap :: call
+            return Result.Err :: err :: call
+
+fn create_mask_bitmap(read image: GlfwImage) -> Result[HBitmap, WindowTaskbarIconError]:
+    let bits: *read CVoid = null
+    let bitmap = #unsafe CreateBitmap :: image.width, image.height, 1, 1, bits :: call
+    select:
+        when bitmap.is_null :: :: method => return Result.Err :: WindowTaskbarIconError.BitmapCreateFailed :: call
+        else => return Result.Ok :: bitmap :: call
+
+fn create_taskbar_icon(read image: GlfwImage) -> Result[HIcon, WindowTaskbarIconError]:
+    let Result.Ok(_) = validate_glfw_image :: image :: call else => return Result.Err :: WindowTaskbarIconError.InvalidImage :: call
+    let Result.Ok(color_bitmap) = create_color_bitmap :: image :: call else => return Result.Err :: WindowTaskbarIconError.BitmapCreateFailed :: call
+    let Result.Ok(mask_bitmap) = create_mask_bitmap :: image :: call else =>
+        destroy_bitmap :: color_bitmap :: call
+        return Result.Err :: WindowTaskbarIconError.BitmapCreateFailed :: call
+    let info = IconInfo :: :: call
+        icon = 1
+        x_hotspot = 0
+        y_hotspot = 0
+        mask = mask_bitmap
+        color = color_bitmap
+    let icon = #unsafe CreateIconIndirect :: (#unsafe &raw read info) :: call
+    destroy_bitmap :: mask_bitmap :: call
+    destroy_bitmap :: color_bitmap :: call
+    select:
+        when icon.is_null :: :: method => return Result.Err :: WindowTaskbarIconError.IconCreateFailed :: call
+        else => return Result.Ok :: icon :: call
+
+pub(package) fn destroy_window_taskbar_icon(mailbox: *edit WindowMailbox) -> Unit:
+    destroy_mailbox_taskbar_icon :: mailbox :: call
+    return
+
+pub(package) fn set_window_taskbar_icon(read window: GlfwWindow, read image: GlfwImage) -> Result[Unit, WindowTaskbarIconError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowTaskbarIconError.NativeWindowUnavailable :: call
+    let mailbox = window_mailbox :: window :: call
+    select:
+        when mailbox.is_null :: :: method => return Result.Err :: WindowTaskbarIconError.NativeWindowUnavailable :: call
+        else => ()
+    let Result.Ok(icon) = create_taskbar_icon :: image :: call else => return Result.Err :: WindowTaskbarIconError.IconCreateFailed :: call
+    let icon_bits = icon_handle_bits :: icon :: call
+    let _ = #unsafe SendMessageW :: hwnd, WM_SETICON, ICON_BIG, icon_bits :: call
+    destroy_mailbox_taskbar_icon :: mailbox :: call
+    set_mailbox_taskbar_icon :: mailbox, icon :: call
+    return Result.Ok :: () :: call
+
+pub(package) fn clear_window_taskbar_icon(read window: GlfwWindow) -> Result[Unit, WindowTaskbarIconError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowTaskbarIconError.NativeWindowUnavailable :: call
+    let mailbox = window_mailbox :: window :: call
+    select:
+        when mailbox.is_null :: :: method => return Result.Err :: WindowTaskbarIconError.NativeWindowUnavailable :: call
+        else => ()
+    let _ = #unsafe SendMessageW :: hwnd, WM_SETICON, ICON_BIG, 0USize :: call
+    destroy_mailbox_taskbar_icon :: mailbox :: call
+    return Result.Ok :: () :: call

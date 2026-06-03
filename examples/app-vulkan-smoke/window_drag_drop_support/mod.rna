@@ -1,0 +1,43 @@
+use std.Result
+
+use runa_app.WindowId
+use runa_app.hidden_window_spec
+use runa_app.window_spec_without_win32_drag_and_drop
+use runa_app_vulkan.VulkanPresentApp
+
+pub fn prove_window_drag_drop_runtime(edit present_app: VulkanPresentApp, window_id: WindowId) -> I32:
+    let owned_window = present_app.window :: :: method
+    select:
+        when owned_window.id != window_id => return 3480
+        when !owned_window.drag_and_drop_enabled :: :: method => return 3481
+        else => ()
+
+    let aux_spec = hidden_window_spec :: "drag drop toggle aux", 64, 64 :: call
+    let aux_spec = window_spec_without_win32_drag_and_drop :: aux_spec :: call
+    select present_app.create_window :: aux_spec :: method:
+        when Result.Ok(aux_window) =>
+            let aux_id = aux_window.id
+            select:
+                when aux_id == window_id => return 3489
+                else => ()
+            let created_ids = present_app.poll_created_window_ids :: :: method
+            select:
+                when created_ids.count :: :: method != 1 => return 3482
+                when created_ids.remove :: 0 :: method != aux_id => return 3483
+                else => ()
+            select:
+                when aux_window.drag_and_drop_enabled :: :: method => return 3490
+                when !aux_window.enable_drag_and_drop :: :: method => return 3492
+                when !aux_window.drag_and_drop_enabled :: :: method => return 3493
+                when !aux_window.disable_drag_and_drop :: :: method => return 3484
+                when aux_window.drag_and_drop_enabled :: :: method => return 3491
+                else => ()
+            select present_app.destroy_auxiliary_window :: aux_window :: method:
+                when Result.Ok(_) =>
+                    let destroyed_ids = present_app.wait_timeout_destroyed_window_ids :: 0.1 :: method
+                    select:
+                        when destroyed_ids.count :: :: method != 1 => return 3485
+                        when destroyed_ids.remove :: 0 :: method != aux_id => return 3486
+                        else => return 0
+                when Result.Err(_) => return 3487
+        when Result.Err(_) => return 3488

@@ -15,7 +15,7 @@ use input.{input_action_from_raw, input_action_raw, touch_phase_from_raw, touch_
 use input.key_from_raw
 use input.{modifiers_from_raw, modifiers_raw}
 use input.mouse_button_from_raw
-use window.{Theme, WindowId, theme_from_raw, theme_raw}
+use window.{Theme, WindowId, WindowSizeLimits, theme_from_raw, theme_raw}
 
 pub const WINDOW_MAILBOX_CAPACITY: Index = 128
 const POINTER_OFFSET_STEP: ISize = 1
@@ -41,16 +41,22 @@ pub(package) struct WindowMailbox:
     pub read_index: CUInt
     pub write_index: CUInt
     pub overflowed: CInt
+    pub drag_drop_enabled: CInt
     pub theme_preference: CInt
     pub window_level_preference: CInt
     pub resize_increment_width: CInt
     pub resize_increment_height: CInt
+    pub size_limit_min_width: CInt
+    pub size_limit_min_height: CInt
+    pub size_limit_max_width: CInt
+    pub size_limit_max_height: CInt
     pub appearance_undecorated_shadow: CInt
     pub appearance_system_backdrop: CInt
     pub appearance_border_color: CUInt
     pub appearance_title_background_color: CUInt
     pub appearance_title_text_color: CUInt
     pub appearance_corner_preference: CInt
+    pub taskbar_icon_handle: *edit CVoid
     pub kinds: [CInt; 128]
     pub as_: [CInt; 128]
     pub bs: [CInt; 128]
@@ -127,6 +133,33 @@ fn mailbox_from_window(window: *edit GlfwWindowRaw) -> *edit WindowMailbox:
             let pointer: *edit WindowMailbox = null
             return pointer
         else => return void_as_mailbox :: user :: call
+
+fn mailbox_window_size_limits(mailbox_ptr: *edit WindowMailbox) -> WindowSizeLimits:
+    select:
+        when mailbox_ptr.is_null :: :: method => return WindowSizeLimits :: :: call
+            min_width = 0 - 1
+            min_height = 0 - 1
+            max_width = 0 - 1
+            max_height = 0 - 1
+        else =>
+            let mailbox: WindowMailbox = #unsafe mailbox_ptr.load :: :: method
+            return WindowSizeLimits :: :: call
+                min_width = mailbox.size_limit_min_width
+                min_height = mailbox.size_limit_min_height
+                max_width = mailbox.size_limit_max_width
+                max_height = mailbox.size_limit_max_height
+
+fn set_mailbox_window_size_limits(mailbox_ptr: *edit WindowMailbox, read limits: WindowSizeLimits) -> Unit:
+    select:
+        when mailbox_ptr.is_null :: :: method => return
+        else =>
+            let mailbox: WindowMailbox = #unsafe mailbox_ptr.load :: :: method
+            mailbox.size_limit_min_width = limits.min_width
+            mailbox.size_limit_min_height = limits.min_height
+            mailbox.size_limit_max_width = limits.max_width
+            mailbox.size_limit_max_height = limits.max_height
+            #unsafe mailbox_ptr.store :: mailbox :: method
+            return
 
 fn mailbox_has_pending_refresh(mailbox_ptr: *edit WindowMailbox) -> Bool:
     select:
@@ -815,6 +848,10 @@ pub(package) fn allocate_window_mailbox() -> Option[*edit WindowMailbox]:
                 else =>
                     let mailbox = void_as_mailbox :: memory :: call
                     let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+                    stored.size_limit_min_width = 0 - 1
+                    stored.size_limit_min_height = 0 - 1
+                    stored.size_limit_max_width = 0 - 1
+                    stored.size_limit_max_height = 0 - 1
                     stored.appearance_border_color = 0xFFFFFFFF
                     stored.appearance_title_background_color = 0xFFFFFFFF
                     stored.appearance_title_text_color = 0xFFFFFFFF
@@ -887,6 +924,18 @@ pub(package) fn attach_callbacks(read window: GlfwWindow, mailbox: *edit WindowM
 pub(package) fn clear_user_pointer(read window: GlfwWindow) -> Unit:
     let user: *edit CVoid = null
     window.set_user_pointer :: user :: method
+    return
+
+pub(package) fn current_window_size_limits(read window: GlfwWindow) -> WindowSizeLimits:
+    let raw_window = glfw_window_raw_handle :: window :: call
+    let mailbox = mailbox_from_window :: raw_window :: call
+    return mailbox_window_size_limits :: mailbox :: call
+
+pub(package) fn set_window_size_limits(read window: GlfwWindow, read limits: WindowSizeLimits) -> Unit:
+    window.set_size_limits :: limits.min_width, limits.min_height, limits.max_width, limits.max_height :: method
+    let raw_window = glfw_window_raw_handle :: window :: call
+    let mailbox = mailbox_from_window :: raw_window :: call
+    set_mailbox_window_size_limits :: mailbox, limits :: call
     return
 
 pub(package) fn request_window_refresh(read window: GlfwWindow) -> Unit:

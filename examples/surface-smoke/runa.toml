@@ -2,7 +2,7 @@
 name = "glfw_surface_smoke"
 version = "2026.0.01"
 edition = "2026"
-lang_version = "2026.0.01"
+lang_version = "2026.0.02"
 
 [dependencies]
 glfw = { path = "../.." }

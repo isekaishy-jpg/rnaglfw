@@ -17,6 +17,18 @@ where Handler: AppHandler
                 select:
                     when flow.exits :: :: method => break
                     else => ()
+                select:
+                    when flow.blocks :: :: method && !app.has_pending_events :: :: method =>
+                        select handler.about_to_wait :: app :: method:
+                            when Result.Ok(next) => flow = next
+                            when Result.Err(err) =>
+                                handler.exiting :: app :: method
+                                app.terminate :: :: method
+                                return Result.Err :: err :: call
+                    else => ()
+                select:
+                    when flow.exits :: :: method => break
+                    else => ()
                 let events = app.events_for :: flow :: method
                 select:
                     when events.is_empty :: :: method =>
@@ -78,6 +90,18 @@ where Handler: AppHandler
                     app.terminate :: :: method
                     return Result.Err :: err :: call
             repeat:
+                select:
+                    when active_flow.exits :: :: method => break
+                    else => ()
+                select:
+                    when active_flow.blocks :: :: method && !app.has_pending_events :: :: method =>
+                        select handler.about_to_wait :: app :: method:
+                            when Result.Ok(next) => active_flow = next
+                            when Result.Err(err) =>
+                                handler.exiting :: app :: method
+                                app.terminate :: :: method
+                                return Result.Err :: err :: call
+                    else => ()
                 select:
                     when active_flow.exits :: :: method => break
                     else => ()
@@ -146,6 +170,18 @@ where Handler: AppHandler
                     app.terminate :: :: method
                     return Result.Err :: err :: call
             repeat:
+                select:
+                    when active_flow.exits :: :: method => break
+                    else => ()
+                select:
+                    when active_flow.blocks :: :: method && !app.has_pending_events :: :: method =>
+                        select handler.about_to_wait :: app :: method:
+                            when Result.Ok(next) => active_flow = next
+                            when Result.Err(err) =>
+                                handler.exiting :: app :: method
+                                app.terminate :: :: method
+                                return Result.Err :: err :: call
+                    else => ()
                 select:
                     when active_flow.exits :: :: method => break
                     else => ()

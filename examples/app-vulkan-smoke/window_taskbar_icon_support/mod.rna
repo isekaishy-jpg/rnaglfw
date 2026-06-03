@@ -1,0 +1,84 @@
+use std.Result
+
+use runa_app.{RgbaColor, RgbaImage, WindowId, Win32HWnd, WindowTaskbarIconError}
+use runa_app.{hidden_window_spec, rgba_color, solid_rgba_image}
+use runa_app.window_spec_with_win32_taskbar_icon
+use runa_app_vulkan.VulkanPresentApp
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn SendMessageW(window: Win32HWnd, message: CUInt, wparam: USize, lparam: ISize) -> ISize
+
+const WM_GETICON: CUInt = 0x007F
+const ICON_BIG: USize = 1USize
+
+fn icon_handle(window: Win32HWnd) -> ISize:
+    return #unsafe SendMessageW :: window, WM_GETICON, ICON_BIG, 0ISize :: call
+
+fn solid_icon(red: U8, green: U8, blue: U8) -> Result[RgbaImage, I32]:
+    let color: RgbaColor = rgba_color :: red, green, blue, 255 :: call
+    select solid_rgba_image :: 16, 16, color :: call:
+        when Result.Ok(image) => return Result.Ok :: image :: call
+        when Result.Err(_) => return Result.Err :: 3450 :: call
+
+pub fn prove_window_taskbar_icon_runtime(edit present_app: VulkanPresentApp, window_id: WindowId) -> I32:
+    let owned_window = present_app.window :: :: method
+    select:
+        when owned_window.id != window_id => return 3451
+        else => ()
+
+    let hwnd = owned_window.hwnd :: :: method
+    let initial_handle = icon_handle :: hwnd :: call
+
+    let Result.Ok(live_icon) = solid_icon :: 24, 72, 144 :: call else => return 3452
+    select present_app.set_taskbar_icon_image :: live_icon :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(error) =>
+            select error:
+                when WindowTaskbarIconError.NativeWindowUnavailable => return 3462
+                when WindowTaskbarIconError.InvalidImage => return 3463
+                when WindowTaskbarIconError.BitmapCreateFailed => return 3464
+                when WindowTaskbarIconError.IconCreateFailed => return 3465
+    let applied_handle = icon_handle :: hwnd :: call
+    select:
+        when applied_handle == 0ISize => return 3454
+        when applied_handle == initial_handle => return 3455
+        else => ()
+
+    select owned_window.clear_taskbar_icon :: :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3456
+    let cleared_handle = icon_handle :: hwnd :: call
+    select:
+        when cleared_handle == applied_handle => return 3457
+        else => ()
+
+    let Result.Ok(aux_icon) = solid_icon :: 200, 80, 40 :: call else => return 3458
+    let aux_spec = hidden_window_spec :: "taskbar icon aux", 64, 64 :: call
+    let aux_spec = window_spec_with_win32_taskbar_icon :: aux_spec, aux_icon :: call
+    select present_app.create_window :: aux_spec :: method:
+        when Result.Ok(aux_window) =>
+            let aux_id = aux_window.id
+            let created_ids = present_app.poll_created_window_ids :: :: method
+            select:
+                when created_ids.count :: :: method != 1 => return 3466
+                when created_ids.remove :: 0 :: method != aux_id => return 3467
+                else => ()
+            let aux_hwnd = aux_window.hwnd :: :: method
+            let aux_handle = icon_handle :: aux_hwnd :: call
+            select:
+                when aux_handle == 0ISize =>
+                    select present_app.destroy_auxiliary_window :: aux_window :: method:
+                        when Result.Ok(_) => ()
+                        when Result.Err(_) => ()
+                    return 3459
+                else => ()
+            select present_app.destroy_auxiliary_window :: aux_window :: method:
+                when Result.Ok(_) =>
+                    let destroyed_ids = present_app.wait_timeout_destroyed_window_ids :: 0.1 :: method
+                    select:
+                        when destroyed_ids.count :: :: method != 1 => return 3468
+                        when destroyed_ids.remove :: 0 :: method != aux_id => return 3469
+                        else => return 0
+                when Result.Err(_) => return 3460
+        when Result.Err(_) => return 3461

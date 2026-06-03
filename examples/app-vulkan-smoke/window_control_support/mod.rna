@@ -1,7 +1,40 @@
-use std.Result
+use std.{Option, Result}
 
-use runa_app.{WindowButtons, WindowId, WindowLevel, all_window_buttons, no_window_buttons}
+use runa_app.{AppError, Win32HMenu, WindowButtons, WindowId, WindowLevel}
+use runa_app.{all_window_buttons, hidden_window_spec, no_window_buttons}
 use runa_app_vulkan.VulkanPresentApp
+
+type HMenu = Win32HMenu
+const GWL_STYLE: CInt = 0 - 16
+const WS_CHILD: ISize = 0x40000000
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn CreateMenu() -> HMenu
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn GetMenu(window: *edit CVoid) -> HMenu
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn SetMenu(window: *edit CVoid, menu: HMenu) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn DestroyMenu(menu: HMenu) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn GetClassNameA(window: *edit CVoid, class_name: *edit CChar, count: CInt) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn GetParent(window: *edit CVoid) -> *edit CVoid
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn GetWindowLongPtrW(window: *edit CVoid, index: CInt) -> ISize
 
 fn buttons_match(read left: WindowButtons, read right: WindowButtons) -> Bool:
     select:
@@ -26,6 +59,36 @@ fn levels_match(read left: WindowLevel, read right: WindowLevel) -> Bool:
                 else => return false
     return false
 
+fn u8_pointer_as_c_char(pointer: *edit U8) -> *edit CChar:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[CChar] :: address :: call
+
+fn style_has_bits(style: ISize, bits: ISize) -> Bool:
+    return (style & bits) == bits
+
+fn class_name_matches(window: *edit CVoid) -> Bool:
+    let buffer: [U8; 32] = [0; 32]
+    let buffer_ptr: *edit U8 = #unsafe &raw edit buffer[0]
+    let class_name_ptr = u8_pointer_as_c_char :: buffer_ptr :: call
+    let count = #unsafe GetClassNameA :: window, class_name_ptr, 32 :: call
+    select:
+        when count != 14 => return false
+        when buffer[0] != 82 => return false
+        when buffer[1] != 117 => return false
+        when buffer[2] != 110 => return false
+        when buffer[3] != 97 => return false
+        when buffer[4] != 67 => return false
+        when buffer[5] != 108 => return false
+        when buffer[6] != 97 => return false
+        when buffer[7] != 115 => return false
+        when buffer[8] != 115 => return false
+        when buffer[9] != 83 => return false
+        when buffer[10] != 109 => return false
+        when buffer[11] != 111 => return false
+        when buffer[12] != 107 => return false
+        when buffer[13] != 101 => return false
+        else => return true
+
 pub fn prove_window_control_runtime(edit present_app: VulkanPresentApp, window_id: WindowId) -> I32:
     let owned_window = present_app.window :: :: method
     select:
@@ -41,8 +104,26 @@ pub fn prove_window_control_runtime(edit present_app: VulkanPresentApp, window_i
     let initial_window_level = present_app.window_level :: :: method
     let Result.Ok(initial_enabled) = present_app.enabled :: :: method else => return 3368
     let Result.Ok(initial_skip_taskbar) = present_app.skip_taskbar :: :: method else => return 3369
+    let Result.Ok(initial_clip_children) = present_app.clip_children :: :: method else => return 3494
     let Result.Ok(initial_buttons) = present_app.enabled_buttons :: :: method else => return 3264
     let Result.Ok(initial_content_protected) = present_app.content_protected :: :: method else => return 3331
+    select present_app.owner_window :: :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3495
+        when Result.Err(_) => return 3496
+    select owned_window.owner_window :: :: method:
+        when Result.Ok(Option.None) => ()
+        when Result.Ok(Option.Some(_)) => return 3497
+        when Result.Err(_) => return 3498
+    select:
+        when initial_clip_children => return 3565
+        else => ()
+    select owned_window.clip_children :: :: method:
+        when Result.Ok(value) =>
+            select:
+                when value => return 3566
+                else => ()
+        when Result.Err(_) => return 3567
 
     select:
         when initial_minimized != initial_iconified => return 3321
@@ -131,6 +212,44 @@ pub fn prove_window_control_runtime(edit present_app: VulkanPresentApp, window_i
                 when value != initial_skip_taskbar => return 3384
                 else => ()
         when Result.Err(_) => return 3385
+
+    let toggled_clip_children = !initial_clip_children
+    select present_app.set_clip_children :: toggled_clip_children :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3496
+    select present_app.clip_children :: :: method:
+        when Result.Ok(value) =>
+            select:
+                when value != toggled_clip_children => return 3497
+                else => ()
+        when Result.Err(_) => return 3498
+    select owned_window.clip_children :: :: method:
+        when Result.Ok(value) =>
+            select:
+                when value != toggled_clip_children => return 3499
+                else => ()
+        when Result.Err(_) => return 3500
+    select owned_window.set_clip_children :: initial_clip_children :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 3501
+    select present_app.clip_children :: :: method:
+        when Result.Ok(value) =>
+            select:
+                when value != initial_clip_children => return 3502
+                else => ()
+        when Result.Err(_) => return 3503
+    select present_app.no_redirection_bitmap :: :: method:
+        when Result.Ok(value) =>
+            select:
+                when value => return 3504
+                else => ()
+        when Result.Err(_) => return 3505
+    select owned_window.no_redirection_bitmap :: :: method:
+        when Result.Ok(value) =>
+            select:
+                when value => return 3506
+                else => ()
+        when Result.Err(_) => return 3507
 
     present_app.set_cursor_hittest :: false :: method
     select:
@@ -248,6 +367,264 @@ pub fn prove_window_control_runtime(edit present_app: VulkanPresentApp, window_i
         when !levels_match :: restored_owned_level, initial_window_level :: call => return 3348
         else => ()
 
+    let aux_spec = hidden_window_spec :: "window control aux", 64, 64 :: call
+    let aux_spec = aux_spec.with_win32_clip_children :: :: method
+    select present_app.create_window :: aux_spec :: method:
+        when Result.Ok(aux_window) =>
+            let aux_id = aux_window.id
+            let created_ids = present_app.poll_created_window_ids :: :: method
+            select:
+                when created_ids.count :: :: method != 1 => return 3512
+                when created_ids.remove :: 0 :: method != aux_id => return 3513
+                else => ()
+            select aux_window.clip_children :: :: method:
+                when Result.Ok(value) =>
+                    select:
+                        when !value => return 3514
+                        else => ()
+                when Result.Err(_) => return 3515
+
+            select present_app.destroy_auxiliary_window :: aux_window :: method:
+                when Result.Ok(_) =>
+                    let destroyed_ids = present_app.wait_timeout_destroyed_window_ids :: 0.1 :: method
+                    select:
+                        when destroyed_ids.count :: :: method != 1 => return 3518
+                        when destroyed_ids.remove :: 0 :: method != aux_id => return 3519
+                        else => ()
+                when Result.Err(_) => return 3520
+        when Result.Err(_) => return 3521
+
+    let owner_spec = hidden_window_spec :: "window owner host", 72, 72 :: call
+    select present_app.create_window :: owner_spec :: method:
+        when Result.Ok(owner_window) =>
+            let owner_id = owner_window.id
+            let owner_created_ids = present_app.poll_created_window_ids :: :: method
+            select:
+                when owner_created_ids.count :: :: method != 1 => return 3522
+                when owner_created_ids.remove :: 0 :: method != owner_id => return 3523
+                else => ()
+            let owner_hwnd = owner_window.hwnd :: :: method
+            select:
+                when owner_hwnd.is_null :: :: method => return 3524
+                else => ()
+            let owned_spec = hidden_window_spec :: "window owner child", 60, 60 :: call
+            let owned_spec = owned_spec.with_win32_owner_window :: owner_hwnd :: method
+            select present_app.create_window :: owned_spec :: method:
+                when Result.Ok(owned_aux_window) =>
+                    let owned_aux_id = owned_aux_window.id
+                    let owned_created_ids = present_app.poll_created_window_ids :: :: method
+                    select:
+                        when owned_created_ids.count :: :: method != 1 => return 3525
+                        when owned_created_ids.remove :: 0 :: method != owned_aux_id => return 3526
+                        else => ()
+                    select owned_aux_window.owner_window :: :: method:
+                        when Result.Ok(Option.Some(value)) =>
+                            select:
+                                when value != owner_hwnd => return 3527
+                                else => ()
+                        when Result.Ok(Option.None) => return 3528
+                        when Result.Err(_) => return 3529
+                    select present_app.destroy_auxiliary_window :: owned_aux_window :: method:
+                        when Result.Ok(_) =>
+                            let owned_destroyed_ids = present_app.wait_timeout_destroyed_window_ids :: 0.1 :: method
+                            select:
+                                when owned_destroyed_ids.count :: :: method != 1 => return 3530
+                                when owned_destroyed_ids.remove :: 0 :: method != owned_aux_id => return 3531
+                                else => ()
+                        when Result.Err(_) => return 3532
+                when Result.Err(_) => return 3533
+            select present_app.destroy_auxiliary_window :: owner_window :: method:
+                when Result.Ok(_) =>
+                    let owner_destroyed_ids = present_app.wait_timeout_destroyed_window_ids :: 0.1 :: method
+                    select:
+                        when owner_destroyed_ids.count :: :: method != 1 => return 3534
+                        when owner_destroyed_ids.remove :: 0 :: method != owner_id => return 3535
+                        else => ()
+                when Result.Err(_) => return 3536
+        when Result.Err(_) => return 3537
+
+    let parent_spec = hidden_window_spec :: "window parent host", 72, 72 :: call
+    select present_app.create_window :: parent_spec :: method:
+        when Result.Ok(parent_window) =>
+            let parent_id = parent_window.id
+            let parent_created_ids = present_app.poll_created_window_ids :: :: method
+            select:
+                when parent_created_ids.count :: :: method != 1 => return 3568
+                when parent_created_ids.remove :: 0 :: method != parent_id => return 3569
+                else => ()
+            let parent_hwnd = parent_window.hwnd :: :: method
+            select:
+                when parent_hwnd.is_null :: :: method => return 3570
+                else => ()
+            let child_spec = hidden_window_spec :: "window parent child", 60, 60 :: call
+            let child_spec = child_spec.with_win32_parent_window :: parent_hwnd :: method
+            select present_app.create_window :: child_spec :: method:
+                when Result.Ok(child_window) =>
+                    let child_id = child_window.id
+                    let child_created_ids = present_app.poll_created_window_ids :: :: method
+                    select:
+                        when child_created_ids.count :: :: method != 1 => return 3571
+                        when child_created_ids.remove :: 0 :: method != child_id => return 3572
+                        else => ()
+                    let child_hwnd = child_window.hwnd :: :: method
+                    select:
+                        when child_hwnd.is_null :: :: method => return 3573
+                        when #unsafe GetParent :: child_hwnd :: call != parent_hwnd => return 3574
+                        else => ()
+                    let child_style = #unsafe GetWindowLongPtrW :: child_hwnd, GWL_STYLE :: call
+                    select:
+                        when !style_has_bits :: child_style, WS_CHILD :: call => return 3575
+                        else => ()
+                    select child_window.owner_window :: :: method:
+                        when Result.Ok(Option.None) => ()
+                        when Result.Ok(Option.Some(_)) => return 3576
+                        when Result.Err(_) => return 3577
+                    select present_app.destroy_auxiliary_window :: child_window :: method:
+                        when Result.Ok(_) =>
+                            let child_destroyed_ids = present_app.wait_timeout_destroyed_window_ids :: 0.1 :: method
+                            select:
+                                when child_destroyed_ids.count :: :: method != 1 => return 3578
+                                when child_destroyed_ids.remove :: 0 :: method != child_id => return 3579
+                                else => ()
+                        when Result.Err(_) => return 3580
+                when Result.Err(_) => return 3581
+
+            let invalid_owner_spec = hidden_window_spec :: "window invalid parent owner", 60, 60 :: call
+            let invalid_owner_spec = invalid_owner_spec.with_win32_parent_window :: parent_hwnd :: method
+            let invalid_owner_spec = invalid_owner_spec.with_win32_owner_window :: parent_hwnd :: method
+            select present_app.create_window :: invalid_owner_spec :: method:
+                when Result.Err(AppError.InvalidWindowSpec) => ()
+                when Result.Err(_) => return 3582
+                when Result.Ok(_) => return 3583
+
+            let invalid_menu = #unsafe CreateMenu :: :: call
+            select:
+                when invalid_menu.is_null :: :: method => return 3584
+                else => ()
+            let invalid_menu_spec = hidden_window_spec :: "window invalid parent menu", 60, 60 :: call
+            let invalid_menu_spec = invalid_menu_spec.with_win32_parent_window :: parent_hwnd :: method
+            let invalid_menu_spec = invalid_menu_spec.with_win32_menu :: invalid_menu :: method
+            select present_app.create_window :: invalid_menu_spec :: method:
+                when Result.Err(AppError.InvalidWindowSpec) => ()
+                when Result.Err(_) =>
+                    let _ = #unsafe DestroyMenu :: invalid_menu :: call
+                    return 3585
+                when Result.Ok(_) =>
+                    let _ = #unsafe DestroyMenu :: invalid_menu :: call
+                    return 3586
+            let destroyed_invalid_menu = #unsafe DestroyMenu :: invalid_menu :: call
+            select:
+                when destroyed_invalid_menu == 0 => return 3587
+                else => ()
+
+            select present_app.destroy_auxiliary_window :: parent_window :: method:
+                when Result.Ok(_) =>
+                    let parent_destroyed_ids = present_app.wait_timeout_destroyed_window_ids :: 0.1 :: method
+                    select:
+                        when parent_destroyed_ids.count :: :: method != 1 => return 3588
+                        when parent_destroyed_ids.remove :: 0 :: method != parent_id => return 3589
+                        else => ()
+                when Result.Err(_) => return 3590
+        when Result.Err(_) => return 3591
+
+    let menu = #unsafe CreateMenu :: :: call
+    select:
+        when menu.is_null :: :: method => return 3538
+        else => ()
+    let menu_spec = hidden_window_spec :: "window menu child", 60, 60 :: call
+    let menu_spec = menu_spec.with_win32_menu :: menu :: method
+    select present_app.create_window :: menu_spec :: method:
+        when Result.Ok(menu_window) =>
+            let menu_id = menu_window.id
+            let menu_created_ids = present_app.poll_created_window_ids :: :: method
+            select:
+                when menu_created_ids.count :: :: method != 1 => return 3539
+                when menu_created_ids.remove :: 0 :: method != menu_id => return 3540
+                else => ()
+            let menu_hwnd = menu_window.hwnd :: :: method
+            select:
+                when menu_hwnd.is_null :: :: method => return 3541
+                else => ()
+            let attached_menu = #unsafe GetMenu :: menu_hwnd :: call
+            select:
+                when attached_menu != menu => return 3542
+                else => ()
+            let cleared = #unsafe SetMenu :: menu_hwnd, null :: call
+            select:
+                when cleared == 0 => return 3543
+                else => ()
+            let destroyed_menu = #unsafe DestroyMenu :: menu :: call
+            select:
+                when destroyed_menu == 0 => return 3544
+                else => ()
+            select present_app.destroy_auxiliary_window :: menu_window :: method:
+                when Result.Ok(_) =>
+                    let menu_destroyed_ids = present_app.wait_timeout_destroyed_window_ids :: 0.1 :: method
+                    select:
+                        when menu_destroyed_ids.count :: :: method != 1 => return 3545
+                        when menu_destroyed_ids.remove :: 0 :: method != menu_id => return 3546
+                        else => ()
+                when Result.Err(_) => return 3547
+        when Result.Err(_) =>
+            let _ = #unsafe DestroyMenu :: menu :: call
+            return 3548
+
+    let class_spec = hidden_window_spec :: "window class child", 60, 60 :: call
+    let class_spec = class_spec.with_win32_class_name :: "RunaClassSmoke" :: method
+    select present_app.create_window :: class_spec :: method:
+        when Result.Ok(class_window) =>
+            let class_id = class_window.id
+            let class_created_ids = present_app.poll_created_window_ids :: :: method
+            select:
+                when class_created_ids.count :: :: method != 1 => return 3549
+                when class_created_ids.remove :: 0 :: method != class_id => return 3550
+                else => ()
+            let class_hwnd = class_window.hwnd :: :: method
+            select:
+                when class_hwnd.is_null :: :: method => return 3551
+                when !class_name_matches :: class_hwnd :: call => return 3552
+                else => ()
+            select present_app.destroy_auxiliary_window :: class_window :: method:
+                when Result.Ok(_) =>
+                    let class_destroyed_ids = present_app.wait_timeout_destroyed_window_ids :: 0.1 :: method
+                    select:
+                        when class_destroyed_ids.count :: :: method != 1 => return 3553
+                        when class_destroyed_ids.remove :: 0 :: method != class_id => return 3554
+                        else => ()
+                when Result.Err(_) => return 3555
+        when Result.Err(_) => return 3556
+
+    let no_redirection_spec = hidden_window_spec :: "window no redirection child", 60, 60 :: call
+    let no_redirection_spec = no_redirection_spec.with_win32_no_redirection_bitmap :: :: method
+    select present_app.create_window :: no_redirection_spec :: method:
+        when Result.Ok(no_redirection_window) =>
+            let no_redirection_id = no_redirection_window.id
+            let no_redirection_created_ids = present_app.poll_created_window_ids :: :: method
+            select:
+                when no_redirection_created_ids.count :: :: method != 1 => return 3557
+                when no_redirection_created_ids.remove :: 0 :: method != no_redirection_id => return 3558
+                else => ()
+            select no_redirection_window.no_redirection_bitmap :: :: method:
+                when Result.Ok(value) =>
+                    select:
+                        when !value => return 3559
+                        else => ()
+                when Result.Err(_) => return 3560
+            select present_app.destroy_auxiliary_window :: no_redirection_window :: method:
+                when Result.Ok(_) =>
+                    let no_redirection_destroyed_ids = present_app.wait_timeout_destroyed_window_ids :: 0.1 :: method
+                    select:
+                        when no_redirection_destroyed_ids.count :: :: method != 1 => return 3561
+                        when no_redirection_destroyed_ids.remove :: 0 :: method != no_redirection_id => return 3562
+                        else => ()
+                when Result.Err(_) => return 3563
+        when Result.Err(_) => return 3564
+
     present_app.set_cursor_hittest :: initial_hittest :: method
 
     return 0
+
+
+
+
+

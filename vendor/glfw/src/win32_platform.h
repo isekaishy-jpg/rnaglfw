@@ -423,8 +423,11 @@ typedef struct _GLFWwindowWin32
     // Whether to enable framebuffer transparency on DWM
     GLFWbool            transparent;
     GLFWbool            scaleToMonitor;
+    HWND                parentWindow;
     GLFWbool            keymenu;
     GLFWbool            showDefault;
+    GLFWbool            noRedirectionBitmap;
+    GLFWbool            clipChildren;
 
     // Cached size used to filter out duplicate events
     int                 width, height;
@@ -434,6 +437,12 @@ typedef struct _GLFWwindowWin32
     // The last received high surrogate when decoding pairs of UTF-16 messages
     WCHAR               highSurrogate;
 } _GLFWwindowWin32;
+
+typedef struct _GLFWwindowClassWin32
+{
+    WCHAR*                          name;
+    struct _GLFWwindowClassWin32*  next;
+} _GLFWwindowClassWin32;
 
 // Win32-specific global data
 //
@@ -460,6 +469,7 @@ typedef struct _GLFWlibraryWin32
     UINT                mouseTrailSize;
     // The cursor handle to use to hide the cursor (NULL or a transparent cursor)
     HCURSOR             blankCursor;
+    _GLFWwindowClassWin32* customWindowClasses;
 
     struct {
         HINSTANCE                       instance;

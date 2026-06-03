@@ -8,70 +8,97 @@ When this guide and the spec disagree, the spec wins.
 
 Start from these current sources, in this order:
 
+- `../RunaLang/spec/README.md`
 - `../RunaLang/spec/llm.md`
-- `../RunaLang/spec/sema/modules-and-visibility.md`
-- `../RunaLang/spec/sema/functions.md`
-- `../RunaLang/spec/sema/types.md`
-- `../RunaLang/spec/sema/type-aliases.md`
-- `../RunaLang/spec/sema/traits-and-impls.md`
-- `../RunaLang/spec/sema/where.md`
-- `../RunaLang/spec/sema/callables.md`
-- `../RunaLang/spec/sema/invocation.md`
-- `../RunaLang/spec/sema/control-flow.md`
-- `../RunaLang/spec/sema/bindings.md`
-- `../RunaLang/spec/sema/patterns.md`
-- `../RunaLang/spec/sema/expressions-and-operators.md`
-- `../RunaLang/spec/sema/value-semantics.md`
-- `../RunaLang/spec/sema/scalars.md`
-- `../RunaLang/spec/sema/char-family.md`
-- `../RunaLang/spec/sema/conversions.md`
-- `../RunaLang/spec/sema/result-and-option.md`
-- `../RunaLang/spec/sema/attributes.md`
-- `../RunaLang/spec/sema/consts.md`
-- `../RunaLang/spec/sema/literals.md`
-- `../RunaLang/spec/sema/collections.md`
-- `../RunaLang/spec/sema/collection-capabilities.md`
-- `../RunaLang/spec/sema/arrays.md`
-- `../RunaLang/spec/sema/tuples.md`
-- `../RunaLang/spec/sema/standard-constructors.md`
-- `../RunaLang/spec/sema/standard-collection-apis.md`
-- `../RunaLang/spec/sema/lifetimes-and-regions.md`
-- `../RunaLang/spec/sema/memory-core.md`
-- `../RunaLang/spec/sema/memory-capabilities.md`
-- `../RunaLang/spec/sema/allocator-families.md`
-- `../RunaLang/spec/sema/allocator-strategies.md`
-- `../RunaLang/spec/sema/raw-pointers.md`
-- `../RunaLang/spec/sema/text-and-bytes.md`
-- `../RunaLang/spec/sema/async-and-concurrency.md`
-- `../RunaLang/spec/sema/send.md`
-- `../RunaLang/spec/sema/defer.md`
-- `../RunaLang/spec/sema/handles.md`
-- `../RunaLang/spec/sema/reflection.md`
-- `../RunaLang/spec/sema/observability.md`
-- `../RunaLang/spec/sema/domain-state-roots.md`
-- `../RunaLang/spec/sema/domain-state-surface.md`
-- `../RunaLang/spec/sema/unsafe.md`
-- `../RunaLang/spec/backend/c-abi.md`
-- `../RunaLang/spec/backend/layout-and-repr.md`
-- `../RunaLang/spec/backend/dynamic-libraries.md`
-- `../RunaLang/spec/backend/boundary-kinds.md`
-- `../RunaLang/spec/backend/boundary-contracts.md`
-- `../RunaLang/spec/toolchain/manifest-and-products.md`
-- `../RunaLang/spec/toolchain/packages-and-build.md`
-- `../RunaLang/spec/toolchain/check-and-test.md`
-- `../RunaLang/spec/toolchain/build.md`
-- `../RunaLang/spec/toolchain/package-commands.md`
-- `../RunaLang/std/prelude/mod.rna`
-- `../RunaLang/std/collections/mod.rna`
-- `../RunaLang/std/text/mod.rna`
-- `../RunaLang/std/view/mod.rna`
-- `../RunaLang/std/memory/mod.rna`
-- `../RunaLang/std/iter/mod.rna`
-- `../RunaLang/std/range/mod.rna`
-- `../RunaLang/std/task/mod.rna`
-- `../RunaLang/std/dylib/mod.rna`
-- `../RunaLang/std/reflect/mod.rna`
-- `../RunaLang/std/observe/mod.rna`
+- the owning spec file under `../RunaLang/spec/sema/`,
+  `../RunaLang/spec/backend/`, `../RunaLang/spec/frontend/`,
+  `../RunaLang/spec/support/`, and `../RunaLang/spec/toolchain/`
+- common owning files for this repo:
+  - `../RunaLang/spec/sema/modules-and-visibility.md`
+  - `../RunaLang/spec/sema/functions.md`
+  - `../RunaLang/spec/sema/types.md`
+  - `../RunaLang/spec/sema/type-aliases.md`
+  - `../RunaLang/spec/sema/traits-and-impls.md`
+  - `../RunaLang/spec/sema/where.md`
+  - `../RunaLang/spec/sema/callables.md`
+  - `../RunaLang/spec/sema/invocation.md`
+  - `../RunaLang/spec/sema/control-flow.md`
+  - `../RunaLang/spec/sema/bindings.md`
+  - `../RunaLang/spec/sema/patterns.md`
+  - `../RunaLang/spec/sema/expressions-and-operators.md`
+  - `../RunaLang/spec/sema/value-semantics.md`
+  - `../RunaLang/spec/sema/ownership-model.md`
+  - `../RunaLang/spec/sema/equality-and-hashing.md`
+  - `../RunaLang/spec/sema/scalars.md`
+  - `../RunaLang/spec/sema/char-family.md`
+  - `../RunaLang/spec/sema/conversions.md`
+  - `../RunaLang/spec/sema/result-and-option.md`
+  - `../RunaLang/spec/sema/attributes.md`
+  - `../RunaLang/spec/sema/consts.md`
+  - `../RunaLang/spec/sema/literals.md`
+  - `../RunaLang/spec/sema/collections.md`
+  - `../RunaLang/spec/sema/collection-capabilities.md`
+  - `../RunaLang/spec/sema/arrays.md`
+  - `../RunaLang/spec/sema/tuples.md`
+  - `../RunaLang/spec/sema/standard-constructors.md`
+  - `../RunaLang/spec/sema/standard-collection-apis.md`
+  - `../RunaLang/spec/sema/lifetimes-and-regions.md`
+  - `../RunaLang/spec/sema/memory-core.md`
+  - `../RunaLang/spec/sema/memory-capabilities.md`
+  - `../RunaLang/spec/sema/allocator-families.md`
+  - `../RunaLang/spec/sema/allocator-strategies.md`
+  - `../RunaLang/spec/sema/raw-pointers.md`
+  - `../RunaLang/spec/sema/text-and-bytes.md`
+  - `../RunaLang/spec/sema/async-and-concurrency.md`
+  - `../RunaLang/spec/sema/send.md`
+  - `../RunaLang/spec/sema/defer.md`
+  - `../RunaLang/spec/sema/handles.md`
+  - `../RunaLang/spec/sema/reflection.md`
+  - `../RunaLang/spec/sema/observability.md`
+  - `../RunaLang/spec/sema/domain-state-roots.md`
+  - `../RunaLang/spec/sema/domain-state-surface.md`
+  - `../RunaLang/spec/sema/time.md`
+  - `../RunaLang/spec/sema/timeline.md`
+  - `../RunaLang/spec/sema/unsafe.md`
+  - `../RunaLang/spec/backend/c-abi.md`
+  - `../RunaLang/spec/backend/layout-and-repr.md`
+  - `../RunaLang/spec/backend/dynamic-libraries.md`
+  - `../RunaLang/spec/backend/c-translation-and-discovery.md`
+  - `../RunaLang/spec/backend/boundary-kinds.md`
+  - `../RunaLang/spec/backend/boundary-contracts.md`
+  - `../RunaLang/spec/backend/boundary-transports.md`
+  - `../RunaLang/spec/backend/boundary-runtime-surface.md`
+  - `../RunaLang/spec/toolchain/cli-and-driver.md`
+  - `../RunaLang/spec/toolchain/manifest-and-products.md`
+  - `../RunaLang/spec/toolchain/product-kinds.md`
+  - `../RunaLang/spec/toolchain/packages-and-build.md`
+  - `../RunaLang/spec/toolchain/dependency-resolution.md`
+  - `../RunaLang/spec/toolchain/check-and-test.md`
+  - `../RunaLang/spec/toolchain/build.md`
+  - `../RunaLang/spec/toolchain/formatting.md`
+  - `../RunaLang/spec/toolchain/doc.md`
+  - `../RunaLang/spec/toolchain/review-and-repair.md`
+  - `../RunaLang/spec/toolchain/package-commands.md`
+  - `../RunaLang/spec/toolchain/std-architecture.md`
+  - `../RunaLang/spec/toolchain/repo-structure.md`
+- current bundled `std` root and public module facades:
+  - `../RunaLang/std/root.rna`
+  - `../RunaLang/std/prelude/mod.rna`
+  - `../RunaLang/std/domain/mod.rna`
+  - `../RunaLang/std/timeline/mod.rna`
+  - `../RunaLang/std/time/mod.rna`
+  - `../RunaLang/std/collections/mod.rna`
+  - `../RunaLang/std/text/mod.rna`
+  - `../RunaLang/std/view/mod.rna`
+  - `../RunaLang/std/memory/mod.rna`
+  - `../RunaLang/std/iter/mod.rna`
+  - `../RunaLang/std/range/mod.rna`
+  - `../RunaLang/std/task/mod.rna`
+  - `../RunaLang/std/dylib/mod.rna`
+  - `../RunaLang/std/reflect/mod.rna`
+  - `../RunaLang/std/observe/mod.rna`
+- current scaffold-gap note:
+  - `../RunaLang/docs/spec-scaffold-gaps.md`
 
 Use the repo-local compiler, not the PATH launcher:
 
@@ -190,17 +217,26 @@ Rules:
 - Wildcard imports are not part of v1.
 - `std` is always importable, but never ambient.
 - `use std.prelude` is the sanctioned bulk facade import.
-- There is no flat `std/mod.rna` root file to rely on.
+- There is no flat `std/mod.rna` root file to rely on; the bundled root surface
+  lives in `std/root.rna`.
 - Bundled `std` is compiler-provided and not declared in user manifests.
 - The compiler may lazily load only referenced `std` modules.
 
 Current useful bundled facades:
 
-- `std.prelude` reexports `Eq`, `Hash`, `Option`, `Result`, `Iterator`,
-  `Iterable`, `IndexRange`, `IndexSpan`, `View`, `Contiguous`, `Str`, `Bytes`,
-  `ByteBuffer`, `MaybeStr`, `CStr`, `Utf16`, `Utf16Buffer`, `List`, `Map`,
-  task helpers, dynamic library helpers, and observe helpers.
+- `std` root reexports the shallow common surface: `Clone`, `Eq`, `Hash`,
+  `Option`, `Result`, `ConvertError`, `Iterator`, `Iterable`, `IndexRange`,
+  `IndexSpan`, `View`, `Contiguous`, `Str`, `Bytes`, `ByteBuffer`, `MaybeStr`,
+  `CStr`, `Utf16`, `Utf16Buffer`, `List`, and `Map`.
+- `std.prelude` reexports `Clone`, `Eq`, `Hash`, `Option`, `Result`,
+  `Iterator`, `Iterable`, `IndexRange`, `IndexSpan`, `View`, `Contiguous`,
+  `Str`, `Bytes`, `ByteBuffer`, `MaybeStr`, `CStr`, `Utf16`, `Utf16Buffer`,
+  `List`, `Map`, task helpers, task schedule types, dynamic-library helpers,
+  and observe helpers.
 - Specific modules still matter:
+  - `std.domain`
+  - `std.timeline`
+  - `std.time`
   - `std.text`
   - `std.collections`
   - `std.view`
@@ -591,10 +627,16 @@ Rules:
 - Use `select:` for guarded branching.
 - Use `select value:` for subject-pattern branching.
 - `select value:` arms may attach one `where` guard.
+- Use `select either:` for linear staged refutable sequencing.
+- `select either:` is statement-only in v1.
+- Staged `select either:` steps use `when label: Pattern <- expr`.
+- Routed mismatch handling uses `with Pattern:` blocks keyed by staged labels.
 - Use `repeat:` for infinite loops.
 - Use `repeat while cond:` for conditional loops.
 - Use `repeat pattern in items:` for iteration.
 - Use `let-else` for refutable local extraction.
+- Use `let pattern <- expr else mismatch => body` when the mismatch value
+  matters.
 - Expression-form `select` requires `else`.
 - There is no `if`, `match`, `while`, `for`, or `loop` surface in v1.
 
@@ -610,6 +652,15 @@ select event:
     when Event.Resize(width = w, height = h) => resize :: w, h :: call
 
 let Result.Ok(title_c) = title as Maybe[MaybeStr] else => return Result.Err :: InitError.EmbeddedNul :: call
+
+select either:
+    when title_c: Result.Ok(title_c) <- title as Maybe[MaybeStr]
+    when window: Result.Ok(window) <- open_window :: title_c :: call =>
+        return Result.Ok :: window :: call
+
+with Result.Err(err):
+    title_c => return Result.Err :: InitError.Title :: err :: call
+    window => return Result.Err :: InitError.Window :: err :: call
 
 repeat while running:
     tick :: state :: call
@@ -649,6 +700,9 @@ Builtin comparisons are guaranteed for:
 - `Char`
 - `Index`
 - `IndexRange`
+- `std.time.Duration`
+- `std.time.Instant`
+- `std.time.SystemTime`
 - same-type numeric C ABI aliases
 - `Bool`
 - `Unit`
@@ -722,7 +776,8 @@ Current conversion surface:
 - `value as T` for explicit infallible conversion
 - `value as Maybe[T]` for explicit checked conversion
 
-Checked conversion returns `Result[T, ConvertError]`.
+`value as Maybe[T]` is the checked-conversion syntax marker, not a runtime
+`Maybe[T]` result shape. Checked conversion returns `Result[T, ConvertError]`.
 
 Important conversion rules:
 
@@ -743,15 +798,21 @@ Important text rules:
 
 - `Str` is valid UTF-8 text.
 - `MaybeStr` is valid UTF-8 text with one stable trailing NUL byte.
+- `MaybeStr.byte_count()` and `MaybeStr.utf8_view()` exclude the trailing NUL.
+- `MaybeStr.as_ptr()` is stable for the retained read-borrow lifetime.
 - `CStr['a]` is a borrowed UTF-8 view over a foreign NUL-terminated string.
+- `#unsafe decode_c_string(...)` requires the caller to prove non-null,
+  readable, NUL-terminated storage that stays valid for the chosen borrow
+  lifetime.
 - Text and byte APIs fail loudly on invalid boundaries or invalid decoding.
 
 Current useful text APIs:
 
 - `decode_utf8(read bytes: Bytes) -> Result[Str, Utf8Error]`
-- `decode_c_string['a](ptr: *read CChar) -> Result[CStr['a], Utf8Error]`
+- `#unsafe decode_c_string['a](ptr: *read CChar) -> Result[CStr['a], Utf8Error]`
 - `MaybeStr.as_ptr() -> *read CChar`
 - `MaybeStr.to_str() -> Str`
+- `MaybeStr.utf8_view() -> hold['a] read View[U8, Contiguous]`
 - `Str.copy_utf8() -> Bytes`
 - `Str.encode_utf16() -> Utf16Buffer`
 
@@ -906,6 +967,10 @@ Rules:
 - Runtime reflection entry roots are:
   - `std.reflect.current_package()`
   - `Mirror[...]` for direct reflected declaration acquisition
+    using `Mirror[fn path]`, `Mirror[const path]`, `Mirror[struct path]`,
+    `Mirror[enum path]`, or `Mirror[opaque type path]`
+  - `Mirror[...]` accepts only compile-time-known exported `#reflect`
+    declaration subjects, not runtime strings or computed paths
 
 Useful `std.reflect` families:
 
@@ -917,6 +982,9 @@ Useful `std.reflect` families:
 - `StructMetadata`
 - `EnumMetadata`
 - `OpaqueTypeMetadata`
+- `ParameterMetadata`
+- `FieldMetadata`
+- `VariantMetadata`
 - `TypeShape`
 
 Observability is explicit under `std.observe`.
@@ -931,6 +999,10 @@ Useful `std.observe` families:
 - `Event`
 - `SpanGuard`
 - `TraceSnapshot`
+- `ObserveSink`
+- `Subscriber`
+- `SubscriberHandle`
+- `StderrSink`
 - `FormattingSubscriber`
 - `TracerOps`
 
@@ -939,6 +1011,7 @@ Rules:
 - Observability is library-owned, not ambient default printing.
 - Structured fields are preserved and ordered.
 - Event and span data are typed surfaces, not just flattened strings.
+- `SpanGuard` is execution-lane-local active state and is not `Send` in v1.
 
 ## C ABI, Raw Pointers, And Dynamic Libraries
 
@@ -1098,6 +1171,9 @@ Current core commands:
 - `runa test`
 - `runa fmt`
 - `runa trace`
+- `runa doc`
+- `runa review`
+- `runa repair`
 - `runa new`
 - `runa add`
 - `runa remove`
@@ -1137,8 +1213,8 @@ Practical rules:
 - Then validate the nearest example package that proves the new surface.
 - If a file is drifting toward the hard 3000-line limit, split it before
   adding more surface.
-- If `build` fails after `check` passes, verify whether it is an already
-  recorded compiler issue before rewriting package code around it.
+- If `build` fails after `check` passes, treat that as a real failure to
+  investigate, not a reason to preserve workaround code blindly.
 
 ## Repo Working Rule
 

@@ -58,7 +58,7 @@ use window.{opengl_srgb_window_spec, opengl_window_spec, positioned_window_spec}
 use window.{transparent_window_spec, undecorated_window_spec, unfocused_window_spec}
 use window.{win32_keyboard_menu_window_spec, win32_showdefault_window_spec}
 use window.window_from_glfw
-const JOYSTICK_SLOT_LIMIT: CInt = 16
+pub(package) const JOYSTICK_SLOT_LIMIT: CInt = 16
 const WINDOW_ID_START: WindowId = 1
 const MONITOR_ID_START: MonitorId = 1
 const WINDOW_ID_STEP: WindowId = 1
@@ -525,12 +525,22 @@ impl AppSnapshot:
             scan = scan + 1
         return Option.None
     fn gamepad_index(read self, id: JoystickId) -> Option[Index]:
-        select self.joystick_index :: id :: method:
-            when Option.Some(index) =>
-                select:
-                    when self.joysticks[index].gamepad => return Option.Some :: index :: call
-                    else => return Option.None
-            when Option.None => return Option.None
+        let gamepad_index: CInt = 0
+        let count = self.joysticks.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return Option.None
+            select:
+                when self.joysticks[index].gamepad =>
+                    select:
+                        when self.joysticks[index].joystick.id == id =>
+                            let Result.Ok(result) = cint_to_index :: gamepad_index :: call else => return Option.None
+                            return Option.Some :: result :: call
+                        else => gamepad_index = gamepad_index + 1
+                else => ()
+            scan = scan + 1
+        return Option.None
     fn has_window(read self, id: WindowId) -> Bool:
         select self.window_index :: id :: method:
             when Option.Some(_) => return true
@@ -544,8 +554,8 @@ impl AppSnapshot:
             when Option.Some(_) => return true
             when Option.None => return false
     fn has_gamepad(read self, id: JoystickId) -> Bool:
-        select self.gamepad_index :: id :: method:
-            when Option.Some(_) => return true
+        select self.joystick_index :: id :: method:
+            when Option.Some(index) => return self.joysticks[index].gamepad
             when Option.None => return false
     fn gamepad_count(read self) -> Index:
         let total: CInt = 0
@@ -561,7 +571,16 @@ impl AppSnapshot:
         let Result.Ok(result) = cint_to_index :: total :: call else => return 0
         return result
     fn has_gamepads(read self) -> Bool:
-        return self.gamepad_count :: :: method != 0
+        let count = self.joysticks.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return false
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return false
+            select:
+                when self.joysticks[index].gamepad => return true
+                else => ()
+            scan = scan + 1
+        return false
     fn gamepad_ids(read self) -> List[JoystickId]:
         let ids = List[JoystickId] :: :: call
         let count = self.joysticks.count :: :: method
@@ -588,7 +607,16 @@ impl AppSnapshot:
         let Result.Ok(result) = cint_to_index :: total :: call else => return 0
         return result
     fn has_close_requested_windows(read self) -> Bool:
-        return self.close_requested_window_count :: :: method != 0
+        let count = self.windows.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return false
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return false
+            select:
+                when self.windows[index].should_close => return true
+                else => ()
+            scan = scan + 1
+        return false
     fn close_requested_window_ids(read self) -> List[WindowId]:
         let ids = List[WindowId] :: :: call
         let count = self.windows.count :: :: method
@@ -877,9 +905,10 @@ fn drain_pending_events(edit pending: List[AppEvent]) -> List[AppEvent]:
     let events = List[AppEvent] :: :: call
     repeat:
         select pending_pop_front :: pending :: call:
-            when Option.Some(event) => events.push :: event :: method
-            when Option.None => break
-    return events
+            when Option.Some(event) =>
+                events.push :: event :: method
+                continue
+            else => return events
 fn snapshot_optional_text(present: Bool, text: Result[Str, TextDecodeError]) -> Result[Option[Str], TextDecodeError]:
     select:
         when !present => return Result.Ok :: Option.None :: call
@@ -927,11 +956,10 @@ fn clipboard_anchor_window(read app: App) -> Option[Window]:
     select app.current_context_window :: :: method:
         when Result.Ok(window) => return Option.Some :: window :: call
         when Result.Err(_) => ()
-    let windows = app.windows_snapshot :: :: method
     select:
-        when windows.is_empty :: :: method => return Option.None
+        when app.windows.is_empty :: :: method => return Option.None
         else =>
-            let window = windows.remove :: 0 :: method
+            let window = live_window_from_record :: app.windows[0] :: call
             return Option.Some :: window :: call
 pub(package) fn joystick_snapshot_from_id(id: JoystickId) -> JoystickSnapshot:
     let joystick = joystick_from_id :: id :: call
@@ -999,6 +1027,117 @@ fn live_window_from_record(read record: WindowRecord) -> Window:
 fn live_window_from_raw_handle(raw_handle: *edit GlfwWindowRaw, id: WindowId) -> Window:
     let raw_window = GlfwWindow :: raw_handle :: call
     return Window :: raw_window, id :: call
+fn live_window_snapshot_from_window(read window: Window, should_close: Bool) -> WindowSnapshot:
+    let title = window.title :: :: method
+    let input = window.input_snapshot :: :: method
+    let hwnd = window.hwnd :: :: method
+    let frame_size = window.frame_size :: :: method
+    let client_api = window.client_api :: :: method
+    let opengl_profile = window.opengl_profile :: :: method
+    let context_creation_api = window.context_creation_api :: :: method
+    let context_version_major = window.context_version_major :: :: method
+    let context_version_minor = window.context_version_minor :: :: method
+    let current_context = window.current_context :: :: method
+    let opengl_forward_compat = window.opengl_forward_compat :: :: method
+    let opengl_debug_context = window.opengl_debug_context :: :: method
+    let context_no_error = window.context_no_error :: :: method
+    let srgb_capable = window.srgb_capable :: :: method
+    let doublebuffered = window.doublebuffered :: :: method
+    let opacity = window.opacity :: :: method
+    let cursor_mode = window.cursor_mode :: :: method
+    let sticky_keys_enabled = window.sticky_keys_enabled :: :: method
+    let sticky_mouse_buttons_enabled = window.sticky_mouse_buttons_enabled :: :: method
+    let lock_key_mods_enabled = window.lock_key_mods_enabled :: :: method
+    let raw_mouse_motion_enabled = window.raw_mouse_motion_enabled :: :: method
+    let visible = window.visible :: :: method
+    let resizable = window.resizable :: :: method
+    let decorated = window.decorated :: :: method
+    let auto_iconify = window.auto_iconify :: :: method
+    let focus_on_show = window.focus_on_show :: :: method
+    let mouse_passthrough = window.mouse_passthrough :: :: method
+    let hovered = window.hovered :: :: method
+    let floating = window.floating :: :: method
+    let fullscreen = window.fullscreen :: :: method
+    return WindowSnapshot :: :: call
+        window = window
+        title = title
+        input = input
+        hwnd = hwnd
+        should_close = should_close
+        pos = window.pos :: :: method
+        size = window.size :: :: method
+        frame_size = frame_size
+        framebuffer_size = window.framebuffer_size :: :: method
+        content_scale = window.content_scale :: :: method
+        focused = window.focused :: :: method
+        iconified = window.iconified :: :: method
+        maximized = window.maximized :: :: method
+        cursor_pos = window.cursor_pos :: :: method
+        client_api = client_api
+        opengl_profile = opengl_profile
+        context_creation_api = context_creation_api
+        context_version_major = context_version_major
+        context_version_minor = context_version_minor
+        current_context = current_context
+        opengl_forward_compat = opengl_forward_compat
+        opengl_debug_context = opengl_debug_context
+        context_no_error = context_no_error
+        srgb_capable = srgb_capable
+        doublebuffered = doublebuffered
+        opacity = opacity
+        cursor_mode = cursor_mode
+        sticky_keys_enabled = sticky_keys_enabled
+        sticky_mouse_buttons_enabled = sticky_mouse_buttons_enabled
+        lock_key_mods_enabled = lock_key_mods_enabled
+        raw_mouse_motion_enabled = raw_mouse_motion_enabled
+        visible = visible
+        resizable = resizable
+        decorated = decorated
+        auto_iconify = auto_iconify
+        focus_on_show = focus_on_show
+        mouse_passthrough = mouse_passthrough
+        hovered = hovered
+        floating = floating
+        fullscreen = fullscreen
+fn close_requested_window_count_from_records(read app: App) -> Index:
+    let total: CInt = 0
+    let count = app.windows.count :: :: method
+    let Result.Ok(limit) = index_to_cint :: count :: call else => return 0
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = cint_to_index :: scan :: call else => return 0
+        select:
+            when app.windows[index].should_close => total = total + 1
+            else => ()
+        scan = scan + 1
+    let Result.Ok(result) = total as Maybe[Index] else => return 0
+    return result
+fn close_requested_window_ids_from_records(read app: App) -> List[WindowId]:
+    let ids = List[WindowId] :: :: call
+    let count = app.windows.count :: :: method
+    let Result.Ok(limit) = index_to_cint :: count :: call else => return ids
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = cint_to_index :: scan :: call else => return ids
+        select:
+            when app.windows[index].should_close => ids.push :: app.windows[index].window.id :: method
+            else => ()
+        scan = scan + 1
+    return ids
+fn close_requested_windows_from_records(read app: App) -> List[Window]:
+    let windows = List[Window] :: :: call
+    let count = app.windows.count :: :: method
+    let Result.Ok(limit) = index_to_cint :: count :: call else => return windows
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = cint_to_index :: scan :: call else => return windows
+        select:
+            when app.windows[index].should_close =>
+                let window = live_window_from_record :: app.windows[index] :: call
+                windows.push :: window :: method
+            else => ()
+        scan = scan + 1
+    return windows
 fn copy_point(read point: Point) -> Point:
     return GlfwPoint :: point.x, point.y :: call
 fn copy_size(read size: Size) -> Size:
@@ -1267,7 +1406,7 @@ fn next_monitor_id(edit app: App) -> MonitorId:
     let id = app.next_monitor_id
     app.next_monitor_id = app.next_monitor_id + MONITOR_ID_STEP
     return id
-fn find_window_index(read app: App, id: WindowId) -> Option[Index]:
+pub(package) fn find_window_index(read app: App, id: WindowId) -> Option[Index]:
     let count = app.windows.count :: :: method
     let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
     let scan: CInt = 0
@@ -1288,7 +1427,7 @@ fn find_monitor_index(read app: App, take monitor: Monitor) -> Option[Index]:
             when app.monitors[index].raw == target_raw => return Option.Some :: index :: call
             else => scan = scan + 1
     return Option.None
-fn find_monitor_record_index(read app: App, id: MonitorId) -> Option[Index]:
+pub(package) fn find_monitor_record_index(read app: App, id: MonitorId) -> Option[Index]:
     let count = app.monitors.count :: :: method
     let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
     let scan: CInt = 0
@@ -1299,15 +1438,29 @@ fn find_monitor_record_index(read app: App, id: MonitorId) -> Option[Index]:
             else => scan = scan + 1
     return Option.None
 fn joystick_presence_bit(jid: JoystickId) -> CUInt:
-    let bit: CUInt = 1
-    let scan: CInt = 0
-    repeat while scan < jid:
-        bit = bit * 2
-        scan = scan + 1
-    return bit
-fn joystick_present_in_bits(bits: CUInt, jid: JoystickId) -> Bool:
+    select jid:
+        when 0 => return 1
+        when 1 => return 2
+        when 2 => return 4
+        when 3 => return 8
+        when 4 => return 16
+        when 5 => return 32
+        when 6 => return 64
+        when 7 => return 128
+        when 8 => return 256
+        when 9 => return 512
+        when 10 => return 1024
+        when 11 => return 2048
+        when 12 => return 4096
+        when 13 => return 8192
+        when 14 => return 16384
+        when 15 => return 32768
+        else => return 0
+pub(package) fn joystick_present_in_bits(bits: CUInt, jid: JoystickId) -> Bool:
     let bit = joystick_presence_bit :: jid :: call
     return (bits & bit) != 0
+pub(package) fn joystick_id_in_range(jid: JoystickId) -> Bool:
+    return jid >= 0 && jid < JOYSTICK_SLOT_LIMIT
 fn joystick_presence_state() -> JoystickPresenceState:
     return JoystickPresenceState :: :: call
         bits = 0
@@ -1329,13 +1482,12 @@ impl JoystickPresenceState:
 fn collect_joystick_bits(previous_bits: CUInt, emit_events: Bool, edit pending: List[AppEvent]) -> CUInt:
     let next_bits: CUInt = 0
     let jid: CInt = 0
+    let bitmask: CUInt = 1
     repeat while jid < JOYSTICK_SLOT_LIMIT:
         let present = glfw_joystick_present :: jid :: call
-        let was_present = joystick_present_in_bits :: previous_bits, jid :: call
+        let was_present = (previous_bits & bitmask) != 0
         select:
-            when present =>
-                let bit = joystick_presence_bit :: jid :: call
-                next_bits = next_bits | bit
+            when present => next_bits = next_bits | bitmask
             else => ()
         select:
             when emit_events && present && !was_present =>
@@ -1349,6 +1501,7 @@ fn collect_joystick_bits(previous_bits: CUInt, emit_events: Bool, edit pending: 
                     id = jid
                 push_joystick_event :: pending, event :: call
             else => ()
+        bitmask = bitmask + bitmask
         jid = jid + 1
     return next_bits
 fn collect_window_events(edit app: App) -> Unit:
@@ -1436,6 +1589,59 @@ fn find_monitor_index_in_list(read records: List[MonitorRecord], take monitor: M
             when records[index].raw == target_raw => return Option.Some :: index :: call
             else => scan = scan + 1
     return Option.None
+fn live_monitor_snapshot_from_record(read record: MonitorRecord) -> MonitorSnapshot:
+    let monitor = GlfwMonitor :: record.raw :: call
+    let name_text = monitor.name_text :: :: method
+    let win32_names = monitor.win32_names :: :: method
+    let available = monitor.available :: :: method
+    let primary = monitor.primary :: :: method
+    let screen_pos = monitor.screen_pos :: :: method
+    let work_rect = monitor.work_rect :: :: method
+    let physical_size_mm = monitor.physical_size_mm :: :: method
+    let desktop_scale = monitor.desktop_scale :: :: method
+    let current_video_mode = monitor.current_video_mode :: :: method
+    let video_mode_count = monitor.video_mode_count :: :: method
+    let video_modes = monitor.video_modes_snapshot :: :: method
+    let gamma_ramp = monitor.gamma_ramp_snapshot :: :: method
+    return MonitorSnapshot :: :: call
+        id = record.id
+        monitor = monitor
+        name_text = name_text
+        win32_names = win32_names
+        available = available
+        primary = primary
+        screen_pos = screen_pos
+        work_rect = work_rect
+        physical_size_mm = physical_size_mm
+        desktop_scale = desktop_scale
+        current_video_mode = current_video_mode
+        video_mode_count = video_mode_count
+        video_modes = video_modes
+        gamma_ramp = gamma_ramp
+pub(package) fn find_primary_monitor_record_index(read app: App) -> Result[Index, AppError]:
+    let primary = glfw_primary_monitor :: :: call
+    select:
+        when primary.is_null :: :: method => return Result.Err :: AppError.PrimaryMonitorUnavailable :: call
+        else => ()
+    let Option.Some(index) = find_monitor_index_in_list :: app.monitors, primary :: call else => return Result.Err :: AppError.MonitorNotFound :: call
+    return Result.Ok :: index :: call
+pub(package) fn find_current_context_window_record_index(read app: App) -> Result[Index, AppError]:
+    let current = glfw_get_current_context :: :: call
+    select:
+        when current.is_null :: :: method => return Result.Err :: AppError.NoCurrentContext :: call
+        else => ()
+    let current_raw = current.raw_handle :: :: method
+    let count = app.windows.count :: :: method
+    let Result.Ok(limit) = index_to_cint :: count :: call else => return Result.Err :: AppError.CurrentContextWindowNotTracked :: call
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = cint_to_index :: scan :: call else => return Result.Err :: AppError.CurrentContextWindowNotTracked :: call
+        let raw_handle = glfw_window_raw_handle :: app.windows[index].window.raw :: call
+        select:
+            when raw_handle == current_raw => return Result.Ok :: index :: call
+            else => ()
+        scan = scan + 1
+    return Result.Err :: AppError.CurrentContextWindowNotTracked :: call
 fn apply_app_init_config(config: AppInitConfig) -> Unit:
     select config.joystick_hat_buttons:
         when BoolOverride.Enabled => glfw_init_hint_bool :: 0x00050001, true :: call
@@ -1510,98 +1716,171 @@ impl App:
         let _ = self
         return joystick_snapshot_from_id :: id :: call
     fn gamepad(read self, id: JoystickId) -> Option[Joystick]:
-        let joystick = self.joystick :: id :: method
         select:
-            when joystick.present :: :: method && joystick.gamepad :: :: method =>
+            when self.has_joystick :: id :: method && glfw_joystick_is_gamepad :: id :: call =>
+                let joystick = joystick_from_id :: id :: call
                 return Option.Some :: joystick :: call
             else => return Option.None
     fn gamepad_snapshot(read self, id: JoystickId) -> Option[JoystickSnapshot]:
-        let snapshot = self.joystick_snapshot :: id :: method
         select:
-            when snapshot.present && snapshot.gamepad =>
+            when self.has_joystick :: id :: method && glfw_joystick_is_gamepad :: id :: call =>
+                let snapshot = joystick_snapshot_from_id :: id :: call
                 return Option.Some :: snapshot :: call
             else => return Option.None
     fn gamepad_index(read self, id: JoystickId) -> Option[Index]:
-        let ids = self.gamepad_ids :: :: method
-        let count = ids.count :: :: method
-        let Result.Ok(limit) = index_to_cint :: count :: call else => return Option.None
-        let scan: CInt = 0
-        repeat while scan < limit:
-            let Result.Ok(index) = cint_to_index :: scan :: call else => return Option.None
+        let bits = self.joystick_state.bits_value :: :: method
+        let gamepad_index: CInt = 0
+        let jid: CInt = 0
+        let bitmask: CUInt = 1
+        repeat while jid < JOYSTICK_SLOT_LIMIT:
             select:
-                when ids[index] == id => return Option.Some :: index :: call
+                when (bits & bitmask) != 0 =>
+                    select:
+                        when glfw_joystick_is_gamepad :: jid :: call =>
+                            select:
+                                when jid == id =>
+                                    let Result.Ok(index) = cint_to_index :: gamepad_index :: call else => return Option.None
+                                    return Option.Some :: index :: call
+                                else => gamepad_index = gamepad_index + 1
+                        else => ()
                 else => ()
-            scan = scan + 1
+            bitmask = bitmask + bitmask
+            jid = jid + 1
         return Option.None
     fn has_gamepad(read self, id: JoystickId) -> Bool:
-        select self.gamepad :: id :: method:
-            when Option.Some(_) => return true
-            when Option.None => return false
+        return self.has_joystick :: id :: method && glfw_joystick_is_gamepad :: id :: call
     fn gamepad_count(read self) -> Index:
-        let ids = self.gamepad_ids :: :: method
-        return ids.count :: :: method
+        let total: CInt = 0
+        let bits = self.joystick_state.bits_value :: :: method
+        let jid: CInt = 0
+        let bitmask: CUInt = 1
+        repeat while jid < JOYSTICK_SLOT_LIMIT:
+            select:
+                when (bits & bitmask) != 0 =>
+                    select:
+                        when glfw_joystick_is_gamepad :: jid :: call => total = total + 1
+                        else => ()
+                else => ()
+            bitmask = bitmask + bitmask
+            jid = jid + 1
+        let Result.Ok(count) = cint_to_index :: total :: call else => return 0
+        return count
     fn has_gamepads(read self) -> Bool:
-        return self.gamepad_count :: :: method != 0
+        let bits = self.joystick_state.bits_value :: :: method
+        let jid: CInt = 0
+        let bitmask: CUInt = 1
+        repeat while jid < JOYSTICK_SLOT_LIMIT:
+            select:
+                when (bits & bitmask) != 0 =>
+                    select:
+                        when glfw_joystick_is_gamepad :: jid :: call => return true
+                        else => ()
+                else => ()
+            bitmask = bitmask + bitmask
+            jid = jid + 1
+        return false
     fn gamepad_ids(read self) -> List[JoystickId]:
         let ids = List[JoystickId] :: :: call
-        let joystick_ids = self.connected_joystick_ids :: :: method
-        repeat while !joystick_ids.is_empty :: :: method:
-            let id = joystick_ids.remove :: 0 :: method
-            select self.gamepad :: id :: method:
-                when Option.Some(_) => ids.push :: id :: method
-                when Option.None => ()
+        let bits = self.joystick_state.bits_value :: :: method
+        let jid: CInt = 0
+        let bitmask: CUInt = 1
+        repeat while jid < JOYSTICK_SLOT_LIMIT:
+            select:
+                when (bits & bitmask) != 0 =>
+                    select:
+                        when glfw_joystick_is_gamepad :: jid :: call => ids.push :: jid :: method
+                        else => ()
+                else => ()
+            bitmask = bitmask + bitmask
+            jid = jid + 1
         return ids
     fn connected_joystick_count(read self) -> Index:
-        let ids = self.connected_joystick_ids :: :: method
-        return ids.count :: :: method
+        let total: CInt = 0
+        let bits = self.joystick_state.bits_value :: :: method
+        let jid: CInt = 0
+        let bitmask: CUInt = 1
+        repeat while jid < JOYSTICK_SLOT_LIMIT:
+            select:
+                when (bits & bitmask) != 0 => total = total + 1
+                else => ()
+            bitmask = bitmask + bitmask
+            jid = jid + 1
+        let Result.Ok(count) = cint_to_index :: total :: call else => return 0
+        return count
     fn connected_joystick_ids(read self) -> List[JoystickId]:
         let ids = List[JoystickId] :: :: call
         let bits = self.joystick_state.bits_value :: :: method
         let jid: CInt = 0
+        let bitmask: CUInt = 1
         repeat while jid < JOYSTICK_SLOT_LIMIT:
             select:
-                when joystick_present_in_bits :: bits, jid :: call =>
+                when (bits & bitmask) != 0 =>
                     ids.push :: jid :: method
                 else => ()
+            bitmask = bitmask + bitmask
             jid = jid + 1
         return ids
     fn connected_joysticks(read self) -> List[Joystick]:
         let joysticks = List[Joystick] :: :: call
-        let ids = self.connected_joystick_ids :: :: method
-        repeat while !ids.is_empty :: :: method:
-            let id = ids.remove :: 0 :: method
-            let joystick = joystick_from_id :: id :: call
-            joysticks.push :: joystick :: method
+        let bits = self.joystick_state.bits_value :: :: method
+        let jid: CInt = 0
+        let bitmask: CUInt = 1
+        repeat while jid < JOYSTICK_SLOT_LIMIT:
+            select:
+                when (bits & bitmask) != 0 =>
+                    let joystick = joystick_from_id :: jid :: call
+                    joysticks.push :: joystick :: method
+                else => ()
+            bitmask = bitmask + bitmask
+            jid = jid + 1
         return joysticks
     fn joystick_snapshots(read self) -> List[JoystickSnapshot]:
         let snapshots = List[JoystickSnapshot] :: :: call
-        let ids = self.connected_joystick_ids :: :: method
-        repeat while !ids.is_empty :: :: method:
-            let id = ids.remove :: 0 :: method
-            let snapshot = joystick_snapshot_from_id :: id :: call
-            snapshots.push :: snapshot :: method
+        let bits = self.joystick_state.bits_value :: :: method
+        let jid: CInt = 0
+        let bitmask: CUInt = 1
+        repeat while jid < JOYSTICK_SLOT_LIMIT:
+            select:
+                when (bits & bitmask) != 0 =>
+                    let snapshot = joystick_snapshot_from_id :: jid :: call
+                    snapshots.push :: snapshot :: method
+                else => ()
+            bitmask = bitmask + bitmask
+            jid = jid + 1
         return snapshots
     fn gamepads(read self) -> List[Joystick]:
         let joysticks = List[Joystick] :: :: call
-        let ids = self.connected_joystick_ids :: :: method
-        repeat while !ids.is_empty :: :: method:
-            let id = ids.remove :: 0 :: method
-            let joystick = joystick_from_id :: id :: call
+        let bits = self.joystick_state.bits_value :: :: method
+        let jid: CInt = 0
+        let bitmask: CUInt = 1
+        repeat while jid < JOYSTICK_SLOT_LIMIT:
             select:
-                when joystick.gamepad :: :: method => joysticks.push :: joystick :: method
+                when (bits & bitmask) != 0 =>
+                    select:
+                        when glfw_joystick_is_gamepad :: jid :: call =>
+                            let joystick = joystick_from_id :: jid :: call
+                            joysticks.push :: joystick :: method
+                        else => ()
                 else => ()
+            bitmask = bitmask + bitmask
+            jid = jid + 1
         return joysticks
     fn gamepad_snapshots(read self) -> List[JoystickSnapshot]:
         let snapshots = List[JoystickSnapshot] :: :: call
-        let ids = self.connected_joystick_ids :: :: method
-        repeat while !ids.is_empty :: :: method:
-            let id = ids.remove :: 0 :: method
-            let joystick = joystick_from_id :: id :: call
+        let bits = self.joystick_state.bits_value :: :: method
+        let jid: CInt = 0
+        let bitmask: CUInt = 1
+        repeat while jid < JOYSTICK_SLOT_LIMIT:
             select:
-                when joystick.gamepad :: :: method =>
-                    let snapshot = joystick_snapshot_from_id :: id :: call
-                    snapshots.push :: snapshot :: method
+                when (bits & bitmask) != 0 =>
+                    select:
+                        when glfw_joystick_is_gamepad :: jid :: call =>
+                            let snapshot = joystick_snapshot_from_id :: jid :: call
+                            snapshots.push :: snapshot :: method
+                        else => ()
                 else => ()
+            bitmask = bitmask + bitmask
+            jid = jid + 1
         return snapshots
     fn window_count(read self) -> Index:
         return self.windows.count :: :: method
@@ -1610,62 +1889,45 @@ impl App:
             when Option.Some(_) => return true
             when Option.None => return false
     fn close_requested_window_count(read self) -> Index:
-        let ids = self.window_ids :: :: method
-        let total: CInt = 0
-        repeat while !ids.is_empty :: :: method:
-            let id = ids.remove :: 0 :: method
-            select self.window :: id :: method:
-                when Result.Ok(window) =>
-                    select:
-                        when window.should_close :: :: method => total = total + 1
-                        else => ()
-                when Result.Err(_) => ()
-        let Result.Ok(result) = total as Maybe[Index] else => return 0
-        return result
+        return close_requested_window_count_from_records :: self :: call
     fn has_close_requested_windows(read self) -> Bool:
-        return self.close_requested_window_count :: :: method != 0
+        let count = self.windows.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return false
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return false
+            select:
+                when self.windows[index].should_close => return true
+                else => ()
+            scan = scan + 1
+        return false
     fn close_requested_window_ids(read self) -> List[WindowId]:
-        let ids = List[WindowId] :: :: call
-        let window_ids = self.window_ids :: :: method
-        repeat while !window_ids.is_empty :: :: method:
-            let id = window_ids.remove :: 0 :: method
-            select self.window :: id :: method:
-                when Result.Ok(window) =>
-                    select:
-                        when window.should_close :: :: method => ids.push :: id :: method
-                        else => ()
-                when Result.Err(_) => ()
-        return ids
+        return close_requested_window_ids_from_records :: self :: call
     fn window_close_requested(read self, id: WindowId) -> Bool:
-        select self.window :: id :: method:
-            when Result.Ok(window) => return window.should_close :: :: method
-            when Result.Err(_) => return false
+        select find_window_index :: self, id :: call:
+            when Option.Some(index) => return self.windows[index].should_close
+            when Option.None => return false
     fn close_requested_window(read self, id: WindowId) -> Option[Window]:
-        select self.window :: id :: method:
-            when Result.Ok(window) =>
+        select find_window_index :: self, id :: call:
+            when Option.Some(index) =>
                 select:
-                    when window.should_close :: :: method => return Option.Some :: window :: call
+                    when self.windows[index].should_close =>
+                        let window = live_window_from_record :: self.windows[index] :: call
+                        return Option.Some :: window :: call
                     else => return Option.None
-            when Result.Err(_) => return Option.None
+            when Option.None => return Option.None
     fn close_requested_windows(read self) -> List[Window]:
-        let windows = List[Window] :: :: call
-        let ids = self.window_ids :: :: method
-        repeat while !ids.is_empty :: :: method:
-            let id = ids.remove :: 0 :: method
-            select self.window :: id :: method:
-                when Result.Ok(window) =>
-                    select:
-                        when window.should_close :: :: method => windows.push :: window :: method
-                        else => ()
-                when Result.Err(_) => ()
-        return windows
+        return close_requested_windows_from_records :: self :: call
     fn close_requested_window_snapshot(read self, id: WindowId) -> Option[WindowSnapshot]:
-        select self.window_snapshot :: id :: method:
-            when Result.Ok(snapshot) =>
-                select:
-                    when snapshot.should_close => return Option.Some :: snapshot :: call
-                    else => return Option.None
-            when Result.Err(_) => return Option.None
+        let Option.Some(index) = find_window_index :: self, id :: call else => return Option.None
+        select:
+            when !self.windows[index].should_close => return Option.None
+            else => ()
+        let raw_handle = glfw_window_raw_handle :: self.windows[index].window.raw :: call
+        let window = live_window_from_raw_handle :: raw_handle, self.windows[index].window.id :: call
+        let should_close = self.windows[index].should_close
+        let snapshot = live_window_snapshot_from_window :: window, should_close :: call
+        return Option.Some :: snapshot :: call
     fn close_requested_window_snapshots(read self) -> List[WindowSnapshot]:
         let snapshots = List[WindowSnapshot] :: :: call
         let count = self.windows.count :: :: method
@@ -1673,83 +1935,16 @@ impl App:
         let scan: CInt = 0
         repeat while scan < limit:
             let Result.Ok(index) = cint_to_index :: scan :: call else => return snapshots
+            select:
+                when !self.windows[index].should_close =>
+                    scan = scan + 1
+                    continue
+                else => ()
             let raw_handle = glfw_window_raw_handle :: self.windows[index].window.raw :: call
             let window = live_window_from_raw_handle :: raw_handle, self.windows[index].window.id :: call
-            let title = window.title :: :: method
-            let input = window.input_snapshot :: :: method
-            let hwnd = window.hwnd :: :: method
-            let should_close = window.should_close :: :: method
-            let frame_size = window.frame_size :: :: method
-            let client_api = window.client_api :: :: method
-            let opengl_profile = window.opengl_profile :: :: method
-            let context_creation_api = window.context_creation_api :: :: method
-            let context_version_major = window.context_version_major :: :: method
-            let context_version_minor = window.context_version_minor :: :: method
-            let current_context = window.current_context :: :: method
-            let opengl_forward_compat = window.opengl_forward_compat :: :: method
-            let opengl_debug_context = window.opengl_debug_context :: :: method
-            let context_no_error = window.context_no_error :: :: method
-            let srgb_capable = window.srgb_capable :: :: method
-            let doublebuffered = window.doublebuffered :: :: method
-            let opacity = window.opacity :: :: method
-            let cursor_mode = window.cursor_mode :: :: method
-            let sticky_keys_enabled = window.sticky_keys_enabled :: :: method
-            let sticky_mouse_buttons_enabled = window.sticky_mouse_buttons_enabled :: :: method
-            let lock_key_mods_enabled = window.lock_key_mods_enabled :: :: method
-            let raw_mouse_motion_enabled = window.raw_mouse_motion_enabled :: :: method
-            let visible = window.visible :: :: method
-            let resizable = window.resizable :: :: method
-            let decorated = window.decorated :: :: method
-            let auto_iconify = window.auto_iconify :: :: method
-            let focus_on_show = window.focus_on_show :: :: method
-            let mouse_passthrough = window.mouse_passthrough :: :: method
-            let hovered = window.hovered :: :: method
-            let floating = window.floating :: :: method
-            let fullscreen = window.fullscreen :: :: method
-            let snapshot = WindowSnapshot :: :: call
-                window = window
-                title = title
-                input = input
-                hwnd = hwnd
-                should_close = should_close
-                pos = window.pos :: :: method
-                size = window.size :: :: method
-                frame_size = frame_size
-                framebuffer_size = window.framebuffer_size :: :: method
-                content_scale = window.content_scale :: :: method
-                focused = window.focused :: :: method
-                iconified = window.iconified :: :: method
-                maximized = window.maximized :: :: method
-                cursor_pos = window.cursor_pos :: :: method
-                client_api = client_api
-                opengl_profile = opengl_profile
-                context_creation_api = context_creation_api
-                context_version_major = context_version_major
-                context_version_minor = context_version_minor
-                current_context = current_context
-                opengl_forward_compat = opengl_forward_compat
-                opengl_debug_context = opengl_debug_context
-                context_no_error = context_no_error
-                srgb_capable = srgb_capable
-                doublebuffered = doublebuffered
-                opacity = opacity
-                cursor_mode = cursor_mode
-                sticky_keys_enabled = sticky_keys_enabled
-                sticky_mouse_buttons_enabled = sticky_mouse_buttons_enabled
-                lock_key_mods_enabled = lock_key_mods_enabled
-                raw_mouse_motion_enabled = raw_mouse_motion_enabled
-                visible = visible
-                resizable = resizable
-                decorated = decorated
-                auto_iconify = auto_iconify
-                focus_on_show = focus_on_show
-                mouse_passthrough = mouse_passthrough
-                hovered = hovered
-                floating = floating
-                fullscreen = fullscreen
-            select:
-                when snapshot.should_close => snapshots.push :: snapshot :: method
-                else => ()
+            let should_close = self.windows[index].should_close
+            let snapshot = live_window_snapshot_from_window :: window, should_close :: call
+            snapshots.push :: snapshot :: method
             scan = scan + 1
         return snapshots
     fn window_ids(read self) -> List[WindowId]:
@@ -1783,78 +1978,8 @@ impl App:
             let Result.Ok(index) = cint_to_index :: scan :: call else => return snapshots
             let raw_handle = glfw_window_raw_handle :: self.windows[index].window.raw :: call
             let window = live_window_from_raw_handle :: raw_handle, self.windows[index].window.id :: call
-            let title = window.title :: :: method
-            let input = window.input_snapshot :: :: method
-            let hwnd = window.hwnd :: :: method
             let should_close = window.should_close :: :: method
-            let frame_size = window.frame_size :: :: method
-            let client_api = window.client_api :: :: method
-            let opengl_profile = window.opengl_profile :: :: method
-            let context_creation_api = window.context_creation_api :: :: method
-            let context_version_major = window.context_version_major :: :: method
-            let context_version_minor = window.context_version_minor :: :: method
-            let current_context = window.current_context :: :: method
-            let opengl_forward_compat = window.opengl_forward_compat :: :: method
-            let opengl_debug_context = window.opengl_debug_context :: :: method
-            let context_no_error = window.context_no_error :: :: method
-            let srgb_capable = window.srgb_capable :: :: method
-            let doublebuffered = window.doublebuffered :: :: method
-            let opacity = window.opacity :: :: method
-            let cursor_mode = window.cursor_mode :: :: method
-            let sticky_keys_enabled = window.sticky_keys_enabled :: :: method
-            let sticky_mouse_buttons_enabled = window.sticky_mouse_buttons_enabled :: :: method
-            let lock_key_mods_enabled = window.lock_key_mods_enabled :: :: method
-            let raw_mouse_motion_enabled = window.raw_mouse_motion_enabled :: :: method
-            let visible = window.visible :: :: method
-            let resizable = window.resizable :: :: method
-            let decorated = window.decorated :: :: method
-            let auto_iconify = window.auto_iconify :: :: method
-            let focus_on_show = window.focus_on_show :: :: method
-            let mouse_passthrough = window.mouse_passthrough :: :: method
-            let hovered = window.hovered :: :: method
-            let floating = window.floating :: :: method
-            let fullscreen = window.fullscreen :: :: method
-            let snapshot = WindowSnapshot :: :: call
-                window = window
-                title = title
-                input = input
-                hwnd = hwnd
-                should_close = should_close
-                pos = window.pos :: :: method
-                size = window.size :: :: method
-                frame_size = frame_size
-                framebuffer_size = window.framebuffer_size :: :: method
-                content_scale = window.content_scale :: :: method
-                focused = window.focused :: :: method
-                iconified = window.iconified :: :: method
-                maximized = window.maximized :: :: method
-                cursor_pos = window.cursor_pos :: :: method
-                client_api = client_api
-                opengl_profile = opengl_profile
-                context_creation_api = context_creation_api
-                context_version_major = context_version_major
-                context_version_minor = context_version_minor
-                current_context = current_context
-                opengl_forward_compat = opengl_forward_compat
-                opengl_debug_context = opengl_debug_context
-                context_no_error = context_no_error
-                srgb_capable = srgb_capable
-                doublebuffered = doublebuffered
-                opacity = opacity
-                cursor_mode = cursor_mode
-                sticky_keys_enabled = sticky_keys_enabled
-                sticky_mouse_buttons_enabled = sticky_mouse_buttons_enabled
-                lock_key_mods_enabled = lock_key_mods_enabled
-                raw_mouse_motion_enabled = raw_mouse_motion_enabled
-                visible = visible
-                resizable = resizable
-                decorated = decorated
-                auto_iconify = auto_iconify
-                focus_on_show = focus_on_show
-                mouse_passthrough = mouse_passthrough
-                hovered = hovered
-                floating = floating
-                fullscreen = fullscreen
+            let snapshot = live_window_snapshot_from_window :: window, should_close :: call
             snapshots.push :: snapshot :: method
             scan = scan + 1
         return snapshots
@@ -1862,78 +1987,8 @@ impl App:
         let Option.Some(index) = find_window_index :: self, id :: call else => return Result.Err :: AppError.WindowNotFound :: call
         let raw_handle = glfw_window_raw_handle :: self.windows[index].window.raw :: call
         let window = live_window_from_raw_handle :: raw_handle, self.windows[index].window.id :: call
-        let title = window.title :: :: method
-        let input = window.input_snapshot :: :: method
-        let hwnd = window.hwnd :: :: method
         let should_close = window.should_close :: :: method
-        let frame_size = window.frame_size :: :: method
-        let client_api = window.client_api :: :: method
-        let opengl_profile = window.opengl_profile :: :: method
-        let context_creation_api = window.context_creation_api :: :: method
-        let context_version_major = window.context_version_major :: :: method
-        let context_version_minor = window.context_version_minor :: :: method
-        let current_context = window.current_context :: :: method
-        let opengl_forward_compat = window.opengl_forward_compat :: :: method
-        let opengl_debug_context = window.opengl_debug_context :: :: method
-        let context_no_error = window.context_no_error :: :: method
-        let srgb_capable = window.srgb_capable :: :: method
-        let doublebuffered = window.doublebuffered :: :: method
-        let opacity = window.opacity :: :: method
-        let cursor_mode = window.cursor_mode :: :: method
-        let sticky_keys_enabled = window.sticky_keys_enabled :: :: method
-        let sticky_mouse_buttons_enabled = window.sticky_mouse_buttons_enabled :: :: method
-        let lock_key_mods_enabled = window.lock_key_mods_enabled :: :: method
-        let raw_mouse_motion_enabled = window.raw_mouse_motion_enabled :: :: method
-        let visible = window.visible :: :: method
-        let resizable = window.resizable :: :: method
-        let decorated = window.decorated :: :: method
-        let auto_iconify = window.auto_iconify :: :: method
-        let focus_on_show = window.focus_on_show :: :: method
-        let mouse_passthrough = window.mouse_passthrough :: :: method
-        let hovered = window.hovered :: :: method
-        let floating = window.floating :: :: method
-        let fullscreen = window.fullscreen :: :: method
-        let snapshot = WindowSnapshot :: :: call
-            window = window
-            title = title
-            input = input
-            hwnd = hwnd
-            should_close = should_close
-            pos = window.pos :: :: method
-            size = window.size :: :: method
-            frame_size = frame_size
-            framebuffer_size = window.framebuffer_size :: :: method
-            content_scale = window.content_scale :: :: method
-            focused = window.focused :: :: method
-            iconified = window.iconified :: :: method
-            maximized = window.maximized :: :: method
-            cursor_pos = window.cursor_pos :: :: method
-            client_api = client_api
-            opengl_profile = opengl_profile
-            context_creation_api = context_creation_api
-            context_version_major = context_version_major
-            context_version_minor = context_version_minor
-            current_context = current_context
-            opengl_forward_compat = opengl_forward_compat
-            opengl_debug_context = opengl_debug_context
-            context_no_error = context_no_error
-            srgb_capable = srgb_capable
-            doublebuffered = doublebuffered
-            opacity = opacity
-            cursor_mode = cursor_mode
-            sticky_keys_enabled = sticky_keys_enabled
-            sticky_mouse_buttons_enabled = sticky_mouse_buttons_enabled
-            lock_key_mods_enabled = lock_key_mods_enabled
-            raw_mouse_motion_enabled = raw_mouse_motion_enabled
-            visible = visible
-            resizable = resizable
-            decorated = decorated
-            auto_iconify = auto_iconify
-            focus_on_show = focus_on_show
-            mouse_passthrough = mouse_passthrough
-            hovered = hovered
-            floating = floating
-            fullscreen = fullscreen
+        let snapshot = live_window_snapshot_from_window :: window, should_close :: call
         return Result.Ok :: snapshot :: call
     fn monitor_count(read self) -> Index:
         return self.monitors.count :: :: method
@@ -1966,67 +2021,13 @@ impl App:
         let scan: CInt = 0
         repeat while scan < limit:
             let Result.Ok(index) = cint_to_index :: scan :: call else => return snapshots
-            let monitor = GlfwMonitor :: self.monitors[index].raw :: call
-            let name_text = monitor.name_text :: :: method
-            let win32_names = monitor.win32_names :: :: method
-            let available = monitor.available :: :: method
-            let primary = monitor.primary :: :: method
-            let screen_pos = monitor.screen_pos :: :: method
-            let work_rect = monitor.work_rect :: :: method
-            let physical_size_mm = monitor.physical_size_mm :: :: method
-            let desktop_scale = monitor.desktop_scale :: :: method
-            let current_video_mode = monitor.current_video_mode :: :: method
-            let video_mode_count = monitor.video_mode_count :: :: method
-            let video_modes = monitor.video_modes_snapshot :: :: method
-            let gamma_ramp = monitor.gamma_ramp_snapshot :: :: method
-            let snapshot = MonitorSnapshot :: :: call
-                id = self.monitors[index].id
-                monitor = monitor
-                name_text = name_text
-                win32_names = win32_names
-                available = available
-                primary = primary
-                screen_pos = screen_pos
-                work_rect = work_rect
-                physical_size_mm = physical_size_mm
-                desktop_scale = desktop_scale
-                current_video_mode = current_video_mode
-                video_mode_count = video_mode_count
-                video_modes = video_modes
-                gamma_ramp = gamma_ramp
+            let snapshot = live_monitor_snapshot_from_record :: self.monitors[index] :: call
             snapshots.push :: snapshot :: method
             scan = scan + 1
         return snapshots
     fn monitor_snapshot(read self, id: MonitorId) -> Result[MonitorSnapshot, AppError]:
         let Option.Some(index) = find_monitor_record_index :: self, id :: call else => return Result.Err :: AppError.MonitorNotFound :: call
-        let monitor = GlfwMonitor :: self.monitors[index].raw :: call
-        let name_text = monitor.name_text :: :: method
-        let win32_names = monitor.win32_names :: :: method
-        let available = monitor.available :: :: method
-        let primary = monitor.primary :: :: method
-        let screen_pos = monitor.screen_pos :: :: method
-        let work_rect = monitor.work_rect :: :: method
-        let physical_size_mm = monitor.physical_size_mm :: :: method
-        let desktop_scale = monitor.desktop_scale :: :: method
-        let current_video_mode = monitor.current_video_mode :: :: method
-        let video_mode_count = monitor.video_mode_count :: :: method
-        let video_modes = monitor.video_modes_snapshot :: :: method
-        let gamma_ramp = monitor.gamma_ramp_snapshot :: :: method
-        let snapshot = MonitorSnapshot :: :: call
-            id = self.monitors[index].id
-            monitor = monitor
-            name_text = name_text
-            win32_names = win32_names
-            available = available
-            primary = primary
-            screen_pos = screen_pos
-            work_rect = work_rect
-            physical_size_mm = physical_size_mm
-            desktop_scale = desktop_scale
-            current_video_mode = current_video_mode
-            video_mode_count = video_mode_count
-            video_modes = video_modes
-            gamma_ramp = gamma_ramp
+        let snapshot = live_monitor_snapshot_from_record :: self.monitors[index] :: call
         return Result.Ok :: snapshot :: call
     fn monitor(read self, id: MonitorId) -> Result[Monitor, AppError]:
         let Option.Some(index) = find_monitor_record_index :: self, id :: call else => return Result.Err :: AppError.MonitorNotFound :: call
@@ -2039,13 +2040,17 @@ impl App:
             when primary.is_null :: :: method => return Result.Err :: AppError.PrimaryMonitorUnavailable :: call
             else => return Result.Ok :: primary :: call
     fn primary_monitor_id(read self) -> Result[MonitorId, AppError]:
-        let Result.Ok(primary) = self.primary_monitor :: :: method else => return Result.Err :: AppError.PrimaryMonitorUnavailable :: call
-        let Option.Some(index) = find_monitor_index :: self, primary :: call else => return Result.Err :: AppError.MonitorNotFound :: call
-        let id = self.monitors[index].id
-        return Result.Ok :: id :: call
+        select find_primary_monitor_record_index :: self :: call:
+            when Result.Ok(index) =>
+                let id = self.monitors[index].id
+                return Result.Ok :: id :: call
+            when Result.Err(err) => return Result.Err :: err :: call
     fn primary_monitor_snapshot(read self) -> Result[MonitorSnapshot, AppError]:
-        let Result.Ok(id) = self.primary_monitor_id :: :: method else => return Result.Err :: AppError.PrimaryMonitorUnavailable :: call
-        return self.monitor_snapshot :: id :: method
+        select find_primary_monitor_record_index :: self :: call:
+            when Result.Ok(index) =>
+                let snapshot = live_monitor_snapshot_from_record :: self.monitors[index] :: call
+                return Result.Ok :: snapshot :: call
+            when Result.Err(err) => return Result.Err :: err :: call
     fn has_pending_events(read self) -> Bool:
         return !self.pending.is_empty :: :: method
     fn pending_event_count(read self) -> Index:
@@ -2317,25 +2322,28 @@ impl App:
     fn destroy_window(edit self, take window: Window) -> Result[Unit, AppError]:
         return app_destroy_window_by_id :: self, window.id :: call
     fn close_all_windows(read self) -> Unit:
-        let ids = self.window_ids :: :: method
-        let windows = List[Window] :: :: call
-        repeat while !ids.is_empty :: :: method:
-            let id = ids.remove :: 0 :: method
-            select self.window :: id :: method:
-                when Result.Ok(window) => windows.push :: window :: method
-                when Result.Err(_) => ()
-        repeat while !windows.is_empty :: :: method:
-            let window = windows.remove :: 0 :: method
+        let count = self.windows.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return
+            let window = live_window_from_record :: self.windows[index] :: call
             window.close :: :: method
+            scan = scan + 1
         return
     fn destroy_close_requested_windows(edit self) -> Index:
         let destroyed: CInt = 0
-        let ids = self.close_requested_window_ids :: :: method
-        repeat while !ids.is_empty :: :: method:
-            let id = ids.remove :: 0 :: method
+        let ids = close_requested_window_ids_from_records :: self :: call
+        let count = ids.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return 0
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return 0
+            let id = ids[index]
             select app_destroy_window_by_id :: self, id :: call:
                 when Result.Ok(_) => destroyed = destroyed + 1
                 when Result.Err(_) => ()
+            scan = scan + 1
         let Result.Ok(result) = destroyed as Maybe[Index] else => return 0
         return result
     fn destroy_all_windows(edit self) -> Index:
@@ -2754,24 +2762,12 @@ impl App:
         let _ = self
         return glfw_get_timer_frequency :: :: call
     fn current_context_window(read self) -> Result[Window, AppError]:
-        let current = glfw_get_current_context :: :: call
-        select:
-            when current.is_null :: :: method => return Result.Err :: AppError.NoCurrentContext :: call
-            else => ()
-        let count = self.windows.count :: :: method
-        let Result.Ok(limit) = index_to_cint :: count :: call else => return Result.Err :: AppError.CurrentContextWindowNotTracked :: call
-        let scan: CInt = 0
-        repeat while scan < limit:
-            let Result.Ok(index) = cint_to_index :: scan :: call else => return Result.Err :: AppError.CurrentContextWindowNotTracked :: call
-            let id = self.windows[index].window.id
-            select self.window :: id :: method:
-                when Result.Ok(window) =>
-                    select:
-                        when window.current_context :: :: method => return Result.Ok :: window :: call
-                        else => ()
-                when Result.Err(_) => ()
-            scan = scan + 1
-        return Result.Err :: AppError.CurrentContextWindowNotTracked :: call
+        select find_current_context_window_record_index :: self :: call:
+            when Result.Ok(index) =>
+                let raw_handle = glfw_window_raw_handle :: self.windows[index].window.raw :: call
+                let window = live_window_from_raw_handle :: raw_handle, self.windows[index].window.id :: call
+                return Result.Ok :: window :: call
+            when Result.Err(err) => return Result.Err :: err :: call
     fn terminate(take self) -> Unit:
         let _ = self.destroy_all_windows :: :: method
         select:

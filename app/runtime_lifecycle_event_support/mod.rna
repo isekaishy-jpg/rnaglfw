@@ -7,170 +7,250 @@ use window.WindowId
 
 fn windows_from_ids(read app: App, take ids: List[WindowId]) -> List[Window]:
     let windows = List[Window] :: :: call
-    repeat while !ids.is_empty :: :: method:
-        let id = ids.remove :: 0 :: method
+    let count = ids.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return windows
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return windows
+        let id = ids[index]
         select app.window_option :: id :: method:
             when Option.Some(window) => windows.push :: window :: method
             when Option.None => ()
+        scan = scan + 1
     return windows
 
 fn window_snapshots_from_ids(read app: App, take ids: List[WindowId]) -> List[WindowSnapshot]:
     let snapshots = List[WindowSnapshot] :: :: call
-    repeat while !ids.is_empty :: :: method:
-        let id = ids.remove :: 0 :: method
+    let count = ids.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return snapshots
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return snapshots
+        let id = ids[index]
         select app.window_snapshot_option :: id :: method:
             when Option.Some(snapshot) => snapshots.push :: snapshot :: method
             when Option.None => ()
+        scan = scan + 1
     return snapshots
 
 fn close_requested_windows_from_ids(read app: App, take ids: List[WindowId]) -> List[Window]:
     let windows = List[Window] :: :: call
-    repeat while !ids.is_empty :: :: method:
-        let id = ids.remove :: 0 :: method
+    let count = ids.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return windows
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return windows
+        let id = ids[index]
         select app.close_requested_window :: id :: method:
             when Option.Some(window) => windows.push :: window :: method
             when Option.None => ()
+        scan = scan + 1
     return windows
 
 fn close_requested_window_snapshots_from_ids(read app: App, take ids: List[WindowId]) -> List[WindowSnapshot]:
     let snapshots = List[WindowSnapshot] :: :: call
-    repeat while !ids.is_empty :: :: method:
-        let id = ids.remove :: 0 :: method
+    let count = ids.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return snapshots
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return snapshots
+        let id = ids[index]
         select app.close_requested_window_snapshot :: id :: method:
             when Option.Some(snapshot) => snapshots.push :: snapshot :: method
             when Option.None => ()
+        scan = scan + 1
     return snapshots
 
 fn monitors_from_ids(read app: App, take ids: List[MonitorId]) -> List[Monitor]:
     let monitors = List[Monitor] :: :: call
-    repeat while !ids.is_empty :: :: method:
-        let id = ids.remove :: 0 :: method
+    let count = ids.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return monitors
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return monitors
+        let id = ids[index]
         select app.monitor_option :: id :: method:
             when Option.Some(monitor) => monitors.push :: monitor :: method
             when Option.None => ()
+        scan = scan + 1
     return monitors
 
 fn monitor_snapshots_from_ids(read app: App, take ids: List[MonitorId]) -> List[MonitorSnapshot]:
     let snapshots = List[MonitorSnapshot] :: :: call
-    repeat while !ids.is_empty :: :: method:
-        let id = ids.remove :: 0 :: method
+    let count = ids.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return snapshots
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return snapshots
+        let id = ids[index]
         select app.monitor_snapshot_option :: id :: method:
             when Option.Some(snapshot) => snapshots.push :: snapshot :: method
             when Option.None => ()
+        scan = scan + 1
     return snapshots
 
 fn joysticks_from_ids(read app: App, take ids: List[JoystickId]) -> List[Joystick]:
     let joysticks = List[Joystick] :: :: call
-    repeat while !ids.is_empty :: :: method:
-        let id = ids.remove :: 0 :: method
+    let count = ids.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return joysticks
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return joysticks
+        let id = ids[index]
         select app.joystick_option :: id :: method:
             when Option.Some(joystick) => joysticks.push :: joystick :: method
             when Option.None => ()
+        scan = scan + 1
     return joysticks
 
 fn joystick_snapshots_from_ids(read app: App, take ids: List[JoystickId]) -> List[JoystickSnapshot]:
     let snapshots = List[JoystickSnapshot] :: :: call
-    repeat while !ids.is_empty :: :: method:
-        let id = ids.remove :: 0 :: method
+    let count = ids.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return snapshots
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return snapshots
+        let id = ids[index]
         select app.joystick_snapshot_option :: id :: method:
             when Option.Some(snapshot) => snapshots.push :: snapshot :: method
             when Option.None => ()
+        scan = scan + 1
     return snapshots
 
 fn windows_for_id_from_ids(read app: App, take ids: List[WindowId], target: WindowId) -> List[Window]:
     let windows = List[Window] :: :: call
-    repeat while !ids.is_empty :: :: method:
-        let id = ids.remove :: 0 :: method
+    let count = ids.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return windows
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return windows
+        let id = ids[index]
         select:
             when id != target => ()
             else =>
                 select app.window_option :: id :: method:
                     when Option.Some(window) => windows.push :: window :: method
                     when Option.None => ()
+        scan = scan + 1
     return windows
 
 fn window_snapshots_for_id_from_ids(read app: App, take ids: List[WindowId], target: WindowId) -> List[WindowSnapshot]:
     let snapshots = List[WindowSnapshot] :: :: call
-    repeat while !ids.is_empty :: :: method:
-        let id = ids.remove :: 0 :: method
+    let count = ids.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return snapshots
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return snapshots
+        let id = ids[index]
         select:
             when id != target => ()
             else =>
                 select app.window_snapshot_option :: id :: method:
                     when Option.Some(snapshot) => snapshots.push :: snapshot :: method
                     when Option.None => ()
+        scan = scan + 1
     return snapshots
 
 fn close_requested_windows_for_id_from_ids(read app: App, take ids: List[WindowId], target: WindowId) -> List[Window]:
     let windows = List[Window] :: :: call
-    repeat while !ids.is_empty :: :: method:
-        let id = ids.remove :: 0 :: method
+    let count = ids.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return windows
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return windows
+        let id = ids[index]
         select:
             when id != target => ()
             else =>
                 select app.close_requested_window :: id :: method:
                     when Option.Some(window) => windows.push :: window :: method
                     when Option.None => ()
+        scan = scan + 1
     return windows
 
 fn close_requested_window_snapshots_for_id_from_ids(read app: App, take ids: List[WindowId], target: WindowId) -> List[WindowSnapshot]:
     let snapshots = List[WindowSnapshot] :: :: call
-    repeat while !ids.is_empty :: :: method:
-        let id = ids.remove :: 0 :: method
+    let count = ids.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return snapshots
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return snapshots
+        let id = ids[index]
         select:
             when id != target => ()
             else =>
                 select app.close_requested_window_snapshot :: id :: method:
                     when Option.Some(snapshot) => snapshots.push :: snapshot :: method
                     when Option.None => ()
+        scan = scan + 1
     return snapshots
 
 fn monitors_for_id_from_ids(read app: App, take ids: List[MonitorId], target: MonitorId) -> List[Monitor]:
     let monitors = List[Monitor] :: :: call
-    repeat while !ids.is_empty :: :: method:
-        let id = ids.remove :: 0 :: method
+    let count = ids.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return monitors
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return monitors
+        let id = ids[index]
         select:
             when id != target => ()
             else =>
                 select app.monitor_option :: id :: method:
                     when Option.Some(monitor) => monitors.push :: monitor :: method
                     when Option.None => ()
+        scan = scan + 1
     return monitors
 
 fn monitor_snapshots_for_id_from_ids(read app: App, take ids: List[MonitorId], target: MonitorId) -> List[MonitorSnapshot]:
     let snapshots = List[MonitorSnapshot] :: :: call
-    repeat while !ids.is_empty :: :: method:
-        let id = ids.remove :: 0 :: method
+    let count = ids.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return snapshots
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return snapshots
+        let id = ids[index]
         select:
             when id != target => ()
             else =>
                 select app.monitor_snapshot_option :: id :: method:
                     when Option.Some(snapshot) => snapshots.push :: snapshot :: method
                     when Option.None => ()
+        scan = scan + 1
     return snapshots
 
 fn joysticks_for_id_from_ids(read app: App, take ids: List[JoystickId], target: JoystickId) -> List[Joystick]:
     let joysticks = List[Joystick] :: :: call
-    repeat while !ids.is_empty :: :: method:
-        let id = ids.remove :: 0 :: method
+    let count = ids.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return joysticks
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return joysticks
+        let id = ids[index]
         select:
             when id != target => ()
             else =>
                 select app.joystick_option :: id :: method:
                     when Option.Some(joystick) => joysticks.push :: joystick :: method
                     when Option.None => ()
+        scan = scan + 1
     return joysticks
 
 fn joystick_snapshots_for_id_from_ids(read app: App, take ids: List[JoystickId], target: JoystickId) -> List[JoystickSnapshot]:
     let snapshots = List[JoystickSnapshot] :: :: call
-    repeat while !ids.is_empty :: :: method:
-        let id = ids.remove :: 0 :: method
+    let count = ids.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return snapshots
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return snapshots
+        let id = ids[index]
         select:
             when id != target => ()
             else =>
                 select app.joystick_snapshot_option :: id :: method:
                     when Option.Some(snapshot) => snapshots.push :: snapshot :: method
                     when Option.None => ()
+        scan = scan + 1
     return snapshots
 
 impl App:

@@ -8,6 +8,19 @@ const MEMORY_PROPERTY_HOST_VISIBLE_BIT: CUInt = 2
 const MEMORY_PROPERTY_HOST_COHERENT_BIT: CUInt = 4
 const MEMORY_HEAP_DEVICE_LOCAL_BIT: CUInt = 1
 
+const MEMORY_TYPE_FILTER_HOST_VISIBLE: CUInt = 1
+const MEMORY_TYPE_FILTER_HOST_COHERENT: CUInt = 2
+const MEMORY_TYPE_FILTER_STAGING_COMPATIBLE: CUInt = 3
+const MEMORY_TYPE_FILTER_DEVICE_LOCAL: CUInt = 4
+
+fn memory_type_matches_filter(read memory_type: VkMemoryType, filter: CUInt) -> Bool:
+    select filter:
+        when MEMORY_TYPE_FILTER_HOST_VISIBLE => return memory_type.host_visible :: :: method
+        when MEMORY_TYPE_FILTER_HOST_COHERENT => return memory_type.host_coherent :: :: method
+        when MEMORY_TYPE_FILTER_STAGING_COMPATIBLE => return memory_type.staging_compatible :: :: method
+        when MEMORY_TYPE_FILTER_DEVICE_LOCAL => return memory_type.device_local :: :: method
+        else => return false
+
 impl VkMemoryType:
     fn device_local(read self) -> Bool:
         return (self.property_flags & MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0
@@ -26,6 +39,44 @@ impl VkMemoryHeap:
         return (self.flags & MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0
 
 impl VkPhysicalDeviceMemoryProperties:
+    fn matching_memory_type_count(read self, filter: CUInt) -> CUInt:
+        let total: CUInt = 0
+        let scan: CUInt = 0
+        repeat while scan < self.memory_type_count:
+            let Result.Ok(slot) = scan as Maybe[Index] else => break
+            let memory_type = self.memory_types[slot]
+            select:
+                when memory_type_matches_filter :: memory_type, filter :: call => total = total + 1
+                else => ()
+            scan = scan + 1
+        return total
+
+    fn first_matching_memory_type_index(read self, filter: CUInt) -> Option[CUInt]:
+        let scan: CUInt = 0
+        repeat while scan < self.memory_type_count:
+            let Result.Ok(slot) = scan as Maybe[Index] else => break
+            let memory_type = self.memory_types[slot]
+            select:
+                when memory_type_matches_filter :: memory_type, filter :: call => return Option.Some :: scan :: call
+                else => ()
+            scan = scan + 1
+        return Option.None
+
+    fn compatible_matching_memory_type_index(read self, memory_type_bits: CUInt, filter: CUInt) -> Option[CUInt]:
+        let scan: CUInt = 0
+        let bitmask: CUInt = 1
+        repeat while scan < self.memory_type_count:
+            let Result.Ok(slot) = scan as Maybe[Index] else => break
+            let supported = (memory_type_bits & bitmask) != 0
+            let memory_type = self.memory_types[slot]
+            select:
+                when supported && memory_type_matches_filter :: memory_type, filter :: call =>
+                    return Option.Some :: scan :: call
+                else => ()
+            bitmask = bitmask + bitmask
+            scan = scan + 1
+        return Option.None
+
     fn memory_type(read self, index: CUInt) -> Option[VkMemoryType]:
         select:
             when index >= self.memory_type_count => return Option.None
@@ -41,48 +92,16 @@ impl VkPhysicalDeviceMemoryProperties:
         return Option.Some :: self.memory_heaps[slot] :: call
 
     fn host_visible_memory_type_count(read self) -> CUInt:
-        let total: CUInt = 0
-        let scan: CUInt = 0
-        repeat while scan < self.memory_type_count:
-            let Result.Ok(slot) = scan as Maybe[Index] else => break
-            select:
-                when self.memory_types[slot].host_visible :: :: method => total = total + 1
-                else => ()
-            scan = scan + 1
-        return total
+        return self.matching_memory_type_count :: MEMORY_TYPE_FILTER_HOST_VISIBLE :: method
 
     fn host_coherent_memory_type_count(read self) -> CUInt:
-        let total: CUInt = 0
-        let scan: CUInt = 0
-        repeat while scan < self.memory_type_count:
-            let Result.Ok(slot) = scan as Maybe[Index] else => break
-            select:
-                when self.memory_types[slot].host_coherent :: :: method => total = total + 1
-                else => ()
-            scan = scan + 1
-        return total
+        return self.matching_memory_type_count :: MEMORY_TYPE_FILTER_HOST_COHERENT :: method
 
     fn staging_memory_type_count(read self) -> CUInt:
-        let total: CUInt = 0
-        let scan: CUInt = 0
-        repeat while scan < self.memory_type_count:
-            let Result.Ok(slot) = scan as Maybe[Index] else => break
-            select:
-                when self.memory_types[slot].staging_compatible :: :: method => total = total + 1
-                else => ()
-            scan = scan + 1
-        return total
+        return self.matching_memory_type_count :: MEMORY_TYPE_FILTER_STAGING_COMPATIBLE :: method
 
     fn device_local_memory_type_count(read self) -> CUInt:
-        let total: CUInt = 0
-        let scan: CUInt = 0
-        repeat while scan < self.memory_type_count:
-            let Result.Ok(slot) = scan as Maybe[Index] else => break
-            select:
-                when self.memory_types[slot].device_local :: :: method => total = total + 1
-                else => ()
-            scan = scan + 1
-        return total
+        return self.matching_memory_type_count :: MEMORY_TYPE_FILTER_DEVICE_LOCAL :: method
 
     fn device_local_memory_heap_count(read self) -> CUInt:
         let total: CUInt = 0
@@ -96,17 +115,12 @@ impl VkPhysicalDeviceMemoryProperties:
         return total
 
     fn has_staging_memory_type(read self) -> Bool:
-        return self.staging_memory_type_count :: :: method != 0
+        select self.first_staging_memory_type_index :: :: method:
+            when Option.Some(_) => return true
+            when Option.None => return false
 
     fn first_staging_memory_type_index(read self) -> Option[CUInt]:
-        let scan: CUInt = 0
-        repeat while scan < self.memory_type_count:
-            let Result.Ok(slot) = scan as Maybe[Index] else => break
-            select:
-                when self.memory_types[slot].staging_compatible :: :: method => return Option.Some :: scan :: call
-                else => ()
-            scan = scan + 1
-        return Option.None
+        return self.first_matching_memory_type_index :: MEMORY_TYPE_FILTER_STAGING_COMPATIBLE :: method
 
     fn memory_type_supported(read self, index: CUInt, memory_type_bits: CUInt) -> Bool:
         select:
@@ -122,6 +136,18 @@ impl VkPhysicalDeviceMemoryProperties:
             scan = scan + 1
         return false
 
+    fn compatible_memory_type_count(read self, memory_type_bits: CUInt) -> CUInt:
+        let total: CUInt = 0
+        let scan: CUInt = 0
+        let bitmask: CUInt = 1
+        repeat while scan < self.memory_type_count:
+            select:
+                when (memory_type_bits & bitmask) != 0 => total = total + 1
+                else => ()
+            bitmask = bitmask + bitmask
+            scan = scan + 1
+        return total
+
     fn compatible_memory_type_indices(read self, memory_type_bits: CUInt) -> List[CUInt]:
         let indices = List[CUInt] :: :: call
         let scan: CUInt = 0
@@ -135,56 +161,16 @@ impl VkPhysicalDeviceMemoryProperties:
         return indices
 
     fn host_visible_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
-        let scan: CUInt = 0
-        let bitmask: CUInt = 1
-        repeat while scan < self.memory_type_count:
-            let Result.Ok(slot) = scan as Maybe[Index] else => break
-            let supported = (memory_type_bits & bitmask) != 0
-            select:
-                when supported && self.memory_types[slot].host_visible :: :: method => return Option.Some :: scan :: call
-                else => ()
-            bitmask = bitmask + bitmask
-            scan = scan + 1
-        return Option.None
+        return self.compatible_matching_memory_type_index :: memory_type_bits, MEMORY_TYPE_FILTER_HOST_VISIBLE :: method
 
     fn host_coherent_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
-        let scan: CUInt = 0
-        let bitmask: CUInt = 1
-        repeat while scan < self.memory_type_count:
-            let Result.Ok(slot) = scan as Maybe[Index] else => break
-            let supported = (memory_type_bits & bitmask) != 0
-            select:
-                when supported && self.memory_types[slot].host_coherent :: :: method => return Option.Some :: scan :: call
-                else => ()
-            bitmask = bitmask + bitmask
-            scan = scan + 1
-        return Option.None
+        return self.compatible_matching_memory_type_index :: memory_type_bits, MEMORY_TYPE_FILTER_HOST_COHERENT :: method
 
     fn staging_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
-        let scan: CUInt = 0
-        let bitmask: CUInt = 1
-        repeat while scan < self.memory_type_count:
-            let Result.Ok(slot) = scan as Maybe[Index] else => break
-            let supported = (memory_type_bits & bitmask) != 0
-            select:
-                when supported && self.memory_types[slot].staging_compatible :: :: method => return Option.Some :: scan :: call
-                else => ()
-            bitmask = bitmask + bitmask
-            scan = scan + 1
-        return Option.None
+        return self.compatible_matching_memory_type_index :: memory_type_bits, MEMORY_TYPE_FILTER_STAGING_COMPATIBLE :: method
 
     fn device_local_memory_type_index(read self, memory_type_bits: CUInt) -> Option[CUInt]:
-        let scan: CUInt = 0
-        let bitmask: CUInt = 1
-        repeat while scan < self.memory_type_count:
-            let Result.Ok(slot) = scan as Maybe[Index] else => break
-            let supported = (memory_type_bits & bitmask) != 0
-            select:
-                when supported && self.memory_types[slot].device_local :: :: method => return Option.Some :: scan :: call
-                else => ()
-            bitmask = bitmask + bitmask
-            scan = scan + 1
-        return Option.None
+        return self.compatible_matching_memory_type_index :: memory_type_bits, MEMORY_TYPE_FILTER_DEVICE_LOCAL :: method
 
 impl VulkanPresentContext:
     fn memory_properties(read self) -> VkPhysicalDeviceMemoryProperties:
@@ -225,6 +211,9 @@ impl VulkanPresentContext:
 
     fn memory_type_supported(read self, index: CUInt, memory_type_bits: CUInt) -> Bool:
         return self.memory_properties.memory_type_supported :: index, memory_type_bits :: method
+
+    fn compatible_memory_type_count(read self, memory_type_bits: CUInt) -> CUInt:
+        return self.memory_properties.compatible_memory_type_count :: memory_type_bits :: method
 
     fn compatible_memory_type_indices(read self, memory_type_bits: CUInt) -> List[CUInt]:
         return self.memory_properties.compatible_memory_type_indices :: memory_type_bits :: method
@@ -281,6 +270,9 @@ impl VulkanPresentApp:
     fn memory_type_supported(read self, index: CUInt, memory_type_bits: CUInt) -> Bool:
         return self.context.memory_type_supported :: index, memory_type_bits :: method
 
+    fn compatible_memory_type_count(read self, memory_type_bits: CUInt) -> CUInt:
+        return self.context.compatible_memory_type_count :: memory_type_bits :: method
+
     fn compatible_memory_type_indices(read self, memory_type_bits: CUInt) -> List[CUInt]:
         return self.context.compatible_memory_type_indices :: memory_type_bits :: method
 
@@ -335,6 +327,9 @@ impl VulkanPresentSnapshot:
 
     fn memory_type_supported(read self, index: CUInt, memory_type_bits: CUInt) -> Bool:
         return self.memory_properties.memory_type_supported :: index, memory_type_bits :: method
+
+    fn compatible_memory_type_count(read self, memory_type_bits: CUInt) -> CUInt:
+        return self.memory_properties.compatible_memory_type_count :: memory_type_bits :: method
 
     fn compatible_memory_type_indices(read self, memory_type_bits: CUInt) -> List[CUInt]:
         return self.memory_properties.compatible_memory_type_indices :: memory_type_bits :: method

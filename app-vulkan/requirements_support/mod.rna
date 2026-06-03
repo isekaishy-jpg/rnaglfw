@@ -1,18 +1,11 @@
 use std.{Option, Result}
 
 use present.{VkMemoryHeap, VkMemoryRequirements, VkMemoryType, VkPhysicalDeviceMemoryProperties}
-use present.{VulkanMemoryAllocationPlan, VulkanPresentApp, VulkanPresentSnapshot}
+use present.{VulkanMemoryAllocationPlan, VulkanPresentApp, VulkanPresentContext, VulkanPresentSnapshot}
 
 impl VkMemoryRequirements:
     fn compatible_memory_type_count(read self, read memory_properties: VkPhysicalDeviceMemoryProperties) -> CUInt:
-        let total: CUInt = 0
-        let scan: CUInt = 0
-        repeat while scan < memory_properties.memory_type_count:
-            select:
-                when memory_properties.memory_type_supported :: scan, self.memory_type_bits :: method => total = total + 1
-                else => ()
-            scan = scan + 1
-        return total
+        return memory_properties.compatible_memory_type_count :: self.memory_type_bits :: method
 
 impl VulkanMemoryAllocationPlan:
     fn size(read self) -> U64:
@@ -57,25 +50,26 @@ impl VkPhysicalDeviceMemoryProperties:
                     when Option.None => return Option.None
             when Option.None => return Option.None
 
-    fn host_visible_allocation_plan(read self, read requirements: VkMemoryRequirements) -> Option[VulkanMemoryAllocationPlan]:
-        select self.host_visible_memory_type_index :: requirements.memory_type_bits :: method:
+    fn compatible_allocation_plan(read self, read requirements: VkMemoryRequirements, memory_type_index: Option[CUInt]) -> Option[VulkanMemoryAllocationPlan]:
+        select memory_type_index:
             when Option.Some(index) => return self.allocation_plan :: requirements, index :: method
             when Option.None => return Option.None
+
+    fn host_visible_allocation_plan(read self, read requirements: VkMemoryRequirements) -> Option[VulkanMemoryAllocationPlan]:
+        let index = self.host_visible_memory_type_index :: requirements.memory_type_bits :: method
+        return self.compatible_allocation_plan :: requirements, index :: method
 
     fn host_coherent_allocation_plan(read self, read requirements: VkMemoryRequirements) -> Option[VulkanMemoryAllocationPlan]:
-        select self.host_coherent_memory_type_index :: requirements.memory_type_bits :: method:
-            when Option.Some(index) => return self.allocation_plan :: requirements, index :: method
-            when Option.None => return Option.None
+        let index = self.host_coherent_memory_type_index :: requirements.memory_type_bits :: method
+        return self.compatible_allocation_plan :: requirements, index :: method
 
     fn staging_allocation_plan(read self, read requirements: VkMemoryRequirements) -> Option[VulkanMemoryAllocationPlan]:
-        select self.staging_memory_type_index :: requirements.memory_type_bits :: method:
-            when Option.Some(index) => return self.allocation_plan :: requirements, index :: method
-            when Option.None => return Option.None
+        let index = self.staging_memory_type_index :: requirements.memory_type_bits :: method
+        return self.compatible_allocation_plan :: requirements, index :: method
 
     fn device_local_allocation_plan(read self, read requirements: VkMemoryRequirements) -> Option[VulkanMemoryAllocationPlan]:
-        select self.device_local_memory_type_index :: requirements.memory_type_bits :: method:
-            when Option.Some(index) => return self.allocation_plan :: requirements, index :: method
-            when Option.None => return Option.None
+        let index = self.device_local_memory_type_index :: requirements.memory_type_bits :: method
+        return self.compatible_allocation_plan :: requirements, index :: method
 
 impl VulkanPresentSnapshot:
     fn host_visible_allocation_plan(read self, read requirements: VkMemoryRequirements) -> Option[VulkanMemoryAllocationPlan]:
@@ -90,19 +84,28 @@ impl VulkanPresentSnapshot:
     fn device_local_allocation_plan(read self, read requirements: VkMemoryRequirements) -> Option[VulkanMemoryAllocationPlan]:
         return self.memory_properties.device_local_allocation_plan :: requirements :: method
 
-impl VulkanPresentApp:
+impl VulkanPresentContext:
     fn host_visible_allocation_plan(read self, read requirements: VkMemoryRequirements) -> Option[VulkanMemoryAllocationPlan]:
-        let properties = self.memory_properties :: :: method
-        return properties.host_visible_allocation_plan :: requirements :: method
+        return self.memory_properties.host_visible_allocation_plan :: requirements :: method
 
     fn host_coherent_allocation_plan(read self, read requirements: VkMemoryRequirements) -> Option[VulkanMemoryAllocationPlan]:
-        let properties = self.memory_properties :: :: method
-        return properties.host_coherent_allocation_plan :: requirements :: method
+        return self.memory_properties.host_coherent_allocation_plan :: requirements :: method
 
     fn staging_allocation_plan(read self, read requirements: VkMemoryRequirements) -> Option[VulkanMemoryAllocationPlan]:
-        let properties = self.memory_properties :: :: method
-        return properties.staging_allocation_plan :: requirements :: method
+        return self.memory_properties.staging_allocation_plan :: requirements :: method
 
     fn device_local_allocation_plan(read self, read requirements: VkMemoryRequirements) -> Option[VulkanMemoryAllocationPlan]:
-        let properties = self.memory_properties :: :: method
-        return properties.device_local_allocation_plan :: requirements :: method
+        return self.memory_properties.device_local_allocation_plan :: requirements :: method
+
+impl VulkanPresentApp:
+    fn host_visible_allocation_plan(read self, read requirements: VkMemoryRequirements) -> Option[VulkanMemoryAllocationPlan]:
+        return self.context.host_visible_allocation_plan :: requirements :: method
+
+    fn host_coherent_allocation_plan(read self, read requirements: VkMemoryRequirements) -> Option[VulkanMemoryAllocationPlan]:
+        return self.context.host_coherent_allocation_plan :: requirements :: method
+
+    fn staging_allocation_plan(read self, read requirements: VkMemoryRequirements) -> Option[VulkanMemoryAllocationPlan]:
+        return self.context.staging_allocation_plan :: requirements :: method
+
+    fn device_local_allocation_plan(read self, read requirements: VkMemoryRequirements) -> Option[VulkanMemoryAllocationPlan]:
+        return self.context.device_local_allocation_plan :: requirements :: method

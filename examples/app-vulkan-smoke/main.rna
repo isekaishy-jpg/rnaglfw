@@ -33,13 +33,14 @@ mod window_geometry_support
 use std.{List, Option, Result, Str}
 
 use runa_app.{AppError, AppSnapshot, ClientApi, ControlFlow, CursorMode, GamepadAxis, GamepadButton}
-use runa_app.{JoystickSnapshot, MonitorSnapshot}
+use runa_app.{HatState, JoystickSnapshot, MonitorSnapshot, TextDecodeError}
 use runa_app.{KeyCode, MouseButton}
 use runa_app.{Platform, StandardCursor}
 use runa_app.RgbaImage
 use runa_app.{WindowEventKind, WindowId}
 use runa_app.{client_api_raw, context_creation_api_raw, input_action_raw, opengl_profile_raw}
 use runa_app.{app_init_config, hidden_window_spec, vulkan_window_spec}
+use runa_app.joystick_from_id
 use runa_app.{rgba_color, solid_rgba_image}
 use runa_app.{window_aspect_ratio, window_size_limits}
 use runa_app_vulkan.VulkanPresentApp
@@ -87,6 +88,32 @@ use window_geometry_support.prove_window_geometry_runtime
 
 const WINDOW_TITLE: Str = "runa_app_vulkan_smoke"
 const UPDATED_WINDOW_TITLE: Str = "runa_app_vulkan_smoke_owned"
+
+fn synthetic_joystick_text() -> Result[Option[Str], TextDecodeError]:
+    return Result.Ok :: Option.None :: call
+
+fn synthetic_joystick_snapshot(id: CInt, gamepad: Bool) -> JoystickSnapshot:
+    let joystick = joystick_from_id :: id :: call
+    let name_text = synthetic_joystick_text :: :: call
+    let guid_text = synthetic_joystick_text :: :: call
+    let gamepad_name_text = synthetic_joystick_text :: :: call
+    let axes = List[F32] :: :: call
+    let buttons = List[Bool] :: :: call
+    let hats = List[HatState] :: :: call
+    return JoystickSnapshot :: :: call
+        joystick = joystick
+        name_text = name_text
+        guid_text = guid_text
+        gamepad_name_text = gamepad_name_text
+        present = true
+        gamepad = gamepad
+        axis_count = 0
+        button_count = 0
+        hat_count = 0
+        axes = axes
+        buttons = buttons
+        hats = hats
+        gamepad_state = Option.None
 
 fn check_primary_monitor_snapshot(read primary_monitor_snapshot: MonitorSnapshot) -> I32:
     select:
@@ -328,6 +355,23 @@ fn check_snapshot_joystick_lookup(read snapshot: AppSnapshot) -> I32:
                 when Option.None => return 551
     return 0
 
+fn check_snapshot_joystick_index(read snapshot: AppSnapshot) -> I32:
+    select:
+        when snapshot.connected_joystick_count == 0 =>
+            select snapshot.joystick_index :: 0 :: method:
+                when Option.Some(_) => return 598
+                when Option.None => ()
+        else =>
+            let joystick_ids = snapshot.joystick_ids :: :: method
+            let joystick_id = joystick_ids[0]
+            select snapshot.joystick_index :: joystick_id :: method:
+                when Option.Some(index) =>
+                    select:
+                        when joystick_ids[index] != joystick_id => return 599
+                        else => ()
+                when Option.None => return 600
+    return 0
+
 fn check_snapshot_id_lists(read snapshot: AppSnapshot, window_id: WindowId) -> I32:
     let window_ids = snapshot.window_ids :: :: method
     select:
@@ -411,6 +455,46 @@ fn check_snapshot_gamepad_lookup(read snapshot: AppSnapshot) -> I32:
                         when !gamepad_snapshots[index].gamepad => return 560
                         else => ()
                 when Option.None => return 533
+    return 0
+
+fn check_snapshot_synthetic_gamepad_index_contract(take snapshot: AppSnapshot) -> I32:
+    let joysticks = List[JoystickSnapshot] :: :: call
+    joysticks.push :: synthetic_joystick_snapshot :: 1, false :: call :: method
+    joysticks.push :: synthetic_joystick_snapshot :: 4, true :: call :: method
+    joysticks.push :: synthetic_joystick_snapshot :: 7, true :: call :: method
+    let connected_joystick_count = joysticks.count :: :: method
+    snapshot.joysticks = joysticks
+    snapshot.connected_joystick_count = connected_joystick_count
+    let gamepad_ids = snapshot.gamepad_ids :: :: method
+    let gamepad_snapshots = snapshot.gamepad_snapshots :: :: method
+    select:
+        when !snapshot.has_gamepads :: :: method => return 582
+        when snapshot.gamepad_count :: :: method != 2 => return 583
+        when gamepad_ids.count :: :: method != 2 => return 584
+        when gamepad_ids[0] != 4 => return 585
+        when gamepad_ids[1] != 7 => return 586
+        when gamepad_snapshots.count :: :: method != 2 => return 587
+        when gamepad_snapshots[0].joystick.id != 4 => return 588
+        when gamepad_snapshots[1].joystick.id != 7 => return 589
+        when !gamepad_snapshots[0].gamepad => return 590
+        when !gamepad_snapshots[1].gamepad => return 591
+        when snapshot.has_gamepad :: 1 :: method => return 592
+        else => ()
+    select snapshot.gamepad_index :: 1 :: method:
+        when Option.Some(_) => return 593
+        when Option.None => ()
+    select snapshot.gamepad_index :: 4 :: method:
+        when Option.Some(index) =>
+            select:
+                when index != 0 => return 594
+                else => ()
+        when Option.None => return 595
+    select snapshot.gamepad_index :: 7 :: method:
+        when Option.Some(index) =>
+            select:
+                when index != 1 => return 596
+                else => ()
+        when Option.None => return 597
     return 0
 
 fn check_snapshot_close_requested_views(take snapshot: AppSnapshot, window_id: WindowId) -> I32:
@@ -700,6 +784,11 @@ fn main() -> I32:
             select:
                 when joystick_lookup_status != 0 => return joystick_lookup_status
                 else => ()
+            let joystick_index_snapshot = present_app.snapshot :: :: method
+            let joystick_index_status = check_snapshot_joystick_index :: joystick_index_snapshot :: call
+            select:
+                when joystick_index_status != 0 => return joystick_index_status
+                else => ()
             let snapshot_id_list_status = check_snapshot_id_lists :: snapshot, window_id :: call
             select:
                 when snapshot_id_list_status != 0 => return snapshot_id_list_status
@@ -713,6 +802,11 @@ fn main() -> I32:
             let snapshot_gamepad_lookup_status = check_snapshot_gamepad_lookup :: gamepad_lookup_snapshot :: call
             select:
                 when snapshot_gamepad_lookup_status != 0 => return snapshot_gamepad_lookup_status
+                else => ()
+            let synthetic_gamepad_index_snapshot = present_app.snapshot :: :: method
+            let synthetic_gamepad_index_status = check_snapshot_synthetic_gamepad_index_contract :: synthetic_gamepad_index_snapshot :: call
+            select:
+                when synthetic_gamepad_index_status != 0 => return synthetic_gamepad_index_status
                 else => ()
             let close_requested_view_snapshot = present_app.snapshot :: :: method
             let snapshot_close_requested_view_status = check_snapshot_close_requested_views :: close_requested_view_snapshot, window_id :: call
@@ -2504,7 +2598,8 @@ fn main() -> I32:
                                 when Result.Err(_) => return 291
                         when Result.Err(_) => return 215
                 when Result.Err(_) => return 216
-            select snapshot.window_index :: window_id :: method:
+            let current_snapshot = present_app.snapshot :: :: method
+            select current_snapshot.window_index :: window_id :: method:
                 when Option.Some(index) =>
                     select:
                         when index != 0 => return 21
@@ -2522,13 +2617,13 @@ fn main() -> I32:
                         when window_snapshot.window.id != window_id => return 40
                         else => ()
                 when Result.Err(_) => return 41
-            select snapshot.current_context_window_index :: :: method:
+            select current_snapshot.current_context_window_index :: :: method:
                 when Option.Some(_) => return 23
                 when Option.None => ()
             select present_app.current_context_window_index :: :: method:
                 when Option.Some(_) => return 299
                 when Option.None => ()
-            select snapshot.primary_monitor_id:
+            select current_snapshot.primary_monitor_id:
                 when Option.Some(primary_monitor_id) =>
                     select:
                         when !present_app.has_monitor :: primary_monitor_id :: method => return 300
@@ -2551,34 +2646,34 @@ fn main() -> I32:
                                 when primary_monitor_snapshot.id != primary_monitor_id => return 46
                                 else => ()
                         when Result.Err(_) => return 47
-                    select snapshot.primary_monitor_index :: :: method:
+                    select current_snapshot.primary_monitor_index :: :: method:
                         when Option.Some(index) =>
                             select:
-                                when snapshot.monitors[index].id != primary_monitor_id => return 24
+                                when current_snapshot.monitors[index].id != primary_monitor_id => return 24
                                 else => ()
                         when Option.None => return 25
                     select present_app.primary_monitor_index :: :: method:
                         when Option.Some(index) =>
                             select:
-                                when snapshot.monitors[index].id != primary_monitor_id => return 301
+                                when current_snapshot.monitors[index].id != primary_monitor_id => return 301
                                 else => ()
                         when Option.None => return 302
-                    select snapshot.monitor_index :: primary_monitor_id :: method:
+                    select current_snapshot.monitor_index :: primary_monitor_id :: method:
                         when Option.Some(index) =>
                             select:
-                                when snapshot.monitors[index].id != primary_monitor_id => return 26
+                                when current_snapshot.monitors[index].id != primary_monitor_id => return 26
                                 else => ()
                         when Option.None => return 27
                     select present_app.monitor_index :: primary_monitor_id :: method:
                         when Option.Some(index) =>
                             select:
-                                when snapshot.monitors[index].id != primary_monitor_id => return 303
+                                when current_snapshot.monitors[index].id != primary_monitor_id => return 303
                                 else => ()
                         when Option.None => return 304
                 when Option.None => return 28
             select:
-                when snapshot.connected_joystick_count == 0 =>
-                    select snapshot.joystick_index :: 0 :: method:
+                when current_snapshot.connected_joystick_count == 0 =>
+                    select current_snapshot.joystick_index :: 0 :: method:
                         when Option.Some(_) => return 29
                         when Option.None => ()
                     select:
@@ -2591,8 +2686,12 @@ fn main() -> I32:
                         when Option.Some(_) => return 310
                         when Option.None => ()
                 else =>
-                    let joystick_snapshot = snapshot.joysticks[0]
+                    let joystick_snapshot = current_snapshot.joysticks[0]
+                    let current_joystick_ids = current_snapshot.joystick_ids :: :: method
                     select:
+                        when current_joystick_ids.count :: :: method != current_snapshot.connected_joystick_count => return 631
+                        when current_joystick_ids.is_empty :: :: method => return 632
+                        when current_joystick_ids[0] != joystick_snapshot.joystick.id => return 633
                         when !present_app.has_joystick :: joystick_snapshot.joystick.id :: method => return 306
                         else => ()
                     select present_app.joystick_option :: joystick_snapshot.joystick.id :: method:
@@ -2607,16 +2706,16 @@ fn main() -> I32:
                                 when optional_joystick_snapshot.joystick.id != joystick_snapshot.joystick.id => return 313
                                 else => ()
                         when Option.None => return 314
-                    select snapshot.joystick_index :: joystick_snapshot.joystick.id :: method:
-                        when Option.Some(index) =>
+                    select current_snapshot.joystick :: joystick_snapshot.joystick.id :: method:
+                        when Option.Some(lookup_snapshot) =>
                             select:
-                                when snapshot.joysticks[index].joystick.id != joystick_snapshot.joystick.id => return 30
+                                when lookup_snapshot.joystick.id != joystick_snapshot.joystick.id => return 634
                                 else => ()
-                        when Option.None => return 31
+                        when Option.None => return 635
                     select present_app.joystick_index :: joystick_snapshot.joystick.id :: method:
                         when Option.Some(index) =>
                             select:
-                                when snapshot.joysticks[index].joystick.id != joystick_snapshot.joystick.id => return 307
+                                when current_joystick_ids[index] != joystick_snapshot.joystick.id => return 307
                                 else => ()
                         when Option.None => return 308
             let present_snapshot = present_app.present_snapshot :: :: method

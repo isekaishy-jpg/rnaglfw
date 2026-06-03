@@ -1,143 +1,37 @@
 use std.{List, Option, Result, Str}
-use event.{AppEvent, JoystickEvent, JoystickId, MonitorEvent, MonitorId}
+use event.{AppEvent, AppEventBatch, AppEventKind, JoystickEvent, JoystickId, MonitorEvent, MonitorId}
 use event.{UserEvent, UserEventId, WindowCharacterData, WindowCharacterModsData}
 use event.{WindowCursorData, WindowEvent, WindowKeyData, WindowMouseButtonData}
 use event.{WindowMoveData, WindowScaleData, WindowScrollData, WindowSizeData}
 use runtime.{App, AppError}
 use window.{Theme, WindowId}
 
-fn pending_pop_window_event_for(edit pending: List[AppEvent], id: WindowId) -> Option[WindowEvent]:
-    let remaining = List[AppEvent] :: :: call
-    let found: Option[WindowEvent] = Option.None
-    let found_any = false
-    repeat while !pending.is_empty :: :: method:
-        let event = pending.remove :: 0 :: method
-        select event:
-            when AppEvent.Window(window_event) =>
-                select:
-                    when !found_any && window_event.window_id :: :: method == id =>
-                        found = Option.Some :: window_event :: call
-                        found_any = true
-                    else =>
-                        let wrapped = AppEvent.Window :: window_event :: call
-                        remaining.push :: wrapped :: method
-            when AppEvent.Monitor(monitor_event) =>
-                let wrapped = AppEvent.Monitor :: monitor_event :: call
-                remaining.push :: wrapped :: method
-            when AppEvent.Joystick(joystick_event) =>
-                let wrapped = AppEvent.Joystick :: joystick_event :: call
-                remaining.push :: wrapped :: method
-            when AppEvent.User(user_event) =>
-                let wrapped = AppEvent.User :: user_event :: call
-                remaining.push :: wrapped :: method
-    pending = remaining
-    return found
-
-fn pending_pop_monitor_event_for(edit pending: List[AppEvent], id: MonitorId) -> Option[MonitorEvent]:
-    let remaining = List[AppEvent] :: :: call
-    let found: Option[MonitorEvent] = Option.None
-    let found_any = false
-    repeat while !pending.is_empty :: :: method:
-        let event = pending.remove :: 0 :: method
-        select event:
-            when AppEvent.Window(window_event) =>
-                let wrapped = AppEvent.Window :: window_event :: call
-                remaining.push :: wrapped :: method
-            when AppEvent.Monitor(monitor_event) =>
-                select:
-                    when !found_any && monitor_event.monitor_id :: :: method == id =>
-                        found = Option.Some :: monitor_event :: call
-                        found_any = true
-                    else =>
-                        let wrapped = AppEvent.Monitor :: monitor_event :: call
-                        remaining.push :: wrapped :: method
-            when AppEvent.Joystick(joystick_event) =>
-                let wrapped = AppEvent.Joystick :: joystick_event :: call
-                remaining.push :: wrapped :: method
-            when AppEvent.User(user_event) =>
-                let wrapped = AppEvent.User :: user_event :: call
-                remaining.push :: wrapped :: method
-    pending = remaining
-    return found
-
-fn pending_pop_joystick_event_for(edit pending: List[AppEvent], id: JoystickId) -> Option[JoystickEvent]:
-    let remaining = List[AppEvent] :: :: call
-    let found: Option[JoystickEvent] = Option.None
-    let found_any = false
-    repeat while !pending.is_empty :: :: method:
-        let event = pending.remove :: 0 :: method
-        select event:
-            when AppEvent.Window(window_event) =>
-                let wrapped = AppEvent.Window :: window_event :: call
-                remaining.push :: wrapped :: method
-            when AppEvent.Monitor(monitor_event) =>
-                let wrapped = AppEvent.Monitor :: monitor_event :: call
-                remaining.push :: wrapped :: method
-            when AppEvent.Joystick(joystick_event) =>
-                select:
-                    when !found_any && joystick_event.joystick_id :: :: method == id =>
-                        found = Option.Some :: joystick_event :: call
-                        found_any = true
-                    else =>
-                        let wrapped = AppEvent.Joystick :: joystick_event :: call
-                        remaining.push :: wrapped :: method
-            when AppEvent.User(user_event) =>
-                let wrapped = AppEvent.User :: user_event :: call
-                remaining.push :: wrapped :: method
-    pending = remaining
-    return found
-
-fn pending_pop_user_event_for(edit pending: List[AppEvent], id: UserEventId) -> Option[UserEvent]:
-    let remaining = List[AppEvent] :: :: call
-    let found: Option[UserEvent] = Option.None
-    let found_any = false
-    repeat while !pending.is_empty :: :: method:
-        let event = pending.remove :: 0 :: method
-        select event:
-            when AppEvent.Window(window_event) =>
-                let wrapped = AppEvent.Window :: window_event :: call
-                remaining.push :: wrapped :: method
-            when AppEvent.Monitor(monitor_event) =>
-                let wrapped = AppEvent.Monitor :: monitor_event :: call
-                remaining.push :: wrapped :: method
-            when AppEvent.Joystick(joystick_event) =>
-                let wrapped = AppEvent.Joystick :: joystick_event :: call
-                remaining.push :: wrapped :: method
-            when AppEvent.User(user_event) =>
-                select:
-                    when !found_any && user_event.user_id :: :: method == id =>
-                        found = Option.Some :: user_event :: call
-                        found_any = true
-                    else =>
-                        let wrapped = AppEvent.User :: user_event :: call
-                        remaining.push :: wrapped :: method
-    pending = remaining
-    return found
-
-fn copy_monitor_event(read event: MonitorEvent) -> MonitorEvent:
-    select event:
-        when MonitorEvent.Connected(id = id) =>
-            return MonitorEvent.Connected :: :: call
-                id = id
-        when MonitorEvent.Disconnected(id = id) =>
-            return MonitorEvent.Disconnected :: :: call
-                id = id
-
-fn copy_joystick_event(read event: JoystickEvent) -> JoystickEvent:
-    select event:
-        when JoystickEvent.Connected(id = id, gamepad = gamepad) =>
-            return JoystickEvent.Connected :: :: call
-                id = id
-                gamepad = gamepad
-        when JoystickEvent.Disconnected(id = id) =>
-            return JoystickEvent.Disconnected :: :: call
-                id = id
-
-fn copy_user_event(read event: UserEvent) -> UserEvent:
-    select event:
-        when UserEvent.Signaled(id = id) =>
-            return UserEvent.Signaled :: :: call
-                id = id
+fn batch_has_event_kind(read batch: AppEventBatch, kind: AppEventKind) -> Bool:
+    let count = batch.events.count :: :: method
+    let Result.Ok(limit) = count as Maybe[CInt] else => return false
+    let scan: CInt = 0
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return false
+        let event_kind = batch.events[index].kind :: :: method
+        select kind:
+            when AppEventKind.Window =>
+                select event_kind:
+                    when AppEventKind.Window => return true
+                    when _ => ()
+            when AppEventKind.Monitor =>
+                select event_kind:
+                    when AppEventKind.Monitor => return true
+                    when _ => ()
+            when AppEventKind.Joystick =>
+                select event_kind:
+                    when AppEventKind.Joystick => return true
+                    when _ => ()
+            when AppEventKind.User =>
+                select event_kind:
+                    when AppEventKind.User => return true
+                    when _ => ()
+        scan = scan + 1
+    return false
 
 impl App:
     fn pending_window_event_count(edit self) -> Index:
@@ -165,16 +59,28 @@ impl App:
         return count
 
     fn has_pending_window_events(edit self) -> Bool:
-        return self.pending_window_event_count :: :: method != 0
+        let batch = self.take_event_batch :: :: method
+        let has_events = batch_has_event_kind :: batch, AppEventKind.Window :: call
+        self.pending = batch.events
+        return has_events
 
     fn has_pending_monitor_events(edit self) -> Bool:
-        return self.pending_monitor_event_count :: :: method != 0
+        let batch = self.take_event_batch :: :: method
+        let has_events = batch_has_event_kind :: batch, AppEventKind.Monitor :: call
+        self.pending = batch.events
+        return has_events
 
     fn has_pending_joystick_events(edit self) -> Bool:
-        return self.pending_joystick_event_count :: :: method != 0
+        let batch = self.take_event_batch :: :: method
+        let has_events = batch_has_event_kind :: batch, AppEventKind.Joystick :: call
+        self.pending = batch.events
+        return has_events
 
     fn has_pending_user_events(edit self) -> Bool:
-        return self.pending_user_event_count :: :: method != 0
+        let batch = self.take_event_batch :: :: method
+        let has_events = batch_has_event_kind :: batch, AppEventKind.User :: call
+        self.pending = batch.events
+        return has_events
 
     fn pending_window_events(edit self) -> List[WindowEvent]:
         let batch = self.take_event_batch :: :: method
@@ -183,72 +89,21 @@ impl App:
         return events
 
     fn pending_monitor_events(edit self) -> List[MonitorEvent]:
-        let events = List[MonitorEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.pending.is_empty :: :: method:
-            let event = self.pending.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    let wrapped = AppEvent.Window :: window_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Monitor(monitor_event) =>
-                    let copied = copy_monitor_event :: monitor_event :: call
-                    events.push :: copied :: method
-                    let wrapped = AppEvent.Monitor :: monitor_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Joystick(joystick_event) =>
-                    let wrapped = AppEvent.Joystick :: joystick_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.User(user_event) =>
-                    let wrapped = AppEvent.User :: user_event :: call
-                    remaining.push :: wrapped :: method
-        self.pending = remaining
+        let batch = self.take_event_batch :: :: method
+        let events = batch.monitors :: :: method
+        self.pending = batch.events
         return events
 
     fn pending_joystick_events(edit self) -> List[JoystickEvent]:
-        let events = List[JoystickEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.pending.is_empty :: :: method:
-            let event = self.pending.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    let wrapped = AppEvent.Window :: window_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Monitor(monitor_event) =>
-                    let wrapped = AppEvent.Monitor :: monitor_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Joystick(joystick_event) =>
-                    let copied = copy_joystick_event :: joystick_event :: call
-                    events.push :: copied :: method
-                    let wrapped = AppEvent.Joystick :: joystick_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.User(user_event) =>
-                    let wrapped = AppEvent.User :: user_event :: call
-                    remaining.push :: wrapped :: method
-        self.pending = remaining
+        let batch = self.take_event_batch :: :: method
+        let events = batch.joysticks :: :: method
+        self.pending = batch.events
         return events
 
     fn pending_user_events(edit self) -> List[UserEvent]:
-        let events = List[UserEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.pending.is_empty :: :: method:
-            let event = self.pending.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    let wrapped = AppEvent.Window :: window_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Monitor(monitor_event) =>
-                    let wrapped = AppEvent.Monitor :: monitor_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Joystick(joystick_event) =>
-                    let wrapped = AppEvent.Joystick :: joystick_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.User(user_event) =>
-                    let copied = copy_user_event :: user_event :: call
-                    events.push :: copied :: method
-                    let wrapped = AppEvent.User :: user_event :: call
-                    remaining.push :: wrapped :: method
-        self.pending = remaining
+        let batch = self.take_event_batch :: :: method
+        let events = batch.users :: :: method
+        self.pending = batch.events
         return events
 
     fn pending_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
@@ -258,105 +113,27 @@ impl App:
         return events
 
     fn pending_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
-        let events = List[MonitorEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.pending.is_empty :: :: method:
-            let event = self.pending.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    let wrapped = AppEvent.Window :: window_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Monitor(monitor_event) =>
-                    select:
-                        when monitor_event.monitor_id :: :: method == id =>
-                            let copied = copy_monitor_event :: monitor_event :: call
-                            events.push :: copied :: method
-                        else => ()
-                    let wrapped = AppEvent.Monitor :: monitor_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Joystick(joystick_event) =>
-                    let wrapped = AppEvent.Joystick :: joystick_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.User(user_event) =>
-                    let wrapped = AppEvent.User :: user_event :: call
-                    remaining.push :: wrapped :: method
-        self.pending = remaining
+        let batch = self.take_event_batch :: :: method
+        let events = batch.monitor_events_for :: id :: method
+        self.pending = batch.events
         return events
 
     fn pending_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
-        let events = List[JoystickEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.pending.is_empty :: :: method:
-            let event = self.pending.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    let wrapped = AppEvent.Window :: window_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Monitor(monitor_event) =>
-                    let wrapped = AppEvent.Monitor :: monitor_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Joystick(joystick_event) =>
-                    select:
-                        when joystick_event.joystick_id :: :: method == id =>
-                            let copied = copy_joystick_event :: joystick_event :: call
-                            events.push :: copied :: method
-                        else => ()
-                    let wrapped = AppEvent.Joystick :: joystick_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.User(user_event) =>
-                    let wrapped = AppEvent.User :: user_event :: call
-                    remaining.push :: wrapped :: method
-        self.pending = remaining
+        let batch = self.take_event_batch :: :: method
+        let events = batch.joystick_events_for :: id :: method
+        self.pending = batch.events
         return events
 
     fn pending_user_events_for(edit self, id: UserEventId) -> List[UserEvent]:
-        let events = List[UserEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.pending.is_empty :: :: method:
-            let event = self.pending.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    let wrapped = AppEvent.Window :: window_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Monitor(monitor_event) =>
-                    let wrapped = AppEvent.Monitor :: monitor_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Joystick(joystick_event) =>
-                    let wrapped = AppEvent.Joystick :: joystick_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.User(user_event) =>
-                    select:
-                        when user_event.user_id :: :: method == id =>
-                            let copied = copy_user_event :: user_event :: call
-                            events.push :: copied :: method
-                        else => ()
-                    let wrapped = AppEvent.User :: user_event :: call
-                    remaining.push :: wrapped :: method
-        self.pending = remaining
+        let batch = self.take_event_batch :: :: method
+        let events = batch.user_events_for :: id :: method
+        self.pending = batch.events
         return events
 
     fn pending_created_window_ids(edit self) -> List[WindowId]:
-        let ids = List[WindowId] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.pending.is_empty :: :: method:
-            let event = self.pending.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Created(id = id) => ids.push :: id :: method
-                        when _ => ()
-                    let wrapped = AppEvent.Window :: window_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Monitor(monitor_event) =>
-                    let wrapped = AppEvent.Monitor :: monitor_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Joystick(joystick_event) =>
-                    let wrapped = AppEvent.Joystick :: joystick_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.User(user_event) =>
-                    let wrapped = AppEvent.User :: user_event :: call
-                    remaining.push :: wrapped :: method
-        self.pending = remaining
+        let batch = self.take_event_batch :: :: method
+        let ids = batch.created_window_ids :: :: method
+        self.pending = batch.events
         return ids
 
     fn pending_created_window_events(edit self) -> List[WindowEvent]:
@@ -366,27 +143,9 @@ impl App:
         return events
 
     fn pending_destroyed_window_ids(edit self) -> List[WindowId]:
-        let ids = List[WindowId] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.pending.is_empty :: :: method:
-            let event = self.pending.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Destroyed(id = id) => ids.push :: id :: method
-                        when _ => ()
-                    let wrapped = AppEvent.Window :: window_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Monitor(monitor_event) =>
-                    let wrapped = AppEvent.Monitor :: monitor_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Joystick(joystick_event) =>
-                    let wrapped = AppEvent.Joystick :: joystick_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.User(user_event) =>
-                    let wrapped = AppEvent.User :: user_event :: call
-                    remaining.push :: wrapped :: method
-        self.pending = remaining
+        let batch = self.take_event_batch :: :: method
+        let ids = batch.destroyed_window_ids :: :: method
+        self.pending = batch.events
         return ids
 
     fn pending_destroyed_window_events(edit self) -> List[WindowEvent]:
@@ -396,27 +155,9 @@ impl App:
         return events
 
     fn pending_close_requested_window_ids(edit self) -> List[WindowId]:
-        let ids = List[WindowId] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.pending.is_empty :: :: method:
-            let event = self.pending.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.CloseRequested(id = id) => ids.push :: id :: method
-                        when _ => ()
-                    let wrapped = AppEvent.Window :: window_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Monitor(monitor_event) =>
-                    let wrapped = AppEvent.Monitor :: monitor_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Joystick(joystick_event) =>
-                    let wrapped = AppEvent.Joystick :: joystick_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.User(user_event) =>
-                    let wrapped = AppEvent.User :: user_event :: call
-                    remaining.push :: wrapped :: method
-        self.pending = remaining
+        let batch = self.take_event_batch :: :: method
+        let ids = batch.close_requested_window_ids :: :: method
+        self.pending = batch.events
         return ids
 
     fn pending_close_requested_window_events(edit self) -> List[WindowEvent]:
@@ -426,27 +167,9 @@ impl App:
         return events
 
     fn pending_connected_monitor_ids(edit self) -> List[MonitorId]:
-        let ids = List[MonitorId] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.pending.is_empty :: :: method:
-            let event = self.pending.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    let wrapped = AppEvent.Window :: window_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Monitor(monitor_event) =>
-                    select monitor_event:
-                        when MonitorEvent.Connected(id = id) => ids.push :: id :: method
-                        when _ => ()
-                    let wrapped = AppEvent.Monitor :: monitor_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Joystick(joystick_event) =>
-                    let wrapped = AppEvent.Joystick :: joystick_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.User(user_event) =>
-                    let wrapped = AppEvent.User :: user_event :: call
-                    remaining.push :: wrapped :: method
-        self.pending = remaining
+        let batch = self.take_event_batch :: :: method
+        let ids = batch.connected_monitor_ids :: :: method
+        self.pending = batch.events
         return ids
 
     fn pending_connected_monitor_events(edit self) -> List[MonitorEvent]:
@@ -456,27 +179,9 @@ impl App:
         return events
 
     fn pending_disconnected_monitor_ids(edit self) -> List[MonitorId]:
-        let ids = List[MonitorId] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.pending.is_empty :: :: method:
-            let event = self.pending.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    let wrapped = AppEvent.Window :: window_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Monitor(monitor_event) =>
-                    select monitor_event:
-                        when MonitorEvent.Disconnected(id = id) => ids.push :: id :: method
-                        when _ => ()
-                    let wrapped = AppEvent.Monitor :: monitor_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Joystick(joystick_event) =>
-                    let wrapped = AppEvent.Joystick :: joystick_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.User(user_event) =>
-                    let wrapped = AppEvent.User :: user_event :: call
-                    remaining.push :: wrapped :: method
-        self.pending = remaining
+        let batch = self.take_event_batch :: :: method
+        let ids = batch.disconnected_monitor_ids :: :: method
+        self.pending = batch.events
         return ids
 
     fn pending_disconnected_monitor_events(edit self) -> List[MonitorEvent]:
@@ -486,29 +191,9 @@ impl App:
         return events
 
     fn pending_connected_joystick_events(edit self) -> List[JoystickEvent]:
-        let events = List[JoystickEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.pending.is_empty :: :: method:
-            let event = self.pending.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    let wrapped = AppEvent.Window :: window_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Monitor(monitor_event) =>
-                    let wrapped = AppEvent.Monitor :: monitor_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Joystick(joystick_event) =>
-                    select joystick_event:
-                        when JoystickEvent.Connected(id = _, gamepad = _) =>
-                            let copied = copy_joystick_event :: joystick_event :: call
-                            events.push :: copied :: method
-                        when _ => ()
-                    let wrapped = AppEvent.Joystick :: joystick_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.User(user_event) =>
-                    let wrapped = AppEvent.User :: user_event :: call
-                    remaining.push :: wrapped :: method
-        self.pending = remaining
+        let batch = self.take_event_batch :: :: method
+        let events = batch.connected_joystick_events :: :: method
+        self.pending = batch.events
         return events
 
     fn pending_connected_joystick_ids(edit self) -> List[JoystickId]:
@@ -518,27 +203,9 @@ impl App:
         return ids
 
     fn pending_disconnected_joystick_ids(edit self) -> List[JoystickId]:
-        let ids = List[JoystickId] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.pending.is_empty :: :: method:
-            let event = self.pending.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    let wrapped = AppEvent.Window :: window_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Monitor(monitor_event) =>
-                    let wrapped = AppEvent.Monitor :: monitor_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Joystick(joystick_event) =>
-                    select joystick_event:
-                        when JoystickEvent.Disconnected(id = id) => ids.push :: id :: method
-                        when _ => ()
-                    let wrapped = AppEvent.Joystick :: joystick_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.User(user_event) =>
-                    let wrapped = AppEvent.User :: user_event :: call
-                    remaining.push :: wrapped :: method
-        self.pending = remaining
+        let batch = self.take_event_batch :: :: method
+        let ids = batch.disconnected_joystick_ids :: :: method
+        self.pending = batch.events
         return ids
 
     fn pending_disconnected_joystick_events(edit self) -> List[JoystickEvent]:
@@ -566,39 +233,34 @@ impl App:
         return ids
 
     fn pending_user_ids(edit self) -> List[UserEventId]:
-        let ids = List[UserEventId] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.pending.is_empty :: :: method:
-            let event = self.pending.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    let wrapped = AppEvent.Window :: window_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Monitor(monitor_event) =>
-                    let wrapped = AppEvent.Monitor :: monitor_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.Joystick(joystick_event) =>
-                    let wrapped = AppEvent.Joystick :: joystick_event :: call
-                    remaining.push :: wrapped :: method
-                when AppEvent.User(user_event) =>
-                    let id = user_event.user_id :: :: method
-                    ids.push :: id :: method
-                    let wrapped = AppEvent.User :: user_event :: call
-                    remaining.push :: wrapped :: method
-        self.pending = remaining
+        let batch = self.take_event_batch :: :: method
+        let ids = batch.user_ids :: :: method
+        self.pending = batch.events
         return ids
 
     fn next_window_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
-        return pending_pop_window_event_for :: self.pending, id :: call
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_window_for :: id :: method
+        self.pending = batch.events
+        return event
 
     fn next_monitor_event_for(edit self, id: MonitorId) -> Option[MonitorEvent]:
-        return pending_pop_monitor_event_for :: self.pending, id :: call
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_monitor_for :: id :: method
+        self.pending = batch.events
+        return event
 
     fn next_joystick_event_for(edit self, id: JoystickId) -> Option[JoystickEvent]:
-        return pending_pop_joystick_event_for :: self.pending, id :: call
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_joystick_for :: id :: method
+        self.pending = batch.events
+        return event
 
     fn next_user_event_for(edit self, id: UserEventId) -> Option[UserEvent]:
-        return pending_pop_user_event_for :: self.pending, id :: call
+        let batch = self.take_event_batch :: :: method
+        let event = batch.pop_user_for :: id :: method
+        self.pending = batch.events
+        return event
 
     fn next_moved_data(edit self) -> Option[WindowMoveData]:
         let batch = self.take_event_batch :: :: method
@@ -709,31 +371,27 @@ impl App:
         return theme
 
     fn poll_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
-        select:
-            when self.has_pending_events :: :: method => ()
-            else => self.pump_poll :: :: method
-        let event = pending_pop_window_event_for :: self.pending, id :: call
+        let batch = self.poll_event_batch :: :: method
+        let event = batch.pop_window_for :: id :: method
+        self.pending = batch.events
         return Result.Ok :: event :: call
 
     fn poll_monitor_event_for(edit self, id: MonitorId) -> Result[Option[MonitorEvent], AppError]:
-        select:
-            when self.has_pending_events :: :: method => ()
-            else => self.pump_poll :: :: method
-        let event = pending_pop_monitor_event_for :: self.pending, id :: call
+        let batch = self.poll_event_batch :: :: method
+        let event = batch.pop_monitor_for :: id :: method
+        self.pending = batch.events
         return Result.Ok :: event :: call
 
     fn poll_joystick_event_for(edit self, id: JoystickId) -> Result[Option[JoystickEvent], AppError]:
-        select:
-            when self.has_pending_events :: :: method => ()
-            else => self.pump_poll :: :: method
-        let event = pending_pop_joystick_event_for :: self.pending, id :: call
+        let batch = self.poll_event_batch :: :: method
+        let event = batch.pop_joystick_for :: id :: method
+        self.pending = batch.events
         return Result.Ok :: event :: call
 
     fn poll_user_event_for(edit self, id: UserEventId) -> Result[Option[UserEvent], AppError]:
-        select:
-            when self.has_pending_events :: :: method => ()
-            else => self.pump_poll :: :: method
-        let event = pending_pop_user_event_for :: self.pending, id :: call
+        let batch = self.poll_event_batch :: :: method
+        let event = batch.pop_user_for :: id :: method
+        self.pending = batch.events
         return Result.Ok :: event :: call
 
     fn poll_next_moved_data(edit self) -> Result[Option[WindowMoveData], AppError]:
@@ -911,31 +569,27 @@ impl App:
         return events
 
     fn wait_window_event_for(edit self, id: WindowId) -> Result[Option[WindowEvent], AppError]:
-        select:
-            when self.has_pending_events :: :: method => ()
-            else => self.pump_wait :: :: method
-        let event = pending_pop_window_event_for :: self.pending, id :: call
+        let batch = self.wait_event_batch :: :: method
+        let event = batch.pop_window_for :: id :: method
+        self.pending = batch.events
         return Result.Ok :: event :: call
 
     fn wait_monitor_event_for(edit self, id: MonitorId) -> Result[Option[MonitorEvent], AppError]:
-        select:
-            when self.has_pending_events :: :: method => ()
-            else => self.pump_wait :: :: method
-        let event = pending_pop_monitor_event_for :: self.pending, id :: call
+        let batch = self.wait_event_batch :: :: method
+        let event = batch.pop_monitor_for :: id :: method
+        self.pending = batch.events
         return Result.Ok :: event :: call
 
     fn wait_joystick_event_for(edit self, id: JoystickId) -> Result[Option[JoystickEvent], AppError]:
-        select:
-            when self.has_pending_events :: :: method => ()
-            else => self.pump_wait :: :: method
-        let event = pending_pop_joystick_event_for :: self.pending, id :: call
+        let batch = self.wait_event_batch :: :: method
+        let event = batch.pop_joystick_for :: id :: method
+        self.pending = batch.events
         return Result.Ok :: event :: call
 
     fn wait_user_event_for(edit self, id: UserEventId) -> Result[Option[UserEvent], AppError]:
-        select:
-            when self.has_pending_events :: :: method => ()
-            else => self.pump_wait :: :: method
-        let event = pending_pop_user_event_for :: self.pending, id :: call
+        let batch = self.wait_event_batch :: :: method
+        let event = batch.pop_user_for :: id :: method
+        self.pending = batch.events
         return Result.Ok :: event :: call
 
     fn wait_next_moved_data(edit self) -> Result[Option[WindowMoveData], AppError]:
@@ -1113,31 +767,27 @@ impl App:
         return events
 
     fn wait_timeout_window_event_for(edit self, id: WindowId, timeout: F64) -> Result[Option[WindowEvent], AppError]:
-        select:
-            when self.has_pending_events :: :: method => ()
-            else => self.pump_wait_timeout :: timeout :: method
-        let event = pending_pop_window_event_for :: self.pending, id :: call
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let event = batch.pop_window_for :: id :: method
+        self.pending = batch.events
         return Result.Ok :: event :: call
 
     fn wait_timeout_monitor_event_for(edit self, id: MonitorId, timeout: F64) -> Result[Option[MonitorEvent], AppError]:
-        select:
-            when self.has_pending_events :: :: method => ()
-            else => self.pump_wait_timeout :: timeout :: method
-        let event = pending_pop_monitor_event_for :: self.pending, id :: call
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let event = batch.pop_monitor_for :: id :: method
+        self.pending = batch.events
         return Result.Ok :: event :: call
 
     fn wait_timeout_joystick_event_for(edit self, id: JoystickId, timeout: F64) -> Result[Option[JoystickEvent], AppError]:
-        select:
-            when self.has_pending_events :: :: method => ()
-            else => self.pump_wait_timeout :: timeout :: method
-        let event = pending_pop_joystick_event_for :: self.pending, id :: call
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let event = batch.pop_joystick_for :: id :: method
+        self.pending = batch.events
         return Result.Ok :: event :: call
 
     fn wait_timeout_user_event_for(edit self, id: UserEventId, timeout: F64) -> Result[Option[UserEvent], AppError]:
-        select:
-            when self.has_pending_events :: :: method => ()
-            else => self.pump_wait_timeout :: timeout :: method
-        let event = pending_pop_user_event_for :: self.pending, id :: call
+        let batch = self.wait_timeout_event_batch :: timeout :: method
+        let event = batch.pop_user_for :: id :: method
+        self.pending = batch.events
         return Result.Ok :: event :: call
 
     fn wait_timeout_next_moved_data(edit self, timeout: F64) -> Result[Option[WindowMoveData], AppError]:

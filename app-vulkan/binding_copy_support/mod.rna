@@ -30,7 +30,7 @@ pub(package) fn collect_swapchain_images(read source: [VkImage; MAX_SWAPCHAIN_IM
         else => ()
     return copied
 
-fn copy_swapchain_image_list(read source: List[VkImage]) -> List[VkImage]:
+pub(package) fn copy_swapchain_image_list(read source: List[VkImage]) -> List[VkImage]:
     let copied = List[VkImage] :: :: call
     let count = source.count :: :: method
     select:

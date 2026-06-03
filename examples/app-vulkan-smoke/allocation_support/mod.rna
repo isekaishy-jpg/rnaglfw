@@ -12,6 +12,15 @@ pub fn check_vulkan_allocation_helpers(read present_app: VulkanPresentApp, read 
                 when requirements.memory_type_bits == 0 => return 3
                 when requirements.compatible_memory_type_count :: memory_properties :: method == 0 => return 4
                 else => ()
+            let app_compatible_memory_type_count = present_app.compatible_memory_type_count :: requirements.memory_type_bits :: method
+            let snapshot_compatible_memory_type_count = present_snapshot.compatible_memory_type_count :: requirements.memory_type_bits :: method
+            let app_compatible_memory_type_indices = present_app.compatible_memory_type_indices :: requirements.memory_type_bits :: method
+            let Result.Ok(app_compatible_memory_type_index_count) = app_compatible_memory_type_indices.count :: :: method as Maybe[CUInt] else => return 32
+            select:
+                when app_compatible_memory_type_count != requirements.compatible_memory_type_count :: memory_properties :: method => return 29
+                when snapshot_compatible_memory_type_count != app_compatible_memory_type_count => return 30
+                when app_compatible_memory_type_index_count != app_compatible_memory_type_count => return 31
+                else => ()
             select present_app.surface_staging_allocation_plan :: :: method:
                 when Result.Ok(app_plan) =>
                     select present_snapshot.staging_allocation_plan :: requirements :: method:

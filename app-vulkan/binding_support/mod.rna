@@ -3,7 +3,7 @@ use std.{List, Option, Result}
 use runa_app.WindowId
 
 use present.{VkImage, VulkanPresentApp, VulkanPresentBindings, VulkanPresentContext, VulkanPresentSnapshot}
-use binding_copy_support.copy_vulkan_present_bindings
+use binding_copy_support.{copy_swapchain_image_list, copy_vulkan_present_bindings}
 use binding_copy_support.collect_swapchain_images
 
 impl VulkanPresentBindings:
@@ -50,13 +50,7 @@ impl VulkanPresentBindings:
         return self.swapchain_image :: 0 :: method
 
     fn active_swapchain_images(read self) -> List[VkImage]:
-        let images = List[VkImage] :: :: call
-        let scan: CUInt = 0
-        repeat while scan < self.swapchain_image_count:
-            let Result.Ok(slot) = scan as Maybe[Index] else => break
-            images.push :: self.swapchain_images[slot] :: method
-            scan = scan + 1
-        return images
+        return copy_swapchain_image_list :: self.swapchain_images :: call
 
 impl VulkanPresentSnapshot:
     fn bindings(read self) -> VulkanPresentBindings:

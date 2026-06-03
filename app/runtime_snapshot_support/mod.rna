@@ -181,10 +181,10 @@ pub(package) fn copy_joystick_snapshot(read snapshot: JoystickSnapshot) -> Joyst
 
 impl AppSnapshot:
     fn has_monitors(read self) -> Bool:
-        return self.monitor_count != 0
+        return !self.monitors.is_empty :: :: method
 
     fn has_joysticks(read self) -> Bool:
-        return self.connected_joystick_count != 0
+        return !self.joysticks.is_empty :: :: method
 
     fn has_current_context_window(read self) -> Bool:
         select self.current_context_window_id:
@@ -215,10 +215,15 @@ impl AppSnapshot:
 
     fn gamepad_snapshots(read self) -> List[JoystickSnapshot]:
         let snapshots = List[JoystickSnapshot] :: :: call
-        let ids = self.gamepad_ids :: :: method
-        repeat while !ids.is_empty :: :: method:
-            let id = ids.remove :: 0 :: method
-            select self.gamepad :: id :: method:
-                when Option.Some(snapshot) => snapshots.push :: snapshot :: method
-                when Option.None => ()
+        let count = self.joysticks.count :: :: method
+        let Result.Ok(limit) = index_to_cint :: count :: call else => return snapshots
+        let scan: CInt = 0
+        repeat while scan < limit:
+            let Result.Ok(index) = cint_to_index :: scan :: call else => return snapshots
+            select:
+                when self.joysticks[index].gamepad =>
+                    let snapshot = copy_joystick_snapshot :: self.joysticks[index] :: call
+                    snapshots.push :: snapshot :: method
+                else => ()
+            scan = scan + 1
         return snapshots

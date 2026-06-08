@@ -1,0 +1,24 @@
+use event.WindowEvent
+
+pub fn window_event_requests_present(read event: WindowEvent) -> Bool:
+    select event:
+        when WindowEvent.RedrawRequested(id = _) => return true
+        else => return false
+
+pub fn window_event_requires_presenter_resize(read event: WindowEvent) -> Bool:
+    select event:
+        when WindowEvent.Resized(id = _, width = _, height = _) => return true
+        when WindowEvent.FramebufferResized(id = _, width = _, height = _) => return true
+        when WindowEvent.ContentScaleChanged(id = _, x = _, y = _) => return true
+        else => return false
+
+pub fn window_event_requires_presenter_sync(read event: WindowEvent) -> Bool:
+    select:
+        when window_event_requests_present :: event :: call => return true
+        when window_event_requires_presenter_resize :: event :: call => return true
+        else => ()
+    select event:
+        when WindowEvent.Created(id = _) => return true
+        when WindowEvent.Destroyed(id = _) => return true
+        when WindowEvent.CloseRequested(id = _) => return true
+        else => return false

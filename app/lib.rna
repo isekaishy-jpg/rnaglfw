@@ -1,37 +1,6 @@
 pub(package) mod bridge
-pub(package) mod event_window_composition_support
-pub(package) mod event_window_hovered_file_support
-pub(package) mod event_lifecycle_support
-pub(package) mod event_window_input_support
-pub(package) mod event_window_modifier_support
-pub(package) mod event_window_raw_input_support
-pub(package) mod event_window_state_support
-pub(package) mod event_window_touch_support
 pub mod input
 pub(package) mod mailbox
-pub(package) mod runtime_joystick_snapshot_support
-pub(package) mod runtime_filtered_event_support
-pub(package) mod runtime_lifecycle_event_support
-pub(package) mod runtime_live_index_support
-pub(package) mod runtime_live_lookup_support
-pub(package) mod runtime_snapshot_support
-pub(package) mod runtime_window_composition_event_support
-pub(package) mod runtime_window_hook_support
-pub(package) mod runtime_window_appearance_support
-pub(package) mod runtime_window_hovered_file_event_support
-pub(package) mod runtime_window_input_event_support
-pub(package) mod runtime_window_modifier_event_support
-pub(package) mod runtime_window_raw_input_list_support
-pub(package) mod runtime_window_state_event_support
-pub(package) mod win32_drag_drop_support
-pub(package) mod win32_ime_support
-pub(package) mod win32_window_icon_support
-pub(package) mod win32_window_appearance_support
-pub(package) mod win32_raw_input_support
-pub(package) mod win32_window_control_support
-pub(package) mod runtime_window_touch_event_support
-pub(package) mod win32_theme_support
-pub(package) mod win32_touch_support
 
 pub mod event
 pub mod graphics
@@ -40,11 +9,46 @@ pub mod runtime
 pub mod system
 pub mod window
 
+pub(package) use event.lifecycle_support as event_lifecycle_support
+pub(package) use event.window.composition_support as event_window_composition_support
+pub(package) use event.window.hovered_file_support as event_window_hovered_file_support
+pub(package) use event.window.input_support as event_window_input_support
+pub(package) use event.window.modifier_support as event_window_modifier_support
+pub(package) use event.window.raw_input_support as event_window_raw_input_support
+pub(package) use event.window.state_support as event_window_state_support
+pub(package) use event.window.touch_support as event_window_touch_support
+pub(package) use runtime.filtered_event_support as runtime_filtered_event_support
+pub(package) use runtime.joystick_snapshot_support as runtime_joystick_snapshot_support
+pub(package) use runtime.lifecycle_event_support as runtime_lifecycle_event_support
+pub(package) use runtime.live_index_support as runtime_live_index_support
+pub(package) use runtime.live_lookup_support as runtime_live_lookup_support
+pub(package) use runtime.snapshot_support as runtime_snapshot_support
+pub(package) use runtime.window_appearance_support as runtime_window_appearance_support
+pub(package) use runtime.window_composition_event_support as runtime_window_composition_event_support
+pub(package) use runtime.window_hook_support as runtime_window_hook_support
+pub(package) use runtime.window_hovered_file_event_support as runtime_window_hovered_file_event_support
+pub(package) use runtime.window_input_event_support as runtime_window_input_event_support
+pub(package) use runtime.window_modifier_event_support as runtime_window_modifier_event_support
+pub(package) use runtime.window_raw_input_list_support as runtime_window_raw_input_list_support
+pub(package) use runtime.window_state_event_support as runtime_window_state_event_support
+pub(package) use runtime.window_touch_event_support as runtime_window_touch_event_support
+pub(package) use window.rgba_support as window_rgba_support
+pub(package) use window.platform_win32.drag_drop_support as win32_drag_drop_support
+pub(package) use window.platform_win32.ime_support as win32_ime_support
+pub(package) use window.platform_win32.raw_input_support as win32_raw_input_support
+pub(package) use window.platform_win32.theme_support as win32_theme_support
+pub(package) use window.platform_win32.touch_support as win32_touch_support
+pub(package) use window.platform_win32.window_appearance_support as win32_window_appearance_support
+pub(package) use window.platform_win32.window_control_support as win32_window_control_support
+pub(package) use window.platform_win32.window_icon_support as win32_window_icon_support
+
 pub use bridge.TextDecodeError
 pub use event.{AppEvent, AppEventBatch, AppEventKind, JoystickEvent, JoystickId}
 pub use event.{JoystickEventKind, MonitorEvent, MonitorEventKind, MonitorId}
 pub use event.{UserEvent, UserEventId, UserEventKind, WindowEvent, app_event_batch}
 pub use event.app_event_batch_from_events
+pub use event.presenter_support.{window_event_requests_present, window_event_requires_presenter_resize}
+pub use event.presenter_support.window_event_requires_presenter_sync
 pub use event.WindowCompositionData
 pub use event.{WindowCharacterData, WindowCharacterModsData, WindowCursorData}
 pub use event.WindowRawKeyData
@@ -112,6 +116,7 @@ pub use window.rgba_blend_source_over
 pub use window.Theme
 pub use window.WindowIconError
 pub use window.WindowTaskbarIconError
+pub use window.host.{WindowPresentationInfo, WindowPresentationTarget}
 pub use window.{KeyboardInputSnapshot, MouseInputSnapshot, WindowInputSnapshot}
 pub use window.{WindowAspectRatio, WindowModeError, WindowPlacement}
 pub use window.WindowSizeLimits

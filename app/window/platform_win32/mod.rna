@@ -1,0 +1,225 @@
+use std.{Option, Result, Str}
+use bridge.{TextDecodeError, copy_c_string}
+use glfw.{GlfwMonitor, GlfwPoint, GlfwRect}
+use window.{Point, Rect, RgbaColor, Window, WindowResizeDirection}
+pub(package) mod drag_drop_support
+pub(package) mod ime_support
+pub(package) mod raw_input_support
+pub(package) mod theme_support
+pub(package) mod touch_support
+pub(package) mod window_appearance_support
+pub(package) mod window_control_support
+pub(package) mod window_icon_support
+use window.platform_win32.drag_drop_support.{current_window_drag_drop_enabled, set_window_drag_drop_enabled}
+use window.platform_win32.ime_support.{current_window_ime_allowed, current_window_ime_cursor_area}
+use window.platform_win32.ime_support.{set_window_ime_allowed, set_window_ime_cursor_area}
+use window.platform_win32.theme_support.{current_window_theme, current_window_theme_preference, set_window_theme}
+use window.platform_win32.window_appearance_support.{current_window_border_color, current_window_corner_preference}
+use window.platform_win32.window_appearance_support.{current_window_system_backdrop, current_window_title_background_color}
+use window.platform_win32.window_appearance_support.{current_window_title_text_color, current_window_undecorated_shadow}
+use window.platform_win32.window_appearance_support.{set_window_border_color, set_window_corner_preference}
+use window.platform_win32.window_appearance_support.{set_window_system_backdrop, set_window_title_background_color}
+use window.platform_win32.window_appearance_support.{set_window_title_text_color, set_window_undecorated_shadow}
+use window.platform_win32.window_control_support.{current_window_buttons, current_window_content_protected}
+use window.platform_win32.window_control_support.{current_window_clip_children, current_window_no_redirection_bitmap}
+use window.platform_win32.window_control_support.{current_window_enabled, current_window_owner_window, current_window_skip_taskbar}
+use window.platform_win32.window_control_support.current_window_level
+use window.platform_win32.window_control_support.{drag_resize_window_interaction, request_window_attention}
+use window.platform_win32.window_control_support.{drag_window_interaction, set_window_buttons}
+use window.platform_win32.window_control_support.set_window_clip_children
+use window.platform_win32.window_control_support.{set_window_content_protected, set_window_enabled}
+use window.platform_win32.window_control_support.{set_window_level, set_window_skip_taskbar, show_window_system_menu}
+
+pub use window.{Theme, UserAttentionType, Win32HMenu, Win32HWnd}
+pub use window.{WindowAppearanceError, WindowButtons, WindowControlError}
+pub use window.{WindowCornerPreference, WindowLevel, WindowSystemBackdrop}
+pub use window.{WindowTaskbarIconError, WindowThemeError}
+pub use window.{all_window_buttons, no_window_buttons, theme_from_raw, theme_raw}
+pub use window.window_buttons
+pub use window.{window_corner_preference_from_raw, window_corner_preference_raw}
+pub use window.{window_level_from_raw, window_level_raw}
+pub use window.{window_system_backdrop_from_raw, window_system_backdrop_raw}
+pub use window.{win32_class_named_window_spec, win32_keyboard_menu_window_spec}
+pub use window.{win32_menu_window_spec, win32_no_redirection_bitmap_window_spec}
+pub use window.{win32_showdefault_window_spec, win32_skip_taskbar_window_spec}
+pub use window.{window_spec_with_win32_border_color, window_spec_with_win32_class_name}
+pub use window.{window_spec_with_win32_clip_children, window_spec_with_win32_corner_preference}
+pub use window.{window_spec_with_win32_keyboard_menu, window_spec_with_win32_menu}
+pub use window.window_spec_with_win32_no_redirection_bitmap
+pub use window.{window_spec_with_win32_owner_window, window_spec_with_win32_parent_window}
+pub use window.{window_spec_with_win32_showdefault, window_spec_with_win32_skip_taskbar}
+pub use window.{window_spec_with_win32_system_backdrop, window_spec_with_win32_taskbar_icon}
+pub use window.window_spec_with_win32_title_background_color
+pub use window.window_spec_with_win32_title_text_color
+pub use window.window_spec_with_win32_undecorated_shadow
+pub use window.window_spec_without_win32_border_color
+pub use window.{window_spec_without_win32_class_name, window_spec_without_win32_menu}
+pub use window.{window_spec_without_win32_owner_window, window_spec_without_win32_parent_window}
+pub use window.window_spec_without_win32_taskbar_icon
+pub use window.window_spec_without_win32_title_background_color
+pub use window.window_spec_without_win32_title_text_color
+pub use window.window_spec_without_win32_drag_and_drop
+
+pub struct Win32MonitorNames:
+    pub adapter_name: Str
+    pub monitor_name: Str
+
+impl Window:
+    fn request_user_attention(read self, read request: Option[UserAttentionType]) -> Result[Unit, WindowControlError]:
+        return request_window_attention :: self.raw, request :: call
+
+    fn drag_window(read self) -> Result[Unit, WindowControlError]:
+        return drag_window_interaction :: self.raw :: call
+
+    fn drag_resize_window(read self, read direction: WindowResizeDirection) -> Result[Unit, WindowControlError]:
+        return drag_resize_window_interaction :: self.raw, direction :: call
+
+    fn show_window_menu(read self, x: CInt, y: CInt) -> Result[Unit, WindowControlError]:
+        let position = GlfwPoint :: x, y :: call
+        return show_window_system_menu :: self.raw, position :: call
+
+    fn show_window_menu_at(read self, read position: Point) -> Result[Unit, WindowControlError]:
+        return show_window_system_menu :: self.raw, position :: call
+
+    fn theme(read self) -> Option[Theme]:
+        return current_window_theme :: self.raw :: call
+
+    fn theme_preference(read self) -> Option[Theme]:
+        return current_window_theme_preference :: self.raw :: call
+
+    fn set_theme(read self, read theme: Option[Theme]) -> Result[Unit, WindowThemeError]:
+        return set_window_theme :: self.raw, theme :: call
+
+    fn undecorated_shadow(read self) -> Bool:
+        return current_window_undecorated_shadow :: self.raw :: call
+
+    fn system_backdrop(read self) -> WindowSystemBackdrop:
+        return current_window_system_backdrop :: self.raw :: call
+
+    fn border_color(read self) -> Option[RgbaColor]:
+        return current_window_border_color :: self.raw :: call
+
+    fn title_background_color(read self) -> Option[RgbaColor]:
+        return current_window_title_background_color :: self.raw :: call
+
+    fn title_text_color(read self) -> Option[RgbaColor]:
+        return current_window_title_text_color :: self.raw :: call
+
+    fn corner_preference(read self) -> WindowCornerPreference:
+        return current_window_corner_preference :: self.raw :: call
+
+    fn window_level(read self) -> WindowLevel:
+        return current_window_level :: self.raw :: call
+
+    fn set_window_level(read self, read level: WindowLevel) -> Result[Unit, WindowControlError]:
+        return set_window_level :: self.raw, level :: call
+
+    fn enabled_buttons(read self) -> Result[WindowButtons, WindowControlError]:
+        return current_window_buttons :: self.raw :: call
+
+    fn enabled(read self) -> Result[Bool, WindowControlError]:
+        return current_window_enabled :: self.raw :: call
+
+    fn skip_taskbar(read self) -> Result[Bool, WindowControlError]:
+        return current_window_skip_taskbar :: self.raw :: call
+
+    fn owner_window(read self) -> Result[Option[Win32HWnd], WindowControlError]:
+        return current_window_owner_window :: self.raw :: call
+
+    fn clip_children(read self) -> Result[Bool, WindowControlError]:
+        return current_window_clip_children :: self.raw :: call
+
+    fn no_redirection_bitmap(read self) -> Result[Bool, WindowControlError]:
+        return current_window_no_redirection_bitmap :: self.raw :: call
+
+    fn content_protected(read self) -> Result[Bool, WindowControlError]:
+        return current_window_content_protected :: self.raw :: call
+
+    fn ime_allowed(read self) -> Bool:
+        return current_window_ime_allowed :: self.raw :: call
+
+    fn set_ime_allowed(read self, allowed: Bool) -> Unit:
+        set_window_ime_allowed :: self.raw, allowed :: call
+        return
+
+    fn ime_cursor_area(read self) -> Option[Rect]:
+        return current_window_ime_cursor_area :: self.raw :: call
+
+    fn set_ime_cursor_area(read self, x: CInt, y: CInt, width: CInt, height: CInt) -> Unit:
+        let area = GlfwRect :: x, y, width, height :: call
+        set_window_ime_cursor_area :: self.raw, area :: call
+        return
+
+    fn apply_ime_cursor_area(read self, read area: Rect) -> Unit:
+        set_window_ime_cursor_area :: self.raw, area :: call
+        return
+
+    fn set_enabled_buttons(read self, read buttons: WindowButtons) -> Result[Unit, WindowControlError]:
+        return set_window_buttons :: self.raw, buttons :: call
+
+    fn set_enabled(read self, enabled: Bool) -> Result[Unit, WindowControlError]:
+        return set_window_enabled :: self.raw, enabled :: call
+
+    fn set_skip_taskbar(read self, skip: Bool) -> Result[Unit, WindowControlError]:
+        return set_window_skip_taskbar :: self.raw, skip :: call
+
+    fn set_clip_children(read self, enabled: Bool) -> Result[Unit, WindowControlError]:
+        return set_window_clip_children :: self.raw, enabled :: call
+
+    fn set_content_protected(read self, enabled: Bool) -> Result[Unit, WindowControlError]:
+        return set_window_content_protected :: self.raw, enabled :: call
+
+    fn set_undecorated_shadow(read self, shadow: Bool) -> Result[Unit, WindowAppearanceError]:
+        return set_window_undecorated_shadow :: self.raw, shadow :: call
+
+    fn set_system_backdrop(read self, read backdrop: WindowSystemBackdrop) -> Result[Unit, WindowAppearanceError]:
+        return set_window_system_backdrop :: self.raw, backdrop :: call
+
+    fn set_border_color(read self, read color: Option[RgbaColor]) -> Result[Unit, WindowAppearanceError]:
+        return set_window_border_color :: self.raw, color :: call
+
+    fn set_title_background_color(read self, read color: Option[RgbaColor]) -> Result[Unit, WindowAppearanceError]:
+        return set_window_title_background_color :: self.raw, color :: call
+
+    fn set_title_text_color(read self, read color: Option[RgbaColor]) -> Result[Unit, WindowAppearanceError]:
+        return set_window_title_text_color :: self.raw, color :: call
+
+    fn set_corner_preference(read self, read preference: WindowCornerPreference) -> Result[Unit, WindowAppearanceError]:
+        return set_window_corner_preference :: self.raw, preference :: call
+
+    fn drag_and_drop_enabled(read self) -> Bool:
+        return current_window_drag_drop_enabled :: self.raw :: call
+
+    fn set_drag_and_drop_enabled(read self, enabled: Bool) -> Bool:
+        return set_window_drag_drop_enabled :: self.raw, enabled :: call
+
+    fn disable_drag_and_drop(read self) -> Bool:
+        return self.set_drag_and_drop_enabled :: false :: method
+
+    fn enable_drag_and_drop(read self) -> Bool:
+        return self.set_drag_and_drop_enabled :: true :: method
+
+    fn hwnd(read self) -> Win32HWnd:
+        return self.raw.win32_window :: :: method
+
+impl GlfwMonitor:
+    fn win32_names(read self) -> Result[Win32MonitorNames, TextDecodeError]:
+        select either:
+            when adapter_name: Result.Ok(adapter_name) <- self.win32_adapter_name_text :: :: method
+            when monitor_name: Result.Ok(monitor_name) <- self.win32_monitor_name_text :: :: method =>
+                let names = Win32MonitorNames :: :: call
+                    adapter_name = adapter_name
+                    monitor_name = monitor_name
+                return Result.Ok :: names :: call
+
+        with Result.Err(err):
+            adapter_name => return Result.Err :: err :: call
+            monitor_name => return Result.Err :: err :: call
+
+    fn win32_adapter_name_text(read self) -> Result[Str, TextDecodeError]:
+        let raw_name = self.win32_adapter_name :: :: method
+        return copy_c_string :: raw_name :: call
+
+    fn win32_monitor_name_text(read self) -> Result[Str, TextDecodeError]:
+        let raw_name = self.win32_monitor_name :: :: method
+        return copy_c_string :: raw_name :: call

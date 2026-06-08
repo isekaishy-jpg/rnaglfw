@@ -1,12 +1,12 @@
 use std.{Option, Result, Str}
-use runa_app_run.app_create_window
-use runa_app_run.{App, AppError, AppHandler, ControlFlow, GamepadButton}
-use runa_app_run.{CursorMode, KeyCode, MouseButton}
-use runa_app_run.{JoystickEvent, MonitorEvent, WindowEvent, WindowId}
-use runa_app_run.UserEvent
-use runa_app_run.{GlfwVkAllocationCallbacksRaw, GlfwVkInstance, GlfwVkPhysicalDevice}
-use runa_app_run.hidden_window_spec
-use runa_app_run.vulkan_window_support_report
+use runa_app.app_create_window
+use runa_app.{App, AppError, AppHandler, ControlFlow, GamepadButton}
+use runa_app.{CursorMode, KeyCode, MouseButton}
+use runa_app.{JoystickEvent, MonitorEvent, WindowEvent, WindowId}
+use runa_app.UserEvent
+use runa_app.{GlfwVkAllocationCallbacksRaw, GlfwVkInstance, GlfwVkPhysicalDevice}
+use runa_app.hidden_window_spec
+use runa_app.vulkan_window_support_report
 
 const WINDOW_TITLE: Str = "runa_app run smoke"
 

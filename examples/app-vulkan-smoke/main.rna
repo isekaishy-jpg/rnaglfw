@@ -2907,7 +2907,7 @@ fn main() -> I32:
                         when AppError.WindowTaskbarIconApplyFailed(_) => return 24
                         when AppError.WindowAppearanceApplyFailed(_) => return 23
                         when AppError.WindowControlHookInstallFailed => return 21
-                        when AppError.ThemeHookInstallFailed => return 14
+                        when AppError.WindowThemeApplyFailed(_) => return 14
                         when AppError.ImeHookInstallFailed => return 15
                         when AppError.RawInputHookInstallFailed => return 16
                         when AppError.TouchHookInstallFailed => return 17

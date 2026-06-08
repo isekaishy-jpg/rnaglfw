@@ -1,11 +1,11 @@
 use std.{List, Option, Result, Str}
 use bridge.{TextDecodeError, copy_c_string, maybe_c_string}
-use glfw.{glfw_create_window_surface, glfw_extension_supported}
-use glfw.{glfw_get_current_context, glfw_get_egl_display, glfw_get_proc_address}
+use glfw.glfw_extension_supported
+use glfw.{glfw_get_egl_display, glfw_get_proc_address}
 use glfw.glfw_get_instance_proc_address
 use glfw.{glfw_init_vulkan_loader, glfw_physical_device_presentation_supported}
 use glfw.{glfw_required_instance_extensions, glfw_vulkan_supported}
-use window.{Monitor, Window}
+use window.Window
 
 pub use glfw.{GlfwEglContext, GlfwEglDisplay, GlfwEglSurface, GlfwGlProc}
 pub use glfw.{GlfwOSMesaColorBuffer, GlfwOSMesaDepthBuffer, GlfwOsMesaContext}
@@ -13,12 +13,9 @@ pub use glfw.{GlfwVkAllocationCallbacksRaw, GlfwVkGetInstanceProcAddr}
 pub use glfw.{GlfwVkInstance, GlfwVkPhysicalDevice, GlfwVkProc}
 pub use glfw.{GlfwVkResult, GlfwVkSurface, GlfwVkSurfaceCreateReport}
 pub use glfw.GlfwWglContext
+pub use window.platform_win32.Win32MonitorNames
 
-use glfw.{GlfwCStringList, GlfwMonitor}
-
-pub struct Win32MonitorNames:
-    pub adapter_name: Str
-    pub monitor_name: Str
+use glfw.GlfwCStringList
 
 pub struct VulkanWindowSupportReport:
     pub vulkan_supported: Bool
@@ -50,11 +47,16 @@ fn copy_c_string_list(read values: GlfwCStringList) -> Result[List[Str], TextDec
     return Result.Ok :: copied :: call
 
 fn osmesa_pixel_count(width: CInt, height: CInt) -> Option[Index]:
-    let Result.Ok(raw_width) = width as Maybe[CUInt] else => return Option.None
-    let Result.Ok(raw_height) = height as Maybe[CUInt] else => return Option.None
-    let raw_pixel_count: CUInt = raw_width * raw_height
-    let Result.Ok(pixel_count) = raw_pixel_count as Maybe[Index] else => return Option.None
-    return Option.Some :: pixel_count :: call
+    select either:
+        when raw_width: Result.Ok(raw_width) <- width as Maybe[CUInt]
+        when raw_height: Result.Ok(raw_height) <- height as Maybe[CUInt]
+        when pixel_count: Result.Ok(pixel_count) <- (raw_width * raw_height) as Maybe[Index] =>
+            return Option.Some :: pixel_count :: call
+
+    with Result.Err(_):
+        raw_width => return Option.None
+        raw_height => return Option.None
+        pixel_count => return Option.None
 
 pub fn gl_extension_supported(extension: Str) -> Result[Bool, TextDecodeError]:
     select maybe_c_string :: extension :: call:
@@ -237,78 +239,3 @@ impl GlfwOSMesaDepthBuffer:
                 let Result.Ok(byte_count) = raw_byte_count as Maybe[Index] else => return Option.None
                 return Option.Some :: byte_count :: call
             when Option.None => return Option.None
-
-impl Window:
-    fn current_context(read self) -> Bool:
-        let current = glfw_get_current_context :: :: call
-        let left_raw = current.raw_handle :: :: method
-        let right_raw = self.raw.raw_handle :: :: method
-        return left_raw == right_raw
-
-    fn gl_extension_supported(read self, extension: Str) -> Result[Bool, TextDecodeError]:
-        let _ = self
-        return gl_extension_supported :: extension :: call
-
-    fn gl_proc_address(read self, procname: Str) -> Result[Option[GlfwGlProc], TextDecodeError]:
-        let _ = self
-        return gl_proc_address :: procname :: call
-
-    fn vulkan_surface(read self, instance: GlfwVkInstance, allocator: *read GlfwVkAllocationCallbacksRaw) -> GlfwVkSurfaceCreateReport:
-        return glfw_create_window_surface :: instance, self.raw, allocator :: call
-
-    fn vulkan_window_support_report(read self) -> Result[VulkanWindowSupportReport, TextDecodeError]:
-        let _ = self
-        return vulkan_window_support_report :: :: call
-
-    fn vulkan_present_report(read self, instance: GlfwVkInstance, device: GlfwVkPhysicalDevice, queuefamily: CUInt, allocator: *read GlfwVkAllocationCallbacksRaw) -> Result[VulkanPresentReport, TextDecodeError]:
-        return vulkan_present_report :: self, instance, device, queuefamily, allocator :: call
-
-    fn vulkan_present_supported(read self, instance: GlfwVkInstance, device: GlfwVkPhysicalDevice, queuefamily: CUInt) -> Bool:
-        let _ = self
-        return vulkan_physical_device_presentation_supported :: instance, device, queuefamily :: call
-
-    fn vulkan_ready_for_presenting(read self, instance: GlfwVkInstance, device: GlfwVkPhysicalDevice, queuefamily: CUInt, allocator: *read GlfwVkAllocationCallbacksRaw) -> Result[Bool, TextDecodeError]:
-        select vulkan_present_report :: self, instance, device, queuefamily, allocator :: call:
-            when Result.Ok(report) =>
-                let ready = report.ready_for_presenting :: :: method
-                return Result.Ok :: ready :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-
-    fn wgl_context(read self) -> GlfwWglContext:
-        return self.raw.wgl_context :: :: method
-
-    fn egl_context(read self) -> GlfwEglContext:
-        return self.raw.egl_context :: :: method
-
-    fn egl_surface(read self) -> GlfwEglSurface:
-        return self.raw.egl_surface :: :: method
-
-    fn osmesa_context(read self) -> GlfwOsMesaContext:
-        return self.raw.osmesa_context :: :: method
-
-    fn osmesa_color_buffer(read self) -> Option[GlfwOSMesaColorBuffer]:
-        return self.raw.osmesa_color_buffer :: :: method
-
-    fn osmesa_depth_buffer(read self) -> Option[GlfwOSMesaDepthBuffer]:
-        return self.raw.osmesa_depth_buffer :: :: method
-
-impl GlfwMonitor:
-    fn win32_names(read self) -> Result[Win32MonitorNames, TextDecodeError]:
-        select self.win32_adapter_name_text :: :: method:
-            when Result.Ok(adapter_name) =>
-                select self.win32_monitor_name_text :: :: method:
-                    when Result.Ok(monitor_name) =>
-                        let names = Win32MonitorNames :: :: call
-                            adapter_name = adapter_name
-                            monitor_name = monitor_name
-                        return Result.Ok :: names :: call
-                    when Result.Err(err) => return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-
-    fn win32_adapter_name_text(read self) -> Result[Str, TextDecodeError]:
-        let raw_name = self.win32_adapter_name :: :: method
-        return copy_c_string :: raw_name :: call
-
-    fn win32_monitor_name_text(read self) -> Result[Str, TextDecodeError]:
-        let raw_name = self.win32_monitor_name :: :: method
-        return copy_c_string :: raw_name :: call

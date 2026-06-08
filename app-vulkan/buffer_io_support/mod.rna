@@ -14,21 +14,21 @@ pub(package) fn read_vulkan_buffer_bytes(read context: VulkanPresentContext, rea
             let error = VulkanPresentError.BufferUsageMissing :: VK_BUFFER_USAGE_TRANSFER_SRC_BIT, buffer.usage :: :: method :: call
             return Result.Err :: error :: call
         else => ()
-    select context.buffer_transfer_buffer :: buffer :: method:
-        when Result.Ok(transfer_buffer) =>
-            select context.copy_buffer :: buffer, transfer_buffer :: method:
-                when Result.Ok(_) =>
-                    select copy_vulkan_buffer_bytes_from_memory :: context, transfer_buffer :: call:
-                        when Result.Ok(bytes) =>
-                            context.destroy_buffer_resource :: transfer_buffer :: method
-                            return Result.Ok :: bytes :: call
-                        when Result.Err(err) =>
-                            context.destroy_buffer_resource :: transfer_buffer :: method
-                            return Result.Err :: err :: call
-                when Result.Err(err) =>
-                    context.destroy_buffer_resource :: transfer_buffer :: method
-                    return Result.Err :: err :: call
-        when Result.Err(err) => return Result.Err :: err :: call
+    select either:
+        when transfer_buffer: Result.Ok(transfer_buffer) <- context.buffer_transfer_buffer :: buffer :: method
+        when copied: Result.Ok(_) <- context.copy_buffer :: buffer, transfer_buffer :: method
+        when bytes: Result.Ok(bytes) <- copy_vulkan_buffer_bytes_from_memory :: context, transfer_buffer :: call =>
+            context.destroy_buffer_resource :: transfer_buffer :: method
+            return Result.Ok :: bytes :: call
+
+    with Result.Err(err):
+        transfer_buffer => return Result.Err :: err :: call
+        copied =>
+            context.destroy_buffer_resource :: transfer_buffer :: method
+            return Result.Err :: err :: call
+        bytes =>
+            context.destroy_buffer_resource :: transfer_buffer :: method
+            return Result.Err :: err :: call
 
 pub(package) fn write_vulkan_buffer_bytes(read context: VulkanPresentContext, read buffer: VulkanBuffer, take bytes: ByteBuffer) -> Result[Unit, VulkanPresentError]:
     select:
@@ -37,21 +37,21 @@ pub(package) fn write_vulkan_buffer_bytes(read context: VulkanPresentContext, re
             let error = VulkanPresentError.BufferUsageMissing :: VK_BUFFER_USAGE_TRANSFER_DST_BIT, buffer.usage :: :: method :: call
             return Result.Err :: error :: call
         else => ()
-    select context.buffer_transfer_buffer :: buffer :: method:
-        when Result.Ok(transfer_buffer) =>
-            select write_vulkan_buffer_bytes_to_memory :: context, transfer_buffer, bytes :: call:
-                when Result.Ok(_) =>
-                    select context.copy_buffer :: transfer_buffer, buffer :: method:
-                        when Result.Ok(_) =>
-                            context.destroy_buffer_resource :: transfer_buffer :: method
-                            return Result.Ok :: :: call
-                        when Result.Err(err) =>
-                            context.destroy_buffer_resource :: transfer_buffer :: method
-                            return Result.Err :: err :: call
-                when Result.Err(err) =>
-                    context.destroy_buffer_resource :: transfer_buffer :: method
-                    return Result.Err :: err :: call
-        when Result.Err(err) => return Result.Err :: err :: call
+    select either:
+        when transfer_buffer: Result.Ok(transfer_buffer) <- context.buffer_transfer_buffer :: buffer :: method
+        when written: Result.Ok(_) <- write_vulkan_buffer_bytes_to_memory :: context, transfer_buffer, bytes :: call
+        when copied: Result.Ok(_) <- context.copy_buffer :: transfer_buffer, buffer :: method =>
+            context.destroy_buffer_resource :: transfer_buffer :: method
+            return Result.Ok :: :: call
+
+    with Result.Err(err):
+        transfer_buffer => return Result.Err :: err :: call
+        written =>
+            context.destroy_buffer_resource :: transfer_buffer :: method
+            return Result.Err :: err :: call
+        copied =>
+            context.destroy_buffer_resource :: transfer_buffer :: method
+            return Result.Err :: err :: call
 
 impl VulkanPresentContext:
     fn buffer_bytes(read self, read buffer: VulkanBuffer) -> Result[ByteBuffer, VulkanPresentError]:
@@ -65,41 +65,48 @@ impl VulkanPresentContext:
         return self.host_coherent_buffer :: buffer.byte_count :: :: method, usage :: method
 
     fn buffer_to_transfer_buffer(read self, read buffer: VulkanBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
-        select self.buffer_transfer_buffer :: buffer :: method:
-            when Result.Ok(transfer_buffer) =>
-                select:
-                    when buffer.host_visible :: :: method =>
-                        select copy_vulkan_buffer_bytes_from_memory :: self, buffer :: call:
-                            when Result.Ok(bytes) =>
-                                select write_vulkan_buffer_bytes_to_memory :: self, transfer_buffer, bytes :: call:
-                                    when Result.Ok(_) => return Result.Ok :: transfer_buffer :: call
-                                    when Result.Err(err) =>
-                                        self.destroy_buffer_resource :: transfer_buffer :: method
-                                        return Result.Err :: err :: call
-                            when Result.Err(err) =>
-                                self.destroy_buffer_resource :: transfer_buffer :: method
-                                return Result.Err :: err :: call
-                    when !buffer.transfer_source_compatible :: :: method =>
+        select:
+            when buffer.host_visible :: :: method =>
+                select either:
+                    when transfer_buffer: Result.Ok(transfer_buffer) <- self.buffer_transfer_buffer :: buffer :: method
+                    when bytes: Result.Ok(bytes) <- copy_vulkan_buffer_bytes_from_memory :: self, buffer :: call
+                    when written: Result.Ok(_) <- write_vulkan_buffer_bytes_to_memory :: self, transfer_buffer, bytes :: call =>
+                        return Result.Ok :: transfer_buffer :: call
+
+                with Result.Err(err):
+                    transfer_buffer => return Result.Err :: err :: call
+                    bytes =>
                         self.destroy_buffer_resource :: transfer_buffer :: method
-                        let error = VulkanPresentError.BufferUsageMissing :: VK_BUFFER_USAGE_TRANSFER_SRC_BIT, buffer.usage :: :: method :: call
-                        return Result.Err :: error :: call
-                    else =>
-                        select self.copy_buffer :: buffer, transfer_buffer :: method:
-                            when Result.Ok(_) => return Result.Ok :: transfer_buffer :: call
-                            when Result.Err(err) =>
-                                self.destroy_buffer_resource :: transfer_buffer :: method
-                                return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+                        return Result.Err :: err :: call
+                    written =>
+                        self.destroy_buffer_resource :: transfer_buffer :: method
+                        return Result.Err :: err :: call
+            when !buffer.transfer_source_compatible :: :: method =>
+                let error = VulkanPresentError.BufferUsageMissing :: VK_BUFFER_USAGE_TRANSFER_SRC_BIT, buffer.usage :: :: method :: call
+                return Result.Err :: error :: call
+            else =>
+                select either:
+                    when transfer_buffer: Result.Ok(transfer_buffer) <- self.buffer_transfer_buffer :: buffer :: method
+                    when copied: Result.Ok(_) <- self.copy_buffer :: buffer, transfer_buffer :: method =>
+                        return Result.Ok :: transfer_buffer :: call
+
+                with Result.Err(err):
+                    transfer_buffer => return Result.Err :: err :: call
+                    copied =>
+                        self.destroy_buffer_resource :: transfer_buffer :: method
+                        return Result.Err :: err :: call
 
     fn buffer_from_plan_with_bytes(read self, read plan: VulkanBufferPlan, take bytes: ByteBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
-        select vulkan_buffer_from_plan_internal :: self, plan :: call:
-            when Result.Ok(buffer) =>
-                select write_vulkan_buffer_bytes :: self, buffer, bytes :: call:
-                    when Result.Ok(_) => return Result.Ok :: buffer :: call
-                    when Result.Err(err) =>
-                        self.destroy_buffer_resource :: buffer :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when buffer: Result.Ok(buffer) <- vulkan_buffer_from_plan_internal :: self, plan :: call
+            when written: Result.Ok(_) <- write_vulkan_buffer_bytes :: self, buffer, bytes :: call =>
+                return Result.Ok :: buffer :: call
+
+        with Result.Err(err):
+            buffer => return Result.Err :: err :: call
+            written =>
+                self.destroy_buffer_resource :: buffer :: method
+                return Result.Err :: err :: call
 
     fn buffer_from_bytes(read self, byte_count: Index, usage: CUInt, memory_type_index: CUInt, take bytes: ByteBuffer) -> Result[VulkanBuffer, VulkanPresentError]:
         select self.buffer_plan :: byte_count, usage, memory_type_index :: method:

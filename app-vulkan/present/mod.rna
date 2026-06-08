@@ -953,73 +953,72 @@ pub fn bootstrap_vulkan_present(read window: Window, app_name: Str) -> Result[Vu
             let error = VulkanPresentError.NotSupported :: :: call
             return Result.Err :: error :: call
         else => ()
-    select open_library :: VULKAN_LIBRARY_PATH :: call:
-        when Result.Ok(library) =>
-            select lookup_loader_symbol[VkCreateInstanceFn] :: library, "vkCreateInstance" :: call:
-                when Result.Ok(create_instance) =>
-                    select copy_required_extension_array :: :: call:
-                        when Result.Ok((extension_pointers, extension_names)) =>
-                            select maybe_c_string_local :: app_name :: call:
-                                when Result.Ok(application_name) =>
-                                    select maybe_c_string_local :: ENGINE_NAME :: call:
-                                        when Result.Ok(engine_name) =>
-                                            let application_info = VkApplicationInfo :: :: call
-                                                stype = VK_STRUCTURE_TYPE_APPLICATION_INFO
-                                                pnext = null
-                                                application_name = application_name.as_ptr :: :: method
-                                                application_version = 0
-                                                engine_name = engine_name.as_ptr :: :: method
-                                                engine_version = 0
-                                                api_version = VK_API_VERSION_1_0
-                                            let application_info_ptr: *read VkApplicationInfo = #unsafe &raw read application_info
-                                            let extension_ptr: *read *read CChar = #unsafe &raw read extension_pointers[0]
-                                            let create_info = VkInstanceCreateInfo :: :: call
-                                                stype = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO
-                                                pnext = null
-                                                flags = 0
-                                                application_info = application_info_ptr
-                                                enabled_layer_count = 0
-                                                enabled_layer_names = null
-                                                enabled_extension_count = 2
-                                                enabled_extension_names = extension_ptr
-                                            let instance: GlfwVkInstance = null
-                                            let create_info_ptr: *read VkInstanceCreateInfo = #unsafe &raw read create_info
-                                            let instance_ptr: *edit GlfwVkInstance = #unsafe &raw edit instance
-                                            let create_result = #unsafe create_instance :: create_info_ptr, null, instance_ptr :: call
-                                            let _ = extension_names
-                                            select:
-                                                when create_result != VK_SUCCESS || instance.is_null :: :: method =>
-                                                    close_library_quiet :: library :: call
-                                                    let error = VulkanPresentError.InstanceCreateFailed :: create_result :: call
-                                                    return Result.Err :: error :: call
-                                                else => ()
-                                            select lookup_instance_symbol[VkDestroyInstanceFn] :: library, instance, "vkDestroyInstance", "vkDestroyInstance" :: call:
-                                                when Result.Ok(destroy_instance) =>
-                                                    select lookup_vulkan_instance_fns :: library, instance, destroy_instance :: call:
-                                                        when Result.Ok(instance_fns) =>
-                                                            return bootstrap_vulkan_present_with_instance :: window, library, instance, instance_fns :: call
-                                                        when Result.Err(err) =>
-                                                            #unsafe destroy_instance :: instance, null :: call
-                                                            close_library_quiet :: library :: call
-                                                            return Result.Err :: err :: call
-                                                when Result.Err(err) =>
-                                                    close_library_quiet :: library :: call
-                                                    return Result.Err :: err :: call
-                                        when Result.Err(err) =>
-                                            close_library_quiet :: library :: call
-                                            return Result.Err :: err :: call
-                                when Result.Err(err) =>
-                                    close_library_quiet :: library :: call
-                                    return Result.Err :: err :: call
-                        when Result.Err(err) =>
-                            close_library_quiet :: library :: call
-                            return Result.Err :: err :: call
-                when Result.Err(err) =>
+    select either:
+        when library: Result.Ok(library) <- open_library :: VULKAN_LIBRARY_PATH :: call
+        when create_instance: Result.Ok(create_instance) <- lookup_loader_symbol[VkCreateInstanceFn] :: library, "vkCreateInstance" :: call
+        when required_extensions: Result.Ok((extension_pointers, extension_names)) <- copy_required_extension_array :: :: call
+        when application_name: Result.Ok(application_name) <- maybe_c_string_local :: app_name :: call
+        when engine_name: Result.Ok(engine_name) <- maybe_c_string_local :: ENGINE_NAME :: call =>
+            let application_info = VkApplicationInfo :: :: call
+                stype = VK_STRUCTURE_TYPE_APPLICATION_INFO
+                pnext = null
+                application_name = application_name.as_ptr :: :: method
+                application_version = 0
+                engine_name = engine_name.as_ptr :: :: method
+                engine_version = 0
+                api_version = VK_API_VERSION_1_0
+            let application_info_ptr: *read VkApplicationInfo = #unsafe &raw read application_info
+            let extension_ptr: *read *read CChar = #unsafe &raw read extension_pointers[0]
+            let create_info = VkInstanceCreateInfo :: :: call
+                stype = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO
+                pnext = null
+                flags = 0
+                application_info = application_info_ptr
+                enabled_layer_count = 0
+                enabled_layer_names = null
+                enabled_extension_count = 2
+                enabled_extension_names = extension_ptr
+            let instance: GlfwVkInstance = null
+            let create_info_ptr: *read VkInstanceCreateInfo = #unsafe &raw read create_info
+            let instance_ptr: *edit GlfwVkInstance = #unsafe &raw edit instance
+            let create_result = #unsafe create_instance :: create_info_ptr, null, instance_ptr :: call
+            let _ = extension_names
+            select:
+                when create_result != VK_SUCCESS || instance.is_null :: :: method =>
+                    close_library_quiet :: library :: call
+                    let error = VulkanPresentError.InstanceCreateFailed :: create_result :: call
+                    return Result.Err :: error :: call
+                else => ()
+            select either:
+                when destroy_instance: Result.Ok(destroy_instance) <- lookup_instance_symbol[VkDestroyInstanceFn] :: library, instance, "vkDestroyInstance", "vkDestroyInstance" :: call
+                when instance_fns: Result.Ok(instance_fns) <- lookup_vulkan_instance_fns :: library, instance, destroy_instance :: call =>
+                    return bootstrap_vulkan_present_with_instance :: window, library, instance, instance_fns :: call
+
+            with Result.Err(err):
+                destroy_instance =>
                     close_library_quiet :: library :: call
                     return Result.Err :: err :: call
-        when Result.Err(err) =>
+                instance_fns =>
+                    #unsafe destroy_instance :: instance, null :: call
+                    close_library_quiet :: library :: call
+                    return Result.Err :: err :: call
+
+    with Result.Err(err):
+        library =>
             let error = VulkanPresentError.LibraryOpen :: err :: call
             return Result.Err :: error :: call
+        create_instance =>
+            close_library_quiet :: library :: call
+            return Result.Err :: err :: call
+        required_extensions =>
+            close_library_quiet :: library :: call
+            return Result.Err :: err :: call
+        application_name =>
+            close_library_quiet :: library :: call
+            return Result.Err :: err :: call
+        engine_name =>
+            close_library_quiet :: library :: call
+            return Result.Err :: err :: call
 
 fn bootstrap_vulkan_present_with_instance(read window: Window, take library: DynamicLibrary, instance: GlfwVkInstance, read instance_fns: VulkanInstanceFns) -> Result[VulkanPresentContext, VulkanPresentError]:
     let surface_report = window.vulkan_surface :: instance, null :: method
@@ -1161,142 +1160,142 @@ fn bootstrap_vulkan_present_with_instance(read window: Window, take library: Dyn
                                             let error = VulkanPresentError.PresentModesFailed :: present_modes_result :: call
                                             return Result.Err :: error :: call
                                         else => ()
-                                    select choose_surface_format :: formats, format_count :: call:
-                                        when Result.Ok(chosen_surface_format) =>
-                                            select choose_present_mode :: present_modes, present_mode_count :: call:
-                                                when Result.Ok(chosen_present_mode) =>
-                                                    select choose_window_extent :: window, capabilities :: call:
-                                                        when Result.Ok(chosen_extent) =>
-                                                            let swapchain: VkSwapchain = 0U64
-                                                            let swapchain_info = VkSwapchainCreateInfoKHR :: :: call
-                                                                stype = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR
-                                                                pnext = null
-                                                                flags = 0
-                                                                surface = surface_report.surface
-                                                                min_image_count = choose_image_count :: capabilities :: call
-                                                                image_format = chosen_surface_format.format
-                                                                image_color_space = chosen_surface_format.color_space
-                                                                image_extent = chosen_extent
-                                                                image_array_layers = 1
-                                                                image_usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT
-                                                                image_sharing_mode = VK_SHARING_MODE_EXCLUSIVE
-                                                                queuefamily_index_count = 0
-                                                                queuefamily_indices = null
-                                                                pre_transform = capabilities.current_transform
-                                                                composite_alpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR
-                                                                present_mode = chosen_present_mode
-                                                                clipped = VK_TRUE
-                                                                old_swapchain = 0U64
-                                                            let swapchain_ptr: *edit VkSwapchain = #unsafe &raw edit swapchain
-                                                            let swapchain_info_ptr: *read VkSwapchainCreateInfoKHR = #unsafe &raw read swapchain_info
-                                                            let swapchain_create_result = #unsafe device_fns.create_swapchain :: device, swapchain_info_ptr, null, swapchain_ptr :: call
-                                                            select:
-                                                                when swapchain_create_result != VK_SUCCESS || swapchain == 0U64 =>
-                                                                    cleanup_device_context :: library, device_cleanup :: call
-                                                                    let error = VulkanPresentError.SwapchainCreateFailed :: swapchain_create_result :: call
-                                                                    return Result.Err :: error :: call
-                                                                else => ()
-                                                            let cleanup_with_swapchain = SwapchainCleanup :: :: call
-                                                                destroy_instance = instance_fns.destroy_instance
-                                                                destroy_device = device_fns.destroy_device
-                                                                destroy_surface = instance_fns.destroy_surface
-                                                                destroy_swapchain = device_fns.destroy_swapchain
-                                                                instance = instance
-                                                                device = device
-                                                                surface = surface_report.surface
-                                                                swapchain = swapchain
-                                                            let swapchain_image_count: CUInt = 0
-                                                            let swapchain_image_count_ptr: *edit CUInt = #unsafe &raw edit swapchain_image_count
-                                                            let image_count_result = #unsafe device_fns.get_swapchain_images :: device, swapchain, swapchain_image_count_ptr, null :: call
-                                                            select:
-                                                                when image_count_result != VK_SUCCESS =>
-                                                                    cleanup_swapchain_context :: library, cleanup_with_swapchain :: call
-                                                                    let error = VulkanPresentError.SwapchainImagesFailed :: image_count_result :: call
-                                                                    return Result.Err :: error :: call
-                                                                when swapchain_image_count == 0 =>
-                                                                    cleanup_swapchain_context :: library, cleanup_with_swapchain :: call
-                                                                    let error = VulkanPresentError.NoSwapchainImages :: :: call
-                                                                    return Result.Err :: error :: call
-                                                                when swapchain_image_count > MAX_SWAPCHAIN_IMAGES_RAW =>
-                                                                    cleanup_swapchain_context :: library, cleanup_with_swapchain :: call
-                                                                    let error = VulkanPresentError.SwapchainImageOverflow :: swapchain_image_count :: call
-                                                                    return Result.Err :: error :: call
-                                                                else => ()
-                                                            let swapchain_images: [VkImage; MAX_SWAPCHAIN_IMAGES] = [0U64; MAX_SWAPCHAIN_IMAGES]
-                                                            let swapchain_images_ptr: *edit VkImage = #unsafe &raw edit swapchain_images[0]
-                                                            let swapchain_images_result = #unsafe device_fns.get_swapchain_images :: device, swapchain, swapchain_image_count_ptr, swapchain_images_ptr :: call
-                                                            select:
-                                                                when swapchain_images_result != VK_SUCCESS =>
-                                                                    cleanup_swapchain_context :: library, cleanup_with_swapchain :: call
-                                                                    let error = VulkanPresentError.SwapchainImagesFailed :: swapchain_images_result :: call
-                                                                    return Result.Err :: error :: call
-                                                                else => ()
-                                                            let context = VulkanPresentContext :: :: call
-                                                                library = library
-                                                                destroy_instance = instance_fns.destroy_instance
-                                                                destroy_device = device_fns.destroy_device
-                                                                destroy_surface = instance_fns.destroy_surface
-                                                                destroy_swapchain = device_fns.destroy_swapchain
-                                                                create_image = device_fns.create_image
-                                                                destroy_image = device_fns.destroy_image
-                                                                get_image_memory_requirements = device_fns.get_image_memory_requirements
-                                                                bind_image_memory = device_fns.bind_image_memory
-                                                                create_buffer = device_fns.create_buffer
-                                                                destroy_buffer = device_fns.destroy_buffer
-                                                                get_buffer_memory_requirements = device_fns.get_buffer_memory_requirements
-                                                                allocate_memory = device_fns.allocate_memory
-                                                                free_memory = device_fns.free_memory
-                                                                bind_buffer_memory = device_fns.bind_buffer_memory
-                                                                map_memory = device_fns.map_memory
-                                                                unmap_memory = device_fns.unmap_memory
-                                                                flush_mapped_memory_ranges = device_fns.flush_mapped_memory_ranges
-                                                                invalidate_mapped_memory_ranges = device_fns.invalidate_mapped_memory_ranges
-                                                                create_command_pool = device_fns.create_command_pool
-                                                                destroy_command_pool = device_fns.destroy_command_pool
-                                                                allocate_command_buffers = device_fns.allocate_command_buffers
-                                                                begin_command_buffer = device_fns.begin_command_buffer
-                                                                end_command_buffer = device_fns.end_command_buffer
-                                                                cmd_pipeline_barrier = device_fns.cmd_pipeline_barrier
-                                                                cmd_clear_color_image = device_fns.cmd_clear_color_image
-                                                                cmd_copy_buffer = device_fns.cmd_copy_buffer
-                                                                cmd_copy_buffer_to_image = device_fns.cmd_copy_buffer_to_image
-                                                                cmd_copy_image = device_fns.cmd_copy_image
-                                                                cmd_copy_image_to_buffer = device_fns.cmd_copy_image_to_buffer
-                                                                create_fence = device_fns.create_fence
-                                                                destroy_fence = device_fns.destroy_fence
-                                                                reset_fences = device_fns.reset_fences
-                                                                wait_for_fences = device_fns.wait_for_fences
-                                                                get_fence_status = device_fns.get_fence_status
-                                                                create_semaphore = device_fns.create_semaphore
-                                                                destroy_semaphore = device_fns.destroy_semaphore
-                                                                acquire_next_image = device_fns.acquire_next_image
-                                                                queue_submit = device_fns.queue_submit
-                                                                queue_present = device_fns.queue_present
-                                                                queue_wait_idle = device_fns.queue_wait_idle
-                                                                device_wait_idle = device_fns.device_wait_idle
-                                                                instance = instance
-                                                                device = device
-                                                                queue = queue
-                                                                surface = surface_report.surface
-                                                                physical_device = candidate.device
-                                                                queuefamily = candidate.queuefamily
-                                                                surface_format = chosen_surface_format
-                                                                surface_capabilities = capabilities
-                                                                memory_properties = memory_properties
-                                                                present_mode = chosen_present_mode
-                                                                extent = chosen_extent
-                                                                swapchain = swapchain
-                                                                swapchain_images = swapchain_images
-                                                                swapchain_image_count = swapchain_image_count
-                                                                presented_once = false
-                                                            return Result.Ok :: context :: call
-                                                        when Result.Err(err) =>
-                                                            cleanup_device_context :: library, device_cleanup :: call
-                                                            return Result.Err :: err :: call
-                                                when Result.Err(err) =>
+                                    select either:
+                                        when chosen_surface_format: Result.Ok(chosen_surface_format) <- choose_surface_format :: formats, format_count :: call
+                                        when chosen_present_mode: Result.Ok(chosen_present_mode) <- choose_present_mode :: present_modes, present_mode_count :: call
+                                        when chosen_extent: Result.Ok(chosen_extent) <- choose_window_extent :: window, capabilities :: call =>
+                                            let swapchain: VkSwapchain = 0U64
+                                            let swapchain_info = VkSwapchainCreateInfoKHR :: :: call
+                                                stype = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR
+                                                pnext = null
+                                                flags = 0
+                                                surface = surface_report.surface
+                                                min_image_count = choose_image_count :: capabilities :: call
+                                                image_format = chosen_surface_format.format
+                                                image_color_space = chosen_surface_format.color_space
+                                                image_extent = chosen_extent
+                                                image_array_layers = 1
+                                                image_usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT
+                                                image_sharing_mode = VK_SHARING_MODE_EXCLUSIVE
+                                                queuefamily_index_count = 0
+                                                queuefamily_indices = null
+                                                pre_transform = capabilities.current_transform
+                                                composite_alpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR
+                                                present_mode = chosen_present_mode
+                                                clipped = VK_TRUE
+                                                old_swapchain = 0U64
+                                            let swapchain_ptr: *edit VkSwapchain = #unsafe &raw edit swapchain
+                                            let swapchain_info_ptr: *read VkSwapchainCreateInfoKHR = #unsafe &raw read swapchain_info
+                                            let swapchain_create_result = #unsafe device_fns.create_swapchain :: device, swapchain_info_ptr, null, swapchain_ptr :: call
+                                            select:
+                                                when swapchain_create_result != VK_SUCCESS || swapchain == 0U64 =>
                                                     cleanup_device_context :: library, device_cleanup :: call
-                                                    return Result.Err :: err :: call
-                                        when Result.Err(err) =>
+                                                    let error = VulkanPresentError.SwapchainCreateFailed :: swapchain_create_result :: call
+                                                    return Result.Err :: error :: call
+                                                else => ()
+                                            let cleanup_with_swapchain = SwapchainCleanup :: :: call
+                                                destroy_instance = instance_fns.destroy_instance
+                                                destroy_device = device_fns.destroy_device
+                                                destroy_surface = instance_fns.destroy_surface
+                                                destroy_swapchain = device_fns.destroy_swapchain
+                                                instance = instance
+                                                device = device
+                                                surface = surface_report.surface
+                                                swapchain = swapchain
+                                            let swapchain_image_count: CUInt = 0
+                                            let swapchain_image_count_ptr: *edit CUInt = #unsafe &raw edit swapchain_image_count
+                                            let image_count_result = #unsafe device_fns.get_swapchain_images :: device, swapchain, swapchain_image_count_ptr, null :: call
+                                            select:
+                                                when image_count_result != VK_SUCCESS =>
+                                                    cleanup_swapchain_context :: library, cleanup_with_swapchain :: call
+                                                    let error = VulkanPresentError.SwapchainImagesFailed :: image_count_result :: call
+                                                    return Result.Err :: error :: call
+                                                when swapchain_image_count == 0 =>
+                                                    cleanup_swapchain_context :: library, cleanup_with_swapchain :: call
+                                                    let error = VulkanPresentError.NoSwapchainImages :: :: call
+                                                    return Result.Err :: error :: call
+                                                when swapchain_image_count > MAX_SWAPCHAIN_IMAGES_RAW =>
+                                                    cleanup_swapchain_context :: library, cleanup_with_swapchain :: call
+                                                    let error = VulkanPresentError.SwapchainImageOverflow :: swapchain_image_count :: call
+                                                    return Result.Err :: error :: call
+                                                else => ()
+                                            let swapchain_images: [VkImage; MAX_SWAPCHAIN_IMAGES] = [0U64; MAX_SWAPCHAIN_IMAGES]
+                                            let swapchain_images_ptr: *edit VkImage = #unsafe &raw edit swapchain_images[0]
+                                            let swapchain_images_result = #unsafe device_fns.get_swapchain_images :: device, swapchain, swapchain_image_count_ptr, swapchain_images_ptr :: call
+                                            select:
+                                                when swapchain_images_result != VK_SUCCESS =>
+                                                    cleanup_swapchain_context :: library, cleanup_with_swapchain :: call
+                                                    let error = VulkanPresentError.SwapchainImagesFailed :: swapchain_images_result :: call
+                                                    return Result.Err :: error :: call
+                                                else => ()
+                                            let context = VulkanPresentContext :: :: call
+                                                library = library
+                                                destroy_instance = instance_fns.destroy_instance
+                                                destroy_device = device_fns.destroy_device
+                                                destroy_surface = instance_fns.destroy_surface
+                                                destroy_swapchain = device_fns.destroy_swapchain
+                                                create_image = device_fns.create_image
+                                                destroy_image = device_fns.destroy_image
+                                                get_image_memory_requirements = device_fns.get_image_memory_requirements
+                                                bind_image_memory = device_fns.bind_image_memory
+                                                create_buffer = device_fns.create_buffer
+                                                destroy_buffer = device_fns.destroy_buffer
+                                                get_buffer_memory_requirements = device_fns.get_buffer_memory_requirements
+                                                allocate_memory = device_fns.allocate_memory
+                                                free_memory = device_fns.free_memory
+                                                bind_buffer_memory = device_fns.bind_buffer_memory
+                                                map_memory = device_fns.map_memory
+                                                unmap_memory = device_fns.unmap_memory
+                                                flush_mapped_memory_ranges = device_fns.flush_mapped_memory_ranges
+                                                invalidate_mapped_memory_ranges = device_fns.invalidate_mapped_memory_ranges
+                                                create_command_pool = device_fns.create_command_pool
+                                                destroy_command_pool = device_fns.destroy_command_pool
+                                                allocate_command_buffers = device_fns.allocate_command_buffers
+                                                begin_command_buffer = device_fns.begin_command_buffer
+                                                end_command_buffer = device_fns.end_command_buffer
+                                                cmd_pipeline_barrier = device_fns.cmd_pipeline_barrier
+                                                cmd_clear_color_image = device_fns.cmd_clear_color_image
+                                                cmd_copy_buffer = device_fns.cmd_copy_buffer
+                                                cmd_copy_buffer_to_image = device_fns.cmd_copy_buffer_to_image
+                                                cmd_copy_image = device_fns.cmd_copy_image
+                                                cmd_copy_image_to_buffer = device_fns.cmd_copy_image_to_buffer
+                                                create_fence = device_fns.create_fence
+                                                destroy_fence = device_fns.destroy_fence
+                                                reset_fences = device_fns.reset_fences
+                                                wait_for_fences = device_fns.wait_for_fences
+                                                get_fence_status = device_fns.get_fence_status
+                                                create_semaphore = device_fns.create_semaphore
+                                                destroy_semaphore = device_fns.destroy_semaphore
+                                                acquire_next_image = device_fns.acquire_next_image
+                                                queue_submit = device_fns.queue_submit
+                                                queue_present = device_fns.queue_present
+                                                queue_wait_idle = device_fns.queue_wait_idle
+                                                device_wait_idle = device_fns.device_wait_idle
+                                                instance = instance
+                                                device = device
+                                                queue = queue
+                                                surface = surface_report.surface
+                                                physical_device = candidate.device
+                                                queuefamily = candidate.queuefamily
+                                                surface_format = chosen_surface_format
+                                                surface_capabilities = capabilities
+                                                memory_properties = memory_properties
+                                                present_mode = chosen_present_mode
+                                                extent = chosen_extent
+                                                swapchain = swapchain
+                                                swapchain_images = swapchain_images
+                                                swapchain_image_count = swapchain_image_count
+                                                presented_once = false
+                                            return Result.Ok :: context :: call
+
+                                    with Result.Err(err):
+                                        chosen_surface_format =>
+                                            cleanup_device_context :: library, device_cleanup :: call
+                                            return Result.Err :: err :: call
+                                        chosen_present_mode =>
+                                            cleanup_device_context :: library, device_cleanup :: call
+                                            return Result.Err :: err :: call
+                                        chosen_extent =>
                                             cleanup_device_context :: library, device_cleanup :: call
                                             return Result.Err :: err :: call
                                 when Result.Err(err) =>
@@ -1312,7 +1311,204 @@ fn bootstrap_vulkan_present_with_instance(read window: Window, take library: Dyn
             cleanup_surface_context :: library, surface_cleanup :: call
             return Result.Err :: err :: call
 
+fn collect_swapchain_images(read source: [VkImage; MAX_SWAPCHAIN_IMAGES], count: CUInt) -> List[VkImage]:
+    let copied = List[VkImage] :: :: call
+    select:
+        when count > 0 => copied.push :: source[0] :: method
+        else => ()
+    select:
+        when count > 1 => copied.push :: source[1] :: method
+        else => ()
+    select:
+        when count > 2 => copied.push :: source[2] :: method
+        else => ()
+    select:
+        when count > 3 => copied.push :: source[3] :: method
+        else => ()
+    select:
+        when count > 4 => copied.push :: source[4] :: method
+        else => ()
+    select:
+        when count > 5 => copied.push :: source[5] :: method
+        else => ()
+    select:
+        when count > 6 => copied.push :: source[6] :: method
+        else => ()
+    select:
+        when count > 7 => copied.push :: source[7] :: method
+        else => ()
+    return copied
+
+fn copy_swapchain_image_list(read source: List[VkImage]) -> List[VkImage]:
+    let copied = List[VkImage] :: :: call
+    let count = source.count :: :: method
+    select:
+        when count > 0 => copied.push :: source[0] :: method
+        else => ()
+    select:
+        when count > 1 => copied.push :: source[1] :: method
+        else => ()
+    select:
+        when count > 2 => copied.push :: source[2] :: method
+        else => ()
+    select:
+        when count > 3 => copied.push :: source[3] :: method
+        else => ()
+    select:
+        when count > 4 => copied.push :: source[4] :: method
+        else => ()
+    select:
+        when count > 5 => copied.push :: source[5] :: method
+        else => ()
+    select:
+        when count > 6 => copied.push :: source[6] :: method
+        else => ()
+    select:
+        when count > 7 => copied.push :: source[7] :: method
+        else => ()
+    return copied
+
+fn copy_vulkan_present_bindings(read source: VulkanPresentBindings) -> VulkanPresentBindings:
+    let copied_images = copy_swapchain_image_list :: source.swapchain_images :: call
+    let copied = VulkanPresentBindings :: :: call
+        instance = source.instance
+        physical_device = source.physical_device
+        device = source.device
+        queue = source.queue
+        surface = source.surface
+        swapchain = source.swapchain
+        queuefamily_index = source.queuefamily_index
+        swapchain_image_count = source.swapchain_image_count
+        swapchain_images = copied_images
+    return copied
+
+impl VulkanPresentBindings:
+    fn instance_valid(read self) -> Bool:
+        return !self.instance.is_null :: :: method
+
+    fn physical_device_valid(read self) -> Bool:
+        return !self.physical_device.is_null :: :: method
+
+    fn device_valid(read self) -> Bool:
+        return !self.device.is_null :: :: method
+
+    fn queue_valid(read self) -> Bool:
+        return !self.queue.is_null :: :: method
+
+    fn surface_valid(read self) -> Bool:
+        return self.surface != 0U64
+
+    fn swapchain_valid(read self) -> Bool:
+        return self.swapchain != 0U64
+
+    fn has_swapchain_images(read self) -> Bool:
+        return self.swapchain_image_count != 0
+
+    fn ready_for_interop(read self) -> Bool:
+        select:
+            when !self.instance_valid :: :: method => return false
+            when !self.physical_device_valid :: :: method => return false
+            when !self.device_valid :: :: method => return false
+            when !self.queue_valid :: :: method => return false
+            when !self.surface_valid :: :: method => return false
+            when !self.swapchain_valid :: :: method => return false
+            when !self.has_swapchain_images :: :: method => return false
+            else => return true
+
+    fn swapchain_image(read self, index: CUInt) -> Option[VkImage]:
+        select:
+            when index >= self.swapchain_image_count => return Option.None
+            else => ()
+        let Result.Ok(slot) = index as Maybe[Index] else => return Option.None
+        return Option.Some :: self.swapchain_images[slot] :: call
+
+    fn first_swapchain_image(read self) -> Option[VkImage]:
+        return self.swapchain_image :: 0 :: method
+
+    fn active_swapchain_images(read self) -> List[VkImage]:
+        return copy_swapchain_image_list :: self.swapchain_images :: call
+
+impl VulkanPresentSnapshot:
+    fn bindings(read self) -> VulkanPresentBindings:
+        return copy_vulkan_present_bindings :: self.bindings :: call
+
+impl VulkanSemaphoreResource:
+    fn semaphore_handle(read self) -> VkSemaphore:
+        return self.semaphore
+
+    fn valid(read self) -> Bool:
+        return self.semaphore != 0U64
+
+impl VulkanPresentContext:
+    fn bindings(read self) -> VulkanPresentBindings:
+        let swapchain_images = collect_swapchain_images :: self.swapchain_images, self.swapchain_image_count :: call
+        let bindings = VulkanPresentBindings :: :: call
+            instance = self.instance
+            physical_device = self.physical_device
+            device = self.device
+            queue = self.queue
+            surface = self.surface
+            swapchain = self.swapchain
+            queuefamily_index = self.queuefamily
+            swapchain_image_count = self.swapchain_image_count
+            swapchain_images = swapchain_images
+        return bindings
+
+    fn present_snapshot(read self, window_id: WindowId) -> VulkanPresentSnapshot:
+        let snapshot = VulkanPresentSnapshot :: :: call
+            bindings = self.bindings :: :: method
+            window_id = window_id
+            queuefamily_index = self.queuefamily
+            surface_capabilities = self.surface_capabilities
+            surface_format = self.surface_format
+            memory_properties = self.memory_properties
+            present_mode = self.present_mode
+            swapchain_image_count = self.swapchain_image_count
+            preferred_image_count = self.preferred_image_count :: :: method
+            surface_extent = self.extent
+            presented_once = self.presented_once
+        return snapshot
+
+    fn semaphore_resource(read self) -> Result[VulkanSemaphoreResource, VulkanPresentError]:
+        let semaphore: VkSemaphore = 0U64
+        let semaphore_info = VkSemaphoreCreateInfo :: :: call
+            stype = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
+            pnext = null
+            flags = 0
+        let semaphore_ptr: *edit VkSemaphore = #unsafe &raw edit semaphore
+        let semaphore_info_ptr: *read VkSemaphoreCreateInfo = #unsafe &raw read semaphore_info
+        let semaphore_result = #unsafe self.create_semaphore :: self.device, semaphore_info_ptr, null, semaphore_ptr :: call
+        select:
+            when semaphore_result != VK_SUCCESS =>
+                let error = VulkanPresentError.SemaphoreCreateFailed :: semaphore_result :: call
+                return Result.Err :: error :: call
+            when semaphore == 0U64 =>
+                let error = VulkanPresentError.SemaphoreCreateFailed :: semaphore_result :: call
+                return Result.Err :: error :: call
+            else => ()
+        let resource = VulkanSemaphoreResource :: :: call
+            semaphore = semaphore
+        return Result.Ok :: resource :: call
+
+    fn destroy_semaphore_resource(read self, take semaphore: VulkanSemaphoreResource) -> Unit:
+        select:
+            when semaphore.semaphore != 0U64 => #unsafe self.destroy_semaphore :: self.device, semaphore.semaphore, null :: call
+            else => ()
+        return
+
 impl VulkanPresentApp:
+    fn present_snapshot(read self) -> VulkanPresentSnapshot:
+        return self.context.present_snapshot :: self.window.id :: method
+
+    fn bindings(read self) -> VulkanPresentBindings:
+        return self.context.bindings :: :: method
+
+    fn semaphore_resource(read self) -> Result[VulkanSemaphoreResource, VulkanPresentError]:
+        return self.context.semaphore_resource :: :: method
+
+    fn destroy_semaphore_resource(read self, take semaphore: VulkanSemaphoreResource) -> Unit:
+        return self.context.destroy_semaphore_resource :: semaphore :: method
+
     fn present(edit self, read color: PresentColor) -> Result[Unit, VulkanPresentError]:
         return self.context.present :: color :: method
 

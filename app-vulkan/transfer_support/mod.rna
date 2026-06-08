@@ -38,24 +38,30 @@ fn image_transfer_byte_count(read image: VulkanImage) -> Result[Index, VulkanPre
         when Result.Err(err) => return Result.Err :: err :: call
     let width_raw = image.width :: :: method
     let height_raw = image.height :: :: method
-    let Result.Ok(width) = width_raw as Maybe[Index] else =>
-        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
-        return Result.Err :: error :: call
-    let Result.Ok(height) = height_raw as Maybe[Index] else =>
-        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
-        return Result.Err :: error :: call
-    let Result.Ok(width_wide) = width as Maybe[USize] else =>
-        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
-        return Result.Err :: error :: call
-    let Result.Ok(height_wide) = height as Maybe[USize] else =>
-        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
-        return Result.Err :: error :: call
-    let pixel_count_wide: USize = width_wide * height_wide
-    let byte_count_wide: USize = pixel_count_wide * 4USize
-    let Result.Ok(byte_count) = byte_count_wide as Maybe[Index] else =>
-        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
-        return Result.Err :: error :: call
-    return Result.Ok :: byte_count :: call
+    select either:
+        when width: Result.Ok(width) <- width_raw as Maybe[Index]
+        when height: Result.Ok(height) <- height_raw as Maybe[Index]
+        when width_wide: Result.Ok(width_wide) <- width as Maybe[USize]
+        when height_wide: Result.Ok(height_wide) <- height as Maybe[USize]
+        when byte_count: Result.Ok(byte_count) <- (width_wide * height_wide * 4USize) as Maybe[Index] =>
+            return Result.Ok :: byte_count :: call
+
+    with Result.Err(_):
+        width =>
+            let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+            return Result.Err :: error :: call
+        height =>
+            let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+            return Result.Err :: error :: call
+        width_wide =>
+            let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+            return Result.Err :: error :: call
+        height_wide =>
+            let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+            return Result.Err :: error :: call
+        byte_count =>
+            let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+            return Result.Err :: error :: call
 
 fn image_plan_transfer_byte_count(read plan: VulkanImagePlan) -> Result[Index, VulkanPresentError]:
     select plan.pixel_format :: :: method:
@@ -63,24 +69,30 @@ fn image_plan_transfer_byte_count(read plan: VulkanImagePlan) -> Result[Index, V
         when Result.Err(err) => return Result.Err :: err :: call
     let width_raw = plan.width :: :: method
     let height_raw = plan.height :: :: method
-    let Result.Ok(width) = width_raw as Maybe[Index] else =>
-        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
-        return Result.Err :: error :: call
-    let Result.Ok(height) = height_raw as Maybe[Index] else =>
-        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
-        return Result.Err :: error :: call
-    let Result.Ok(width_wide) = width as Maybe[USize] else =>
-        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
-        return Result.Err :: error :: call
-    let Result.Ok(height_wide) = height as Maybe[USize] else =>
-        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
-        return Result.Err :: error :: call
-    let pixel_count_wide: USize = width_wide * height_wide
-    let byte_count_wide: USize = pixel_count_wide * 4USize
-    let Result.Ok(byte_count) = byte_count_wide as Maybe[Index] else =>
-        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
-        return Result.Err :: error :: call
-    return Result.Ok :: byte_count :: call
+    select either:
+        when width: Result.Ok(width) <- width_raw as Maybe[Index]
+        when height: Result.Ok(height) <- height_raw as Maybe[Index]
+        when width_wide: Result.Ok(width_wide) <- width as Maybe[USize]
+        when height_wide: Result.Ok(height_wide) <- height as Maybe[USize]
+        when byte_count: Result.Ok(byte_count) <- (width_wide * height_wide * 4USize) as Maybe[Index] =>
+            return Result.Ok :: byte_count :: call
+
+    with Result.Err(_):
+        width =>
+            let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+            return Result.Err :: error :: call
+        height =>
+            let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+            return Result.Err :: error :: call
+        width_wide =>
+            let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+            return Result.Err :: error :: call
+        height_wide =>
+            let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+            return Result.Err :: error :: call
+        byte_count =>
+            let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+            return Result.Err :: error :: call
 
 fn image_extent3d(read image: VulkanImage) -> VkExtent3D:
     return VkExtent3D :: :: call
@@ -249,20 +261,21 @@ impl VulkanPresentContext:
 
     fn transition_image_layout(edit self, edit image: VulkanImage, new_layout: CInt) -> Result[Unit, VulkanPresentError]:
         let old_layout = image.layout_code :: :: method
-        select acquire_recording_command_resources :: self :: call:
-            when Result.Ok(resources) =>
-                select self.record_transition_image_layout :: resources, image, new_layout :: method:
-                    when Result.Ok(_) =>
-                        select finish_recording_command_resources_sync :: self, resources :: call:
-                            when Result.Ok(_) => return Result.Ok :: :: call
-                            when Result.Err(err) =>
-                                image.layout = old_layout
-                                return Result.Err :: err :: call
-                    when Result.Err(err) =>
-                        image.layout = old_layout
-                        self.destroy_command_resources :: resources :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when resources: Result.Ok(resources) <- acquire_recording_command_resources :: self :: call
+            when recorded: Result.Ok(_) <- self.record_transition_image_layout :: resources, image, new_layout :: method
+            when finished: Result.Ok(_) <- finish_recording_command_resources_sync :: self, resources :: call =>
+                return Result.Ok :: :: call
+
+        with Result.Err(err):
+            resources => return Result.Err :: err :: call
+            recorded =>
+                image.layout = old_layout
+                self.destroy_command_resources :: resources :: method
+                return Result.Err :: err :: call
+            finished =>
+                image.layout = old_layout
+                return Result.Err :: err :: call
 
     fn record_copy_buffer(read self, read resources: VulkanCommandResources, read source: VulkanBuffer, read target: VulkanBuffer) -> Result[Unit, VulkanPresentError]:
         let source_usage = source.usage :: :: method
@@ -293,17 +306,18 @@ impl VulkanPresentContext:
         return Result.Ok :: :: call
 
     fn copy_buffer(read self, read source: VulkanBuffer, read target: VulkanBuffer) -> Result[Unit, VulkanPresentError]:
-        select acquire_recording_command_resources :: self :: call:
-            when Result.Ok(resources) =>
-                select self.record_copy_buffer :: resources, source, target :: method:
-                    when Result.Ok(_) =>
-                        select finish_recording_command_resources_sync :: self, resources :: call:
-                            when Result.Ok(_) => return Result.Ok :: :: call
-                            when Result.Err(err) => return Result.Err :: err :: call
-                    when Result.Err(err) =>
-                        self.destroy_command_resources :: resources :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when resources: Result.Ok(resources) <- acquire_recording_command_resources :: self :: call
+            when recorded: Result.Ok(_) <- self.record_copy_buffer :: resources, source, target :: method
+            when finished: Result.Ok(_) <- finish_recording_command_resources_sync :: self, resources :: call =>
+                return Result.Ok :: :: call
+
+        with Result.Err(err):
+            resources => return Result.Err :: err :: call
+            recorded =>
+                self.destroy_command_resources :: resources :: method
+                return Result.Err :: err :: call
+            finished => return Result.Err :: err :: call
 
     fn record_copy_buffer_to_image(read self, read resources: VulkanCommandResources, read buffer: VulkanBuffer, edit image: VulkanImage) -> Result[Unit, VulkanPresentError]:
         let buffer_usage = buffer.usage :: :: method
@@ -341,20 +355,21 @@ impl VulkanPresentContext:
 
     fn copy_buffer_to_image(edit self, read buffer: VulkanBuffer, edit image: VulkanImage) -> Result[Unit, VulkanPresentError]:
         let old_layout = image.layout_code :: :: method
-        select acquire_recording_command_resources :: self :: call:
-            when Result.Ok(resources) =>
-                select self.record_copy_buffer_to_image :: resources, buffer, image :: method:
-                    when Result.Ok(_) =>
-                        select finish_recording_command_resources_sync :: self, resources :: call:
-                            when Result.Ok(_) => return Result.Ok :: :: call
-                            when Result.Err(err) =>
-                                image.layout = old_layout
-                                return Result.Err :: err :: call
-                    when Result.Err(err) =>
-                        image.layout = old_layout
-                        self.destroy_command_resources :: resources :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when resources: Result.Ok(resources) <- acquire_recording_command_resources :: self :: call
+            when recorded: Result.Ok(_) <- self.record_copy_buffer_to_image :: resources, buffer, image :: method
+            when finished: Result.Ok(_) <- finish_recording_command_resources_sync :: self, resources :: call =>
+                return Result.Ok :: :: call
+
+        with Result.Err(err):
+            resources => return Result.Err :: err :: call
+            recorded =>
+                image.layout = old_layout
+                self.destroy_command_resources :: resources :: method
+                return Result.Err :: err :: call
+            finished =>
+                image.layout = old_layout
+                return Result.Err :: err :: call
 
     fn record_copy_image_to_buffer(read self, read resources: VulkanCommandResources, edit image: VulkanImage, read buffer: VulkanBuffer) -> Result[Unit, VulkanPresentError]:
         let image_usage = image.usage :: :: method
@@ -392,20 +407,21 @@ impl VulkanPresentContext:
 
     fn copy_image_to_buffer(edit self, edit image: VulkanImage, read buffer: VulkanBuffer) -> Result[Unit, VulkanPresentError]:
         let old_layout = image.layout_code :: :: method
-        select acquire_recording_command_resources :: self :: call:
-            when Result.Ok(resources) =>
-                select self.record_copy_image_to_buffer :: resources, image, buffer :: method:
-                    when Result.Ok(_) =>
-                        select finish_recording_command_resources_sync :: self, resources :: call:
-                            when Result.Ok(_) => return Result.Ok :: :: call
-                            when Result.Err(err) =>
-                                image.layout = old_layout
-                                return Result.Err :: err :: call
-                    when Result.Err(err) =>
-                        image.layout = old_layout
-                        self.destroy_command_resources :: resources :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when resources: Result.Ok(resources) <- acquire_recording_command_resources :: self :: call
+            when recorded: Result.Ok(_) <- self.record_copy_image_to_buffer :: resources, image, buffer :: method
+            when finished: Result.Ok(_) <- finish_recording_command_resources_sync :: self, resources :: call =>
+                return Result.Ok :: :: call
+
+        with Result.Err(err):
+            resources => return Result.Err :: err :: call
+            recorded =>
+                image.layout = old_layout
+                self.destroy_command_resources :: resources :: method
+                return Result.Err :: err :: call
+            finished =>
+                image.layout = old_layout
+                return Result.Err :: err :: call
 
     fn record_copy_image(read self, read resources: VulkanCommandResources, edit source: VulkanImage, edit target: VulkanImage) -> Result[Unit, VulkanPresentError]:
         let source_width = source.width :: :: method
@@ -455,22 +471,23 @@ impl VulkanPresentContext:
     fn copy_image(edit self, edit source: VulkanImage, edit target: VulkanImage) -> Result[Unit, VulkanPresentError]:
         let source_layout = source.layout_code :: :: method
         let target_layout = target.layout_code :: :: method
-        select acquire_recording_command_resources :: self :: call:
-            when Result.Ok(resources) =>
-                select self.record_copy_image :: resources, source, target :: method:
-                    when Result.Ok(_) =>
-                        select finish_recording_command_resources_sync :: self, resources :: call:
-                            when Result.Ok(_) => return Result.Ok :: :: call
-                            when Result.Err(err) =>
-                                source.layout = source_layout
-                                target.layout = target_layout
-                                return Result.Err :: err :: call
-                    when Result.Err(err) =>
-                        source.layout = source_layout
-                        target.layout = target_layout
-                        self.destroy_command_resources :: resources :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when resources: Result.Ok(resources) <- acquire_recording_command_resources :: self :: call
+            when recorded: Result.Ok(_) <- self.record_copy_image :: resources, source, target :: method
+            when finished: Result.Ok(_) <- finish_recording_command_resources_sync :: self, resources :: call =>
+                return Result.Ok :: :: call
+
+        with Result.Err(err):
+            resources => return Result.Err :: err :: call
+            recorded =>
+                source.layout = source_layout
+                target.layout = target_layout
+                self.destroy_command_resources :: resources :: method
+                return Result.Err :: err :: call
+            finished =>
+                source.layout = source_layout
+                target.layout = target_layout
+                return Result.Err :: err :: call
 
 impl VulkanPresentApp:
     fn record_transition_image_layout(read self, read resources: VulkanCommandResources, edit image: VulkanImage, new_layout: CInt) -> Result[Unit, VulkanPresentError]:

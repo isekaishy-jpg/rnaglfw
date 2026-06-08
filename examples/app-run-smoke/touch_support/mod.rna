@@ -1,6 +1,6 @@
 use std.{List, Option}
-use runa_app_run.{AppEvent, WindowEvent, WindowEventKind, app_event_batch_from_events}
-use runa_app_run.TouchPhase
+use runa_app.{AppEvent, WindowEvent, WindowEventKind, app_event_batch_from_events}
+use runa_app.TouchPhase
 
 pub fn check_touch_batch_helpers() -> I32:
     let direct_touch_event = WindowEvent.Touch :: :: call

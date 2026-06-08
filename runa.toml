@@ -5,11 +5,43 @@ edition = "2026"
 lang_version = "2026.0.02"
 
 [workspace]
-members = ["app", "app-run", "app-vulkan"]
+members = ["app", "app-vulkan"]
 
 [[products]]
 kind = "lib"
 root = "lib.rna"
 
-[[native_links]]
+[[native_bundles]]
 name = "glfw3"
+mode = "embedded"
+provides = ["glfw3"]
+
+[[native_links]]
+name = "kernel32"
+
+[[native_links]]
+name = "user32"
+
+[[native_links]]
+name = "gdi32"
+
+[[native_links]]
+name = "winspool"
+
+[[native_links]]
+name = "shell32"
+
+[[native_links]]
+name = "ole32"
+
+[[native_links]]
+name = "oleaut32"
+
+[[native_links]]
+name = "uuid"
+
+[[native_links]]
+name = "comdlg32"
+
+[[native_links]]
+name = "advapi32"

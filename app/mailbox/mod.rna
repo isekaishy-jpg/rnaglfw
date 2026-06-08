@@ -43,6 +43,7 @@ pub(package) struct WindowMailbox:
     pub overflowed: CInt
     pub drag_drop_enabled: CInt
     pub theme_preference: CInt
+    pub theme_applied: CInt
     pub window_level_preference: CInt
     pub resize_increment_width: CInt
     pub resize_increment_height: CInt
@@ -855,6 +856,7 @@ pub(package) fn allocate_window_mailbox() -> Option[*edit WindowMailbox]:
                     stored.appearance_border_color = 0xFFFFFFFF
                     stored.appearance_title_background_color = 0xFFFFFFFF
                     stored.appearance_title_text_color = 0xFFFFFFFF
+                    stored.theme_applied = 0
                     #unsafe mailbox.store :: stored :: method
                     return Option.Some :: mailbox :: call
 

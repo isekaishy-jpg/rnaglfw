@@ -1,0 +1,282 @@
+use std.Result
+use glfw.GlfwWindow
+use input.InputAction
+use mailbox.{WindowMailbox, push_window_raw_key_changed, push_window_raw_mouse_button_changed}
+use mailbox.{push_window_raw_mouse_motion, push_window_raw_mouse_wheel}
+use window.Win32HWnd
+
+const WM_INPUT: CUInt = 0x00FF
+const RID_INPUT: CUInt = 0x10000003
+const RIM_TYPEMOUSE: CUInt = 0
+const RIM_TYPEKEYBOARD: CUInt = 1
+const MOUSE_MOVE_ABSOLUTE: CUShort = 0x0001
+const RI_MOUSE_LEFT_BUTTON_DOWN: CUInt = 0x0001
+const RI_MOUSE_LEFT_BUTTON_UP: CUInt = 0x0002
+const RI_MOUSE_RIGHT_BUTTON_DOWN: CUInt = 0x0004
+const RI_MOUSE_RIGHT_BUTTON_UP: CUInt = 0x0008
+const RI_MOUSE_MIDDLE_BUTTON_DOWN: CUInt = 0x0010
+const RI_MOUSE_MIDDLE_BUTTON_UP: CUInt = 0x0020
+const RI_MOUSE_BUTTON_4_DOWN: CUInt = 0x0040
+const RI_MOUSE_BUTTON_4_UP: CUInt = 0x0080
+const RI_MOUSE_BUTTON_5_DOWN: CUInt = 0x0100
+const RI_MOUSE_BUTTON_5_UP: CUInt = 0x0200
+const RI_MOUSE_WHEEL: CUInt = 0x0400
+const RI_MOUSE_HWHEEL: CUInt = 0x0800
+const RI_KEY_BREAK: CUShort = 0x0001
+const RI_KEY_E0: CUShort = 0x0002
+const RI_KEY_E1: CUShort = 0x0004
+const RAW_INPUT_SUBCLASS_ID: USize = 0x52415749USize
+const HEAP_ZERO_MEMORY: CUInt = 0x00000008
+const RAW_INPUT_HEADER_BYTES: CUInt = 24
+const RAW_INPUT_ERROR: CUInt = 0xFFFFFFFF
+
+#repr[c]
+struct RawInputHeader:
+    pub dwType: CUInt
+    pub dwSize: CUInt
+    pub hDevice: USize
+    pub wParam: USize
+
+#repr[c]
+struct RawMouse:
+    pub usFlags: CUShort
+    pub buttons: CUInt
+    pub ulRawButtons: CUInt
+    pub lLastX: CInt
+    pub lLastY: CInt
+    pub ulExtraInformation: CUInt
+
+#repr[c]
+struct RawKeyboard:
+    pub make_code: CUShort
+    pub flags: CUShort
+    pub reserved: CUShort
+    pub vkey: CUShort
+    pub message: CUInt
+    pub extra_information: CUInt
+
+#repr[c]
+struct RawMouseInput:
+    pub header: RawInputHeader
+    pub mouse: RawMouse
+
+#repr[c]
+struct RawKeyboardInput:
+    pub header: RawInputHeader
+    pub keyboard: RawKeyboard
+
+#link[name = "kernel32"]
+#unsafe
+extern["system"] fn GetProcessHeap() -> *edit CVoid
+
+#link[name = "kernel32"]
+#unsafe
+extern["system"] fn HeapAlloc(heap: *edit CVoid, flags: CUInt, bytes: CSize) -> *edit CVoid
+
+#link[name = "kernel32"]
+#unsafe
+extern["system"] fn HeapFree(heap: *edit CVoid, flags: CUInt, memory: *edit CVoid) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn GetRawInputData(raw_input: *edit CVoid, command: CUInt, data: *edit CVoid, size: *edit CUInt, header_size: CUInt) -> CUInt
+
+#link[name = "comctl32"]
+#unsafe
+extern["system"] fn SetWindowSubclass(window: Win32HWnd, procedure: extern["system"] fn(Win32HWnd, CUInt, USize, ISize, USize, USize) -> ISize, subclass_id: USize, ref_data: USize) -> CInt
+
+#link[name = "comctl32"]
+#unsafe
+extern["system"] fn RemoveWindowSubclass(window: Win32HWnd, procedure: extern["system"] fn(Win32HWnd, CUInt, USize, ISize, USize, USize) -> ISize, subclass_id: USize) -> CInt
+
+#link[name = "comctl32"]
+#unsafe
+extern["system"] fn DefSubclassProc(window: Win32HWnd, message: CUInt, wparam: USize, lparam: ISize) -> ISize
+
+fn ref_data_as_mailbox(ref_data: USize) -> *edit WindowMailbox:
+    return #unsafe raw_pointer_from_address_edit[WindowMailbox] :: ref_data :: call
+
+fn void_as_raw_input_header_read(pointer: *edit CVoid) -> *read RawInputHeader:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_read[RawInputHeader] :: address :: call
+
+fn void_as_raw_mouse_input_read(pointer: *edit CVoid) -> *read RawMouseInput:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_read[RawMouseInput] :: address :: call
+
+fn void_as_raw_keyboard_input_read(pointer: *edit CVoid) -> *read RawKeyboardInput:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_read[RawKeyboardInput] :: address :: call
+
+fn raw_mouse_button_flags(buttons: CUInt) -> CUInt:
+    return buttons & 0x0000FFFF
+
+fn raw_mouse_button_payload(buttons: CUInt) -> CInt:
+    let shift: Index = 16
+    let bits = (buttons >> shift) & 0x0000FFFF
+    let Result.Ok(value) = bits as Maybe[CInt] else => return 0
+    select:
+        when value >= 0x8000 => return value - 0x10000
+        else => return value
+
+fn push_raw_mouse_xbutton(mailbox: *edit WindowMailbox, payload: CInt, read action: InputAction) -> Unit:
+    select:
+        when payload == 1 => push_window_raw_mouse_button_changed :: mailbox, 3, action :: call
+        when payload == 2 => push_window_raw_mouse_button_changed :: mailbox, 4, action :: call
+        else => ()
+    return
+
+fn push_raw_mouse_button_events(mailbox: *edit WindowMailbox, flags: CUInt, payload: CInt) -> Unit:
+    select:
+        when (flags & RI_MOUSE_LEFT_BUTTON_DOWN) != 0 => push_window_raw_mouse_button_changed :: mailbox, 0, InputAction.Press :: call
+        else => ()
+    select:
+        when (flags & RI_MOUSE_LEFT_BUTTON_UP) != 0 => push_window_raw_mouse_button_changed :: mailbox, 0, InputAction.Release :: call
+        else => ()
+    select:
+        when (flags & RI_MOUSE_RIGHT_BUTTON_DOWN) != 0 => push_window_raw_mouse_button_changed :: mailbox, 1, InputAction.Press :: call
+        else => ()
+    select:
+        when (flags & RI_MOUSE_RIGHT_BUTTON_UP) != 0 => push_window_raw_mouse_button_changed :: mailbox, 1, InputAction.Release :: call
+        else => ()
+    select:
+        when (flags & RI_MOUSE_MIDDLE_BUTTON_DOWN) != 0 => push_window_raw_mouse_button_changed :: mailbox, 2, InputAction.Press :: call
+        else => ()
+    select:
+        when (flags & RI_MOUSE_MIDDLE_BUTTON_UP) != 0 => push_window_raw_mouse_button_changed :: mailbox, 2, InputAction.Release :: call
+        else => ()
+    select:
+        when (flags & RI_MOUSE_BUTTON_4_DOWN) != 0 => push_raw_mouse_xbutton :: mailbox, payload, InputAction.Press :: call
+        else => ()
+    select:
+        when (flags & RI_MOUSE_BUTTON_4_UP) != 0 => push_raw_mouse_xbutton :: mailbox, payload, InputAction.Release :: call
+        else => ()
+    select:
+        when (flags & RI_MOUSE_BUTTON_5_DOWN) != 0 => push_raw_mouse_xbutton :: mailbox, payload, InputAction.Press :: call
+        else => ()
+    select:
+        when (flags & RI_MOUSE_BUTTON_5_UP) != 0 => push_raw_mouse_xbutton :: mailbox, payload, InputAction.Release :: call
+        else => ()
+    return
+
+fn push_raw_mouse_wheel_events(mailbox: *edit WindowMailbox, flags: CUInt, payload: CInt) -> Unit:
+    select:
+        when (flags & RI_MOUSE_WHEEL) != 0 => push_window_raw_mouse_wheel :: mailbox, 0, payload :: call
+        else => ()
+    select:
+        when (flags & RI_MOUSE_HWHEEL) != 0 => push_window_raw_mouse_wheel :: mailbox, payload, 0 :: call
+        else => ()
+    return
+
+fn lparam_as_raw_input_handle(lparam: ISize) -> Result[*edit CVoid, Unit]:
+    let Result.Ok(bits) = lparam as Maybe[USize] else => return Result.Err :: () :: call
+    let handle = #unsafe raw_pointer_from_address_edit[CVoid] :: bits :: call
+    return Result.Ok :: handle :: call
+
+fn free_raw_input_payload(payload: *edit CVoid) -> Unit:
+    select:
+        when payload.is_null :: :: method => return
+        else => ()
+    let heap = #unsafe GetProcessHeap :: :: call
+    select:
+        when heap.is_null :: :: method => return
+        else =>
+            let _ = #unsafe HeapFree :: heap, 0, payload :: call
+            return
+
+fn push_window_raw_input(mailbox: *edit WindowMailbox, lparam: ISize) -> Unit:
+    let Result.Ok(raw_input_handle) = lparam_as_raw_input_handle :: lparam :: call else => return
+    let size: CUInt = 0
+    let size_ptr: *edit CUInt = #unsafe &raw edit size
+    let queried = #unsafe GetRawInputData :: raw_input_handle, RID_INPUT, null, size_ptr, RAW_INPUT_HEADER_BYTES :: call
+    select:
+        when queried == RAW_INPUT_ERROR => return
+        when size == 0 => return
+        else => ()
+    let Result.Ok(payload_bytes) = size as Maybe[CSize] else => return
+    let heap = #unsafe GetProcessHeap :: :: call
+    select:
+        when heap.is_null :: :: method => return
+        else => ()
+    let payload = #unsafe HeapAlloc :: heap, HEAP_ZERO_MEMORY, payload_bytes :: call
+    select:
+        when payload.is_null :: :: method => return
+        else => ()
+    let copied = #unsafe GetRawInputData :: raw_input_handle, RID_INPUT, payload, size_ptr, RAW_INPUT_HEADER_BYTES :: call
+    select:
+        when copied == RAW_INPUT_ERROR =>
+            free_raw_input_payload :: payload :: call
+            return
+        else => ()
+    let header_ptr = void_as_raw_input_header_read :: payload :: call
+    let header: RawInputHeader = #unsafe header_ptr.load :: :: method
+    select:
+        when header.dwType == RIM_TYPEMOUSE =>
+            let raw_input_ptr = void_as_raw_mouse_input_read :: payload :: call
+            let raw_input: RawMouseInput = #unsafe raw_input_ptr.load :: :: method
+            let flags = raw_mouse_button_flags :: raw_input.mouse.buttons :: call
+            let payload_value = raw_mouse_button_payload :: raw_input.mouse.buttons :: call
+            select:
+                when (raw_input.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) != 0 => ()
+                when raw_input.mouse.lLastX == 0 && raw_input.mouse.lLastY == 0 => ()
+                else => ()
+            select:
+                when (raw_input.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) != 0 => ()
+                when raw_input.mouse.lLastX == 0 && raw_input.mouse.lLastY == 0 => ()
+                else => push_window_raw_mouse_motion :: mailbox, raw_input.mouse.lLastX, raw_input.mouse.lLastY :: call
+            push_raw_mouse_button_events :: mailbox, flags, payload_value :: call
+            push_raw_mouse_wheel_events :: mailbox, flags, payload_value :: call
+        when header.dwType == RIM_TYPEKEYBOARD =>
+            let raw_input_ptr = void_as_raw_keyboard_input_read :: payload :: call
+            let raw_input: RawKeyboardInput = #unsafe raw_input_ptr.load :: :: method
+            select either:
+                when raw_key: Result.Ok(raw_key) <- raw_input.keyboard.vkey as Maybe[CInt]
+                when scancode: Result.Ok(scancode) <- raw_input.keyboard.make_code as Maybe[CInt] =>
+                    let extended = (raw_input.keyboard.flags & (RI_KEY_E0 | RI_KEY_E1)) != 0
+                    let action = InputAction.Press
+                    select:
+                        when raw_key == 255 => ()
+                        when (raw_input.keyboard.flags & RI_KEY_BREAK) != 0 =>
+                            let released = InputAction.Release
+                            push_window_raw_key_changed :: mailbox, raw_key, scancode, released, extended :: call
+                        else => push_window_raw_key_changed :: mailbox, raw_key, scancode, action, extended :: call
+
+            with Result.Err(_):
+                raw_key =>
+                    free_raw_input_payload :: payload :: call
+                    return
+                scancode =>
+                    free_raw_input_payload :: payload :: call
+                    return
+        else => ()
+    free_raw_input_payload :: payload :: call
+    return
+
+#export[name = "runa_app_window_raw_input_subclass_proc"]
+extern["system"] fn window_raw_input_subclass_proc(window: Win32HWnd, message: CUInt, wparam: USize, lparam: ISize, subclass_id: USize, ref_data: USize) -> ISize:
+    let _ = subclass_id
+    select:
+        when ref_data == 0USize => ()
+        when message == WM_INPUT =>
+            let mailbox = ref_data_as_mailbox :: ref_data :: call
+            push_window_raw_input :: mailbox, lparam :: call
+        else => ()
+    return #unsafe DefSubclassProc :: window, message, wparam, lparam :: call
+
+pub(package) fn attach_raw_input_subclass(read window: GlfwWindow, mailbox: *edit WindowMailbox) -> Bool:
+    let hwnd = window.win32_window :: :: method
+    select:
+        when hwnd.is_null :: :: method => return false
+        when mailbox.is_null :: :: method => return false
+        else => ()
+    let ref_data = #unsafe raw_pointer_address_edit :: mailbox :: call
+    let attached = #unsafe SetWindowSubclass :: hwnd, window_raw_input_subclass_proc, RAW_INPUT_SUBCLASS_ID, ref_data :: call
+    return attached != 0
+
+pub(package) fn detach_raw_input_subclass(read window: GlfwWindow) -> Unit:
+    let hwnd = window.win32_window :: :: method
+    select:
+        when hwnd.is_null :: :: method => return
+        else => ()
+    let _ = #unsafe RemoveWindowSubclass :: hwnd, window_raw_input_subclass_proc, RAW_INPUT_SUBCLASS_ID :: call
+    return

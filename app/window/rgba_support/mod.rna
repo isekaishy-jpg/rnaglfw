@@ -1,0 +1,588 @@
+use std.{ByteBuffer, List, Result}
+
+use bridge.index_to_cint
+use glfw.{GlfwImage, glfw_image}
+
+pub enum MonitorGammaRampError:
+    Empty
+    ChannelLengthMismatch
+    ChannelCountOutOfRange
+
+pub enum RgbaImageError:
+    ZeroSize
+    SizeOutOfRange
+    PixelCountMismatch
+    CoordOutOfRange(Index, Index, CInt, CInt)
+    RectZeroSize
+
+pub struct RgbaColor:
+    pub red: U8
+    pub green: U8
+    pub blue: U8
+    pub alpha: U8
+
+pub struct MonitorGammaRamp:
+    pub red: List[CUShort]
+    pub green: List[CUShort]
+    pub blue: List[CUShort]
+
+pub struct RgbaImage:
+    pub(package) width: CInt
+    pub(package) height: CInt
+    pub(package) pixels: ByteBuffer
+
+struct CheckedRgbaRect:
+    start_x: CInt
+    start_y: CInt
+    width: CInt
+    height: CInt
+
+struct BlendFactors:
+    dest_alpha: USize
+    source_alpha: USize
+    inv_source_alpha: USize
+    out_alpha: USize
+
+pub(package) fn gamma_ramp_channel_count(read ramp: MonitorGammaRamp) -> Result[CUInt, MonitorGammaRampError]:
+    let red_count = ramp.red.count :: :: method
+    let green_count = ramp.green.count :: :: method
+    let blue_count = ramp.blue.count :: :: method
+    select:
+        when red_count == 0 => return Result.Err :: MonitorGammaRampError.Empty :: call
+        when red_count != green_count || red_count != blue_count => return Result.Err :: MonitorGammaRampError.ChannelLengthMismatch :: call
+        else => ()
+    let Result.Ok(size) = red_count as Maybe[CUInt] else => return Result.Err :: MonitorGammaRampError.ChannelCountOutOfRange :: call
+    return Result.Ok :: size :: call
+
+fn rgba_expected_byte_count(raw_width: CInt, raw_height: CInt) -> Result[Index, RgbaImageError]:
+    let raw_pixel_count: CInt = raw_width * raw_height
+    let raw_byte_count: CInt = raw_pixel_count * 4
+    let Result.Ok(expected) = raw_byte_count as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+    return Result.Ok :: expected :: call
+
+fn rgba_checked_offset(read image: RgbaImage, x: Index, y: Index) -> Result[Index, RgbaImageError]:
+    select either:
+        when raw_x: Result.Ok(raw_x) <- index_to_cint :: x :: call
+        when raw_y: Result.Ok(raw_y) <- index_to_cint :: y :: call =>
+            select:
+                when raw_x >= image.width || raw_y >= image.height =>
+                    let error = RgbaImageError.CoordOutOfRange :: x, y, image.width, image.height :: call
+                    return Result.Err :: error :: call
+                else => ()
+            let raw_offset: CInt = ((raw_y * image.width) + raw_x) * 4
+            let Result.Ok(offset) = raw_offset as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+            return Result.Ok :: offset :: call
+
+    with Result.Err(_):
+        raw_x => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+        raw_y => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+
+fn rgba_channel_index(offset: Index, delta: USize) -> Result[Index, RgbaImageError]:
+    select either:
+        when offset_wide: Result.Ok(offset_wide) <- offset as Maybe[USize]
+        when target: Result.Ok(target) <- (offset_wide + delta) as Maybe[Index] =>
+            return Result.Ok :: target :: call
+
+    with Result.Err(_):
+        offset_wide => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+        target => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+
+fn rgba_checked_rect(read image: RgbaImage, x: Index, y: Index, width: Index, height: Index) -> Result[CheckedRgbaRect, RgbaImageError]:
+    select:
+        when width == 0 || height == 0 => return Result.Err :: RgbaImageError.RectZeroSize :: call
+        else => ()
+    select either:
+        when raw_x: Result.Ok(raw_x) <- index_to_cint :: x :: call
+        when raw_y: Result.Ok(raw_y) <- index_to_cint :: y :: call
+        when raw_width: Result.Ok(raw_width) <- index_to_cint :: width :: call
+        when raw_height: Result.Ok(raw_height) <- index_to_cint :: height :: call =>
+            select:
+                when raw_x >= image.width || raw_y >= image.height =>
+                    let error = RgbaImageError.CoordOutOfRange :: x, y, image.width, image.height :: call
+                    return Result.Err :: error :: call
+                else => ()
+            let end_x: CInt = raw_x + raw_width - 1
+            let end_y: CInt = raw_y + raw_height - 1
+            select:
+                when end_x >= image.width || end_y >= image.height =>
+                    select either:
+                        when last_x: Result.Ok(last_x) <- end_x as Maybe[Index]
+                        when last_y: Result.Ok(last_y) <- end_y as Maybe[Index] =>
+                            let error = RgbaImageError.CoordOutOfRange :: last_x, last_y, image.width, image.height :: call
+                            return Result.Err :: error :: call
+
+                    with Result.Err(_):
+                        last_x => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                        last_y => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                else => ()
+            let rect = CheckedRgbaRect :: raw_x, raw_y, raw_width, raw_height :: call
+            return Result.Ok :: rect :: call
+
+    with Result.Err(_):
+        raw_x => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+        raw_y => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+        raw_width => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+        raw_height => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+
+fn copy_rgba_bytes(read source: ByteBuffer) -> Result[ByteBuffer, RgbaImageError]:
+    let count = source.byte_count :: :: method
+    let copied = ByteBuffer :: :: call
+    copied.reserve :: count :: method
+    let Result.Ok(limit) = count as Maybe[USize] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+    let scan: USize = 0USize
+    repeat while scan < limit:
+        let Result.Ok(index) = scan as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+        let value = source[index]
+        copied.push :: value :: method
+        scan = scan + 1USize
+    return Result.Ok :: copied :: call
+
+pub fn rgba_image(width: Index, height: Index, take pixels: ByteBuffer) -> Result[RgbaImage, RgbaImageError]:
+    select:
+        when width == 0 => return Result.Err :: RgbaImageError.ZeroSize :: call
+        when height == 0 => return Result.Err :: RgbaImageError.ZeroSize :: call
+        else => ()
+    select either:
+        when raw_width: Result.Ok(raw_width) <- index_to_cint :: width :: call
+        when raw_height: Result.Ok(raw_height) <- index_to_cint :: height :: call
+        when expected: Result.Ok(expected) <- rgba_expected_byte_count :: raw_width, raw_height :: call =>
+            let actual = pixels.byte_count :: :: method
+            select:
+                when actual != expected => return Result.Err :: RgbaImageError.PixelCountMismatch :: call
+                else => ()
+            let image = RgbaImage :: :: call
+                width = raw_width
+                height = raw_height
+                pixels = pixels
+            return Result.Ok :: image :: call
+
+    with Result.Err(_):
+        raw_width => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+        raw_height => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+        expected => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+
+pub fn rgba_color(red: U8, green: U8, blue: U8, alpha: U8) -> RgbaColor:
+    return RgbaColor :: :: call
+        red = red
+        green = green
+        blue = blue
+        alpha = alpha
+
+fn rgba_widen_channel(value: U8) -> Result[USize, RgbaImageError]:
+    let Result.Ok(widened) = value as Maybe[USize] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+    return Result.Ok :: widened :: call
+
+fn rgba_narrow_channel(value: USize) -> Result[U8, RgbaImageError]:
+    let Result.Ok(narrowed) = value as Maybe[U8] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+    return Result.Ok :: narrowed :: call
+
+fn rgba_blend_channel(dest: U8, source: U8, read factors: BlendFactors) -> Result[U8, RgbaImageError]:
+    select:
+        when factors.out_alpha == 0USize => return Result.Ok :: 0U8 :: call
+        else => ()
+    select either:
+        when dest_wide: Result.Ok(dest_wide) <- rgba_widen_channel :: dest :: call
+        when source_wide: Result.Ok(source_wide) <- rgba_widen_channel :: source :: call =>
+            let source_premul: USize = source_wide * factors.source_alpha
+            let dest_premul: USize = (dest_wide * factors.dest_alpha * factors.inv_source_alpha + 127USize) / 255USize
+            let out_premul: USize = source_premul + dest_premul
+            let out_value: USize = (out_premul + (factors.out_alpha / 2USize)) / factors.out_alpha
+            return rgba_narrow_channel :: out_value :: call
+
+    with Result.Err(_):
+        dest_wide => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+        source_wide => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+
+fn rgba_abs_delta(value: CInt) -> CInt:
+    select:
+        when value < 0 => return 0 - value
+        else => return value
+    return value
+
+fn rgba_step_direction(start: CInt, end: CInt) -> CInt:
+    select:
+        when start < end => return 1
+        when start > end => return -1
+        else => return 0
+    return 0
+
+pub fn rgba_blend_source_over(read dest: RgbaColor, read source: RgbaColor) -> Result[RgbaColor, RgbaImageError]:
+    select either:
+        when dest_alpha: Result.Ok(dest_alpha) <- rgba_widen_channel :: dest.alpha :: call
+        when source_alpha: Result.Ok(source_alpha) <- rgba_widen_channel :: source.alpha :: call
+        when out_alpha: Result.Ok(out_alpha) <- rgba_narrow_channel :: (source_alpha + ((dest_alpha * (255USize - source_alpha) + 127USize) / 255USize)) :: call =>
+            let inv_source_alpha: USize = 255USize - source_alpha
+            let out_alpha_wide: USize = source_alpha + ((dest_alpha * inv_source_alpha + 127USize) / 255USize)
+            let factors = BlendFactors :: dest_alpha, source_alpha, inv_source_alpha, out_alpha_wide :: call
+            select either:
+                when out_red: Result.Ok(out_red) <- rgba_blend_channel :: dest.red, source.red, factors :: call
+                when out_green: Result.Ok(out_green) <- rgba_blend_channel :: dest.green, source.green, factors :: call
+                when out_blue: Result.Ok(out_blue) <- rgba_blend_channel :: dest.blue, source.blue, factors :: call =>
+                    let color = rgba_color :: out_red, out_green, out_blue, out_alpha :: call
+                    return Result.Ok :: color :: call
+
+            with Result.Err(_):
+                out_red => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                out_green => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                out_blue => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+
+    with Result.Err(_):
+        dest_alpha => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+        source_alpha => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+        out_alpha => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+
+pub fn monitor_gamma_ramp(take red: List[CUShort], take green: List[CUShort], take blue: List[CUShort]) -> Result[MonitorGammaRamp, MonitorGammaRampError]:
+    let ramp = MonitorGammaRamp :: red, green, blue :: call
+    select gamma_ramp_channel_count :: ramp :: call:
+        when Result.Ok(_) => return Result.Ok :: ramp :: call
+        when Result.Err(error) => return Result.Err :: error :: call
+
+pub fn solid_rgba_image(width: Index, height: Index, read fill: RgbaColor) -> Result[RgbaImage, RgbaImageError]:
+    select:
+        when width == 0 => return Result.Err :: RgbaImageError.ZeroSize :: call
+        when height == 0 => return Result.Err :: RgbaImageError.ZeroSize :: call
+        else => ()
+    select either:
+        when raw_width: Result.Ok(raw_width) <- index_to_cint :: width :: call
+        when raw_height: Result.Ok(raw_height) <- index_to_cint :: height :: call
+        when expected: Result.Ok(expected) <- rgba_expected_byte_count :: raw_width, raw_height :: call =>
+            let raw_pixel_count: CInt = raw_width * raw_height
+            let pixels = ByteBuffer :: :: call
+            pixels.reserve :: expected :: method
+            let scan: CInt = 0
+            repeat while scan < raw_pixel_count:
+                pixels.push :: fill.red :: method
+                pixels.push :: fill.green :: method
+                pixels.push :: fill.blue :: method
+                pixels.push :: fill.alpha :: method
+                scan = scan + 1
+            return rgba_image :: width, height, pixels :: call
+
+    with Result.Err(_):
+        raw_width => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+        raw_height => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+        expected => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+
+impl RgbaImage:
+    fn width(read self) -> CInt:
+        return self.width
+
+    fn height(read self) -> CInt:
+        return self.height
+
+    fn width_index(read self) -> Result[Index, RgbaImageError]:
+        let Result.Ok(width) = self.width as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+        return Result.Ok :: width :: call
+
+    fn height_index(read self) -> Result[Index, RgbaImageError]:
+        let Result.Ok(height) = self.height as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+        return Result.Ok :: height :: call
+
+    fn pixel_count(read self) -> Result[Index, RgbaImageError]:
+        let raw_pixel_count: CInt = self.width * self.height
+        let Result.Ok(pixel_count) = raw_pixel_count as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+        return Result.Ok :: pixel_count :: call
+
+    fn pixel(read self, x: Index, y: Index) -> Result[RgbaColor, RgbaImageError]:
+        select either:
+            when offset: Result.Ok(offset) <- rgba_checked_offset :: self, x, y :: call
+            when green_index: Result.Ok(green_index) <- rgba_channel_index :: offset, 1USize :: call
+            when blue_index: Result.Ok(blue_index) <- rgba_channel_index :: offset, 2USize :: call
+            when alpha_index: Result.Ok(alpha_index) <- rgba_channel_index :: offset, 3USize :: call =>
+                let red = self.pixels[offset]
+                let green = self.pixels[green_index]
+                let blue = self.pixels[blue_index]
+                let alpha = self.pixels[alpha_index]
+                let color = rgba_color :: red, green, blue, alpha :: call
+                return Result.Ok :: color :: call
+
+        with Result.Err(err):
+            offset => return Result.Err :: err :: call
+            green_index => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+            blue_index => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+            alpha_index => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+
+    fn set_pixel(edit self, x: Index, y: Index, read color: RgbaColor) -> Result[Unit, RgbaImageError]:
+        select either:
+            when offset: Result.Ok(offset) <- rgba_checked_offset :: self, x, y :: call
+            when green_index: Result.Ok(green_index) <- rgba_channel_index :: offset, 1USize :: call
+            when blue_index: Result.Ok(blue_index) <- rgba_channel_index :: offset, 2USize :: call
+            when alpha_index: Result.Ok(alpha_index) <- rgba_channel_index :: offset, 3USize :: call =>
+                self.pixels[offset] = color.red
+                self.pixels[green_index] = color.green
+                self.pixels[blue_index] = color.blue
+                self.pixels[alpha_index] = color.alpha
+                return Result.Ok :: :: call
+
+        with Result.Err(err):
+            offset => return Result.Err :: err :: call
+            green_index => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+            blue_index => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+            alpha_index => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+
+    fn blend_pixel(edit self, x: Index, y: Index, read source: RgbaColor) -> Result[Unit, RgbaImageError]:
+        select either:
+            when dest: Result.Ok(dest) <- self.pixel :: x, y :: method
+            when blended: Result.Ok(blended) <- rgba_blend_source_over :: dest, source :: call =>
+                return self.set_pixel :: x, y, blended :: method
+
+        with Result.Err(err):
+            dest => return Result.Err :: err :: call
+            blended => return Result.Err :: err :: call
+
+    fn fill_rect(edit self, x: Index, y: Index, width: Index, height: Index, read fill: RgbaColor) -> Result[Unit, RgbaImageError]:
+        select rgba_checked_rect :: self, x, y, width, height :: call:
+            when Result.Ok(rect) =>
+                let scan_y: CInt = 0
+                repeat while scan_y < rect.height:
+                    let row_y: CInt = rect.start_y + scan_y
+                    let Result.Ok(row_y_index) = row_y as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                    let scan_x: CInt = 0
+                    repeat while scan_x < rect.width:
+                        let row_x: CInt = rect.start_x + scan_x
+                        let Result.Ok(row_x_index) = row_x as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                        select self.set_pixel :: row_x_index, row_y_index, fill :: method:
+                            when Result.Ok(_) => ()
+                            when Result.Err(err) => return Result.Err :: err :: call
+                        scan_x = scan_x + 1
+                    scan_y = scan_y + 1
+                return Result.Ok :: :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn draw_hline(edit self, x: Index, y: Index, width: Index, read color: RgbaColor) -> Result[Unit, RgbaImageError]:
+        return self.fill_rect :: x, y, width, 1, color :: method
+
+    fn draw_vline(edit self, x: Index, y: Index, height: Index, read color: RgbaColor) -> Result[Unit, RgbaImageError]:
+        return self.fill_rect :: x, y, 1, height, color :: method
+
+    fn stroke_rect(edit self, x: Index, y: Index, width: Index, height: Index, read color: RgbaColor) -> Result[Unit, RgbaImageError]:
+        select rgba_checked_rect :: self, x, y, width, height :: call:
+            when Result.Ok(rect) =>
+                select:
+                    when rect.width == 1 || rect.height == 1 => return self.fill_rect :: x, y, width, height, color :: method
+                    else => ()
+                let last_x_raw: CInt = rect.start_x + rect.width - 1
+                let last_y_raw: CInt = rect.start_y + rect.height - 1
+                select either:
+                    when last_x: Result.Ok(last_x) <- last_x_raw as Maybe[Index]
+                    when last_y: Result.Ok(last_y) <- last_y_raw as Maybe[Index] =>
+                        select self.draw_hline :: x, y, width, color :: method:
+                            when Result.Ok(_) => ()
+                            when Result.Err(err) => return Result.Err :: err :: call
+                        select self.draw_hline :: x, last_y, width, color :: method:
+                            when Result.Ok(_) => ()
+                            when Result.Err(err) => return Result.Err :: err :: call
+                        select self.draw_vline :: x, y, height, color :: method:
+                            when Result.Ok(_) => ()
+                            when Result.Err(err) => return Result.Err :: err :: call
+                        return self.draw_vline :: last_x, y, height, color :: method
+
+                with Result.Err(_):
+                    last_x => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                    last_y => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn draw_line(edit self, x0: Index, y0: Index, x1: Index, y1: Index, read color: RgbaColor) -> Result[Unit, RgbaImageError]:
+        select either:
+            when raw_x0: Result.Ok(raw_x0) <- x0 as Maybe[CInt]
+            when raw_y0: Result.Ok(raw_y0) <- y0 as Maybe[CInt]
+            when raw_x1: Result.Ok(raw_x1) <- x1 as Maybe[CInt]
+            when raw_y1: Result.Ok(raw_y1) <- y1 as Maybe[CInt] =>
+                let delta_x = rgba_abs_delta :: raw_x1 - raw_x0 :: call
+                let delta_y = rgba_abs_delta :: raw_y1 - raw_y0 :: call
+                let step_x = rgba_step_direction :: raw_x0, raw_x1 :: call
+                let step_y = rgba_step_direction :: raw_y0, raw_y1 :: call
+                let error = delta_x - delta_y
+                let scan_x = raw_x0
+                let scan_y = raw_y0
+                let active = true
+                repeat while active:
+                    select either:
+                        when plot_x: Result.Ok(plot_x) <- scan_x as Maybe[Index]
+                        when plot_y: Result.Ok(plot_y) <- scan_y as Maybe[Index] =>
+                            select self.set_pixel :: plot_x, plot_y, color :: method:
+                                when Result.Ok(_) => ()
+                                when Result.Err(err) => return Result.Err :: err :: call
+
+                    with Result.Err(_):
+                        plot_x => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                        plot_y => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                    select:
+                        when scan_x == raw_x1 && scan_y == raw_y1 =>
+                            active = false
+                            continue
+                        else => ()
+                    let doubled_error: CInt = error + error
+                    select:
+                        when doubled_error > (0 - delta_y) =>
+                            error = error - delta_y
+                            scan_x = scan_x + step_x
+                        else => ()
+                    select:
+                        when doubled_error < delta_x =>
+                            error = error + delta_x
+                            scan_y = scan_y + step_y
+                        else => ()
+                return Result.Ok :: :: call
+
+        with Result.Err(_):
+            raw_x0 => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+            raw_y0 => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+            raw_x1 => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+            raw_y1 => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+
+    fn blend_image(edit self, x: Index, y: Index, read source: RgbaImage) -> Result[Unit, RgbaImageError]:
+        select either:
+            when source_width: Result.Ok(source_width) <- source.width as Maybe[Index]
+            when source_height: Result.Ok(source_height) <- source.height as Maybe[Index] =>
+                select rgba_checked_rect :: self, x, y, source_width, source_height :: call:
+                    when Result.Ok(rect) =>
+                        let scan_y: CInt = 0
+                        repeat while scan_y < source.height:
+                            let row_y: CInt = rect.start_y + scan_y
+                            select either:
+                                when source_y: Result.Ok(source_y) <- scan_y as Maybe[Index]
+                                when dest_y: Result.Ok(dest_y) <- row_y as Maybe[Index] =>
+                                    let scan_x: CInt = 0
+                                    repeat while scan_x < source.width:
+                                        let row_x: CInt = rect.start_x + scan_x
+                                        select either:
+                                            when source_x: Result.Ok(source_x) <- scan_x as Maybe[Index]
+                                            when dest_x: Result.Ok(dest_x) <- row_x as Maybe[Index]
+                                            when color: Result.Ok(color) <- source.pixel :: source_x, source_y :: method
+                                            when blended: Result.Ok(_) <- self.blend_pixel :: dest_x, dest_y, color :: method =>
+                                                ()
+
+                                        with Result.Err(err):
+                                            source_x => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                                            dest_x => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                                            color => return Result.Err :: err :: call
+                                            blended => return Result.Err :: err :: call
+                                        scan_x = scan_x + 1
+
+                            with Result.Err(_):
+                                source_y => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                                dest_y => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                            scan_y = scan_y + 1
+                        return Result.Ok :: :: call
+                    when Result.Err(err) => return Result.Err :: err :: call
+
+        with Result.Err(_):
+            source_width => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+            source_height => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+
+    fn blit_image(edit self, x: Index, y: Index, read source: RgbaImage) -> Result[Unit, RgbaImageError]:
+        select either:
+            when source_width: Result.Ok(source_width) <- source.width as Maybe[Index]
+            when source_height: Result.Ok(source_height) <- source.height as Maybe[Index] =>
+                select rgba_checked_rect :: self, x, y, source_width, source_height :: call:
+                    when Result.Ok(rect) =>
+                        let scan_y: CInt = 0
+                        repeat while scan_y < source.height:
+                            let row_y: CInt = rect.start_y + scan_y
+                            select either:
+                                when source_y: Result.Ok(source_y) <- scan_y as Maybe[Index]
+                                when dest_y: Result.Ok(dest_y) <- row_y as Maybe[Index] =>
+                                    let scan_x: CInt = 0
+                                    repeat while scan_x < source.width:
+                                        let row_x: CInt = rect.start_x + scan_x
+                                        select either:
+                                            when source_x: Result.Ok(source_x) <- scan_x as Maybe[Index]
+                                            when dest_x: Result.Ok(dest_x) <- row_x as Maybe[Index]
+                                            when color: Result.Ok(color) <- source.pixel :: source_x, source_y :: method
+                                            when written: Result.Ok(_) <- self.set_pixel :: dest_x, dest_y, color :: method =>
+                                                ()
+
+                                        with Result.Err(err):
+                                            source_x => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                                            dest_x => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                                            color => return Result.Err :: err :: call
+                                            written => return Result.Err :: err :: call
+                                        scan_x = scan_x + 1
+
+                            with Result.Err(_):
+                                source_y => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                                dest_y => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                            scan_y = scan_y + 1
+                        return Result.Ok :: :: call
+                    when Result.Err(err) => return Result.Err :: err :: call
+
+        with Result.Err(_):
+            source_width => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+            source_height => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+
+    fn clear(edit self, read fill: RgbaColor) -> Result[Unit, RgbaImageError]:
+        select either:
+            when width: Result.Ok(width) <- self.width as Maybe[Index]
+            when height: Result.Ok(height) <- self.height as Maybe[Index] =>
+                return self.fill_rect :: 0, 0, width, height, fill :: method
+
+        with Result.Err(_):
+            width => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+            height => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+
+    fn copy_pixels(read self) -> Result[ByteBuffer, RgbaImageError]:
+        return copy_rgba_bytes :: self.pixels :: call
+
+    fn copy_image(read self) -> Result[RgbaImage, RgbaImageError]:
+        select either:
+            when width: Result.Ok(width) <- self.width as Maybe[Index]
+            when height: Result.Ok(height) <- self.height as Maybe[Index] =>
+                select self.copy_pixels :: :: method:
+                    when Result.Ok(pixels) => return rgba_image :: width, height, pixels :: call
+                    when Result.Err(err) => return Result.Err :: err :: call
+
+        with Result.Err(_):
+            width => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+            height => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+
+    fn sub_image(read self, x: Index, y: Index, width: Index, height: Index) -> Result[RgbaImage, RgbaImageError]:
+        select rgba_checked_rect :: self, x, y, width, height :: call:
+            when Result.Ok(rect) =>
+                let pixels = ByteBuffer :: :: call
+                let Result.Ok(expected) = rgba_expected_byte_count :: rect.width, rect.height :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                pixels.reserve :: expected :: method
+                let scan_y: CInt = 0
+                repeat while scan_y < rect.height:
+                    let row_y: CInt = rect.start_y + scan_y
+                    let Result.Ok(source_y) = row_y as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                    let scan_x: CInt = 0
+                    repeat while scan_x < rect.width:
+                        let row_x: CInt = rect.start_x + scan_x
+                        let Result.Ok(source_x) = row_x as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                        select self.pixel :: source_x, source_y :: method:
+                            when Result.Ok(color) =>
+                                pixels.push :: color.red :: method
+                                pixels.push :: color.green :: method
+                                pixels.push :: color.blue :: method
+                                pixels.push :: color.alpha :: method
+                            when Result.Err(err) => return Result.Err :: err :: call
+                        scan_x = scan_x + 1
+                    scan_y = scan_y + 1
+                select either:
+                    when result_width: Result.Ok(result_width) <- rect.width as Maybe[Index]
+                    when result_height: Result.Ok(result_height) <- rect.height as Maybe[Index] =>
+                        return rgba_image :: result_width, result_height, pixels :: call
+
+                with Result.Err(_):
+                    result_width => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+                    result_height => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn byte_count(read self) -> Index:
+        return self.pixels.byte_count :: :: method
+
+    fn take_pixels(take self) -> ByteBuffer:
+        return self.pixels
+
+    fn raw_image(edit self) -> GlfwImage:
+        let bytes_ptr: *edit U8 = #unsafe &raw edit self.pixels[0]
+        let bytes_address = #unsafe raw_pointer_address_edit :: bytes_ptr :: call
+        let pixels_ptr = #unsafe raw_pointer_from_address_edit[CUnsignedChar] :: bytes_address :: call
+        return glfw_image :: self.width, self.height, pixels_ptr :: call
+
+    fn raw_image_view(read self) -> GlfwImage:
+        let bytes_ptr: *read U8 = #unsafe &raw read self.pixels[0]
+        let bytes_address = #unsafe raw_pointer_address_read :: bytes_ptr :: call
+        let pixels_ptr = #unsafe raw_pointer_from_address_edit[CUnsignedChar] :: bytes_address :: call
+        return glfw_image :: self.width, self.height, pixels_ptr :: call

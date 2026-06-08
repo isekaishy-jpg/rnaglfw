@@ -1,0 +1,544 @@
+use std.{Option, Result, Str, Utf16Buffer}
+use runa_app.{App, AppError, AppEvent, AppHandler, AppInitConfig, ControlFlow}
+use runa_app.{InputAction, KeyCode, Theme, UserAttentionType}
+use runa_app.{Window, WindowEvent, WindowId, WindowLevel, WindowPresentationTarget}
+use runa_app.WindowThemeError
+use runa_app.app_init_with
+use runa_app.{app_create_primary_centered_window, no_api_window_spec}
+use runa_app.{win32_app_init_config, window_event_requests_present}
+use runa_app.{window_event_requires_presenter_resize, window_event_requires_presenter_sync}
+
+enum DemoNotice:
+    Starting
+    Ready
+    TargetMissing
+    Resize
+    Scale
+    Redraw
+    ThemeSystem
+    ThemeLight
+    ThemeDark
+    DragDropEnabled
+    DragDropDisabled
+    ImeEnabled
+    ImeDisabled
+    LevelNormal
+    LevelTop
+    LevelBottom
+    AttentionArmed
+    AttentionRequested
+    AttentionFailed
+    HoveredFile
+    HoveredFileCancelled
+    DroppedPaths
+
+struct PresenterHostDemo:
+    window_id: Option[WindowId]
+    attached: Bool
+    attention_armed: Bool
+    notice: DemoNotice
+
+fn theme_preference_label(read theme: Option[Theme]) -> Str:
+    select theme:
+        when Option.Some(Theme.Light) => return "Light"
+        when Option.Some(Theme.Dark) => return "Dark"
+        when Option.None => return "System"
+    return "System"
+
+fn applied_theme_label(read theme: Option[Theme]) -> Str:
+    select theme:
+        when Option.Some(Theme.Light) => return "Light"
+        when Option.Some(Theme.Dark) => return "Dark"
+        when Option.None => return "Unknown"
+    return "Unknown"
+
+fn theme_notice(read theme: Option[Theme]) -> DemoNotice:
+    select theme:
+        when Option.Some(Theme.Light) => return DemoNotice.ThemeLight
+        when Option.Some(Theme.Dark) => return DemoNotice.ThemeDark
+        when Option.None => return DemoNotice.ThemeSystem
+    return DemoNotice.ThemeSystem
+
+fn window_level_label(read level: WindowLevel) -> Str:
+    select level:
+        when WindowLevel.Normal => return "Normal"
+        when WindowLevel.AlwaysOnTop => return "Top"
+        when WindowLevel.AlwaysOnBottom => return "Bottom"
+    return "Normal"
+
+fn window_level_notice(read level: WindowLevel) -> DemoNotice:
+    select level:
+        when WindowLevel.Normal => return DemoNotice.LevelNormal
+        when WindowLevel.AlwaysOnTop => return DemoNotice.LevelTop
+        when WindowLevel.AlwaysOnBottom => return DemoNotice.LevelBottom
+    return DemoNotice.LevelNormal
+
+fn enabled_label(enabled: Bool) -> Str:
+    select:
+        when enabled => return "On"
+        else => return "Off"
+    return "Off"
+
+fn target_label(attached: Bool) -> Str:
+    select:
+        when attached => return "Ready"
+        else => return "Missing"
+    return "Missing"
+
+fn notice_label(read notice: DemoNotice) -> Str:
+    select notice:
+        when DemoNotice.Starting => return "Starting"
+        when DemoNotice.Ready => return "Ready"
+        when DemoNotice.TargetMissing => return "NoTarget"
+        when DemoNotice.Resize => return "Resize"
+        when DemoNotice.Scale => return "Scale"
+        when DemoNotice.Redraw => return "Redraw"
+        when DemoNotice.ThemeSystem => return "ThemeSystem"
+        when DemoNotice.ThemeLight => return "ThemeLight"
+        when DemoNotice.ThemeDark => return "ThemeDark"
+        when DemoNotice.DragDropEnabled => return "DropOn"
+        when DemoNotice.DragDropDisabled => return "DropOff"
+        when DemoNotice.ImeEnabled => return "ImeOn"
+        when DemoNotice.ImeDisabled => return "ImeOff"
+        when DemoNotice.LevelNormal => return "LevelNormal"
+        when DemoNotice.LevelTop => return "LevelTop"
+        when DemoNotice.LevelBottom => return "LevelBottom"
+        when DemoNotice.AttentionArmed => return "AttentionArmed"
+        when DemoNotice.AttentionRequested => return "Attention"
+        when DemoNotice.AttentionFailed => return "AttentionFailed"
+        when DemoNotice.HoveredFile => return "HoverFile"
+        when DemoNotice.HoveredFileCancelled => return "HoverCancelled"
+        when DemoNotice.DroppedPaths => return "DroppedPaths"
+    return "Ready"
+
+fn next_theme_preference(read current: Option[Theme]) -> Option[Theme]:
+    select current:
+        when Option.Some(Theme.Light) => return Option.Some :: Theme.Dark :: call
+        when Option.Some(Theme.Dark) => return Option.None
+        when Option.None => return Option.Some :: Theme.Light :: call
+    return Option.None
+
+fn next_window_level(read current: WindowLevel) -> WindowLevel:
+    select current:
+        when WindowLevel.Normal => return WindowLevel.AlwaysOnTop
+        when WindowLevel.AlwaysOnTop => return WindowLevel.AlwaysOnBottom
+        when WindowLevel.AlwaysOnBottom => return WindowLevel.Normal
+    return WindowLevel.Normal
+
+fn set_demo_title(read window: Window, read demo: PresenterHostDemo) -> Unit:
+    let effective_theme = window.theme :: :: method
+    let theme_preference = window.theme_preference :: :: method
+    let drag_drop_enabled = window.drag_and_drop_enabled :: :: method
+    let ime_enabled = window.ime_allowed :: :: method
+    let focused = window.focused :: :: method
+    let current_level = window.window_level :: :: method
+    let target_text = target_label :: demo.attached :: call
+    let effective_theme_text = applied_theme_label :: effective_theme :: call
+    let preference_text = theme_preference_label :: theme_preference :: call
+    let drag_drop_text = enabled_label :: drag_drop_enabled :: call
+    let ime_text = enabled_label :: ime_enabled :: call
+    let focused_text = enabled_label :: focused :: call
+    let level_text = window_level_label :: current_level :: call
+    let notice_text = notice_label :: demo.notice :: call
+    let title = Utf16Buffer :: :: call
+    title.append_utf8 :: "Presenter Host | Target:" :: method
+    title.append_utf8 :: target_text :: method
+    title.append_utf8 :: " | Theme:" :: method
+    title.append_utf8 :: effective_theme_text :: method
+    title.append_utf8 :: " | Pref:" :: method
+    title.append_utf8 :: preference_text :: method
+    title.append_utf8 :: " | DnD:" :: method
+    title.append_utf8 :: drag_drop_text :: method
+    title.append_utf8 :: " | IME:" :: method
+    title.append_utf8 :: ime_text :: method
+    title.append_utf8 :: " | Focus:" :: method
+    title.append_utf8 :: focused_text :: method
+    title.append_utf8 :: " | Level:" :: method
+    title.append_utf8 :: level_text :: method
+    title.append_utf8 :: " | Notice:" :: method
+    title.append_utf8 :: notice_text :: method
+    let title_utf16 = title.freeze :: :: method
+    select title_utf16.to_utf8 :: :: method:
+        when Result.Ok(text) =>
+            let _ = window.set_title :: text :: method
+            return
+        when Result.Err(_) =>
+            let _ = window.set_title :: "Presenter Host" :: method
+            return
+
+// This mirrors the minimum host query an external presenter would perform.
+fn sync_presenter_host(edit demo: PresenterHostDemo, read window: Window) -> Bool:
+    let info = window.presentation_info :: :: method
+    select:
+        when !info.ready :: :: method =>
+            demo.attached = false
+            return false
+        else => ()
+    select info.target:
+        when Option.Some(target) =>
+            select target:
+                when WindowPresentationTarget.Win32(hwnd = hwnd) =>
+                    select:
+                        when hwnd.is_null :: :: method =>
+                            demo.attached = false
+                            return false
+                        else =>
+                            demo.attached = true
+                            let _ = info.window_size
+                            let _ = info.surface_size
+                            let _ = info.content_scale
+                            return true
+        when Option.None =>
+            demo.attached = false
+            return false
+
+fn sync_presenter_window(edit demo: PresenterHostDemo, edit app: App, id: WindowId) -> Result[Bool, AppError]:
+    select app.window :: id :: method:
+        when Result.Ok(window) =>
+            let ready = sync_presenter_host :: demo, window :: call
+            set_demo_title :: window, demo :: call
+            return Result.Ok :: ready :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+fn request_demo_attention(edit demo: PresenterHostDemo, read window: Window) -> Unit:
+    demo.attention_armed = false
+    window.request_attention :: :: method
+    let request = Option.Some :: UserAttentionType.Critical :: call
+    select window.request_user_attention :: request :: method:
+        when Result.Ok(_) => demo.notice = DemoNotice.AttentionRequested
+        when Result.Err(_) => demo.notice = DemoNotice.AttentionFailed
+    set_demo_title :: window, demo :: call
+    window.request_present :: :: method
+    return
+
+fn apply_demo_key(edit demo: PresenterHostDemo, edit app: App, id: WindowId, read key: KeyCode) -> Result[Bool, AppError]:
+    select app.window :: id :: method:
+        when Result.Ok(window) =>
+            select key:
+                when KeyCode.T =>
+                    let current_preference = window.theme_preference :: :: method
+                    let next_preference = next_theme_preference :: current_preference :: call
+                    let _ = window.set_theme :: next_preference :: method
+                    demo.notice = theme_notice :: next_preference :: call
+                    set_demo_title :: window, demo :: call
+                    window.request_present :: :: method
+                    return Result.Ok :: true :: call
+                when KeyCode.D =>
+                    let enabled = !window.drag_and_drop_enabled :: :: method
+                    let _ = window.set_drag_and_drop_enabled :: enabled :: method
+                    select window.drag_and_drop_enabled :: :: method:
+                        when true => demo.notice = DemoNotice.DragDropEnabled
+                        when false => demo.notice = DemoNotice.DragDropDisabled
+                    set_demo_title :: window, demo :: call
+                    window.request_present :: :: method
+                    return Result.Ok :: true :: call
+                when KeyCode.I =>
+                    let enabled = !window.ime_allowed :: :: method
+                    window.set_ime_allowed :: enabled :: method
+                    select window.ime_allowed :: :: method:
+                        when true => demo.notice = DemoNotice.ImeEnabled
+                        when false => demo.notice = DemoNotice.ImeDisabled
+                    set_demo_title :: window, demo :: call
+                    window.request_present :: :: method
+                    return Result.Ok :: true :: call
+                when KeyCode.L =>
+                    let next_level = next_window_level :: window.window_level :: :: method :: call
+                    let _ = window.set_window_level :: next_level :: method
+                    let current_level = window.window_level :: :: method
+                    demo.notice = window_level_notice :: current_level :: call
+                    set_demo_title :: window, demo :: call
+                    window.request_present :: :: method
+                    return Result.Ok :: true :: call
+                when KeyCode.A =>
+                    select window.focused :: :: method:
+                        when true =>
+                            demo.attention_armed = true
+                            demo.notice = DemoNotice.AttentionArmed
+                            set_demo_title :: window, demo :: call
+                            window.request_present :: :: method
+                        else => request_demo_attention :: demo, window :: call
+                    return Result.Ok :: true :: call
+                when _ => return Result.Ok :: false :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+impl AppHandler for PresenterHostDemo:
+    fn started(edit self, edit app: App) -> Result[ControlFlow, AppError]:
+        let spec = no_api_window_spec :: "Presenter Host: Starting", 960, 540 :: call
+        select app_create_primary_centered_window :: app, spec :: call:
+            when Result.Ok(window) =>
+                self.window_id = Option.Some :: window.id :: call
+                select sync_presenter_host :: self, window :: call:
+                    when true =>
+                        self.notice = DemoNotice.Ready
+                        set_demo_title :: window, self :: call
+                        window.request_present :: :: method
+                    when false =>
+                        self.notice = DemoNotice.TargetMissing
+                        set_demo_title :: window, self :: call
+                return Result.Ok :: ControlFlow.Wait :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn window_event(edit self, edit app: App, event: WindowEvent) -> Result[ControlFlow, AppError]:
+        let event_window_id = event.window_id :: :: method
+        let refresh_title = false
+        select self.window_id:
+            when Option.Some(id) =>
+                select:
+                    when event_window_id != id => return Result.Ok :: ControlFlow.Wait :: call
+                    else => ()
+            when Option.None => return Result.Ok :: ControlFlow.Wait :: call
+        select event:
+            when WindowEvent.CloseRequested(id = _) => return Result.Ok :: ControlFlow.Exit :: call
+            when WindowEvent.KeyChanged(id = _, key = KeyCode.Escape, scancode = _, action = InputAction.Press, mods = _) =>
+                return Result.Ok :: ControlFlow.Exit :: call
+            when WindowEvent.KeyChanged(id = _, key = KeyCode.T, scancode = _, action = InputAction.Press, mods = _) =>
+                select apply_demo_key :: self, app, event_window_id, KeyCode.T :: call:
+                    when Result.Ok(handled) =>
+                        select:
+                            when handled => return Result.Ok :: ControlFlow.Wait :: call
+                            else => ()
+                    when Result.Err(err) => return Result.Err :: err :: call
+            when WindowEvent.KeyChanged(id = _, key = KeyCode.D, scancode = _, action = InputAction.Press, mods = _) =>
+                select apply_demo_key :: self, app, event_window_id, KeyCode.D :: call:
+                    when Result.Ok(handled) =>
+                        select:
+                            when handled => return Result.Ok :: ControlFlow.Wait :: call
+                            else => ()
+                    when Result.Err(err) => return Result.Err :: err :: call
+            when WindowEvent.KeyChanged(id = _, key = KeyCode.I, scancode = _, action = InputAction.Press, mods = _) =>
+                select apply_demo_key :: self, app, event_window_id, KeyCode.I :: call:
+                    when Result.Ok(handled) =>
+                        select:
+                            when handled => return Result.Ok :: ControlFlow.Wait :: call
+                            else => ()
+                    when Result.Err(err) => return Result.Err :: err :: call
+            when WindowEvent.KeyChanged(id = _, key = KeyCode.L, scancode = _, action = InputAction.Press, mods = _) =>
+                select apply_demo_key :: self, app, event_window_id, KeyCode.L :: call:
+                    when Result.Ok(handled) =>
+                        select:
+                            when handled => return Result.Ok :: ControlFlow.Wait :: call
+                            else => ()
+                    when Result.Err(err) => return Result.Err :: err :: call
+            when WindowEvent.KeyChanged(id = _, key = KeyCode.A, scancode = _, action = InputAction.Press, mods = _) =>
+                select apply_demo_key :: self, app, event_window_id, KeyCode.A :: call:
+                    when Result.Ok(handled) =>
+                        select:
+                            when handled => return Result.Ok :: ControlFlow.Wait :: call
+                            else => ()
+                    when Result.Err(err) => return Result.Err :: err :: call
+            when WindowEvent.FocusChanged(id = _, focused = focused) =>
+                refresh_title = true
+                select:
+                    when !focused && self.attention_armed =>
+                        select app.window :: event_window_id :: method:
+                            when Result.Ok(window) => request_demo_attention :: self, window :: call
+                            when Result.Err(err) => return Result.Err :: err :: call
+                    else => ()
+            when WindowEvent.ThemeChanged(id = _, theme = Theme.Light) =>
+                self.notice = DemoNotice.ThemeLight
+                refresh_title = true
+            when WindowEvent.ThemeChanged(id = _, theme = Theme.Dark) =>
+                self.notice = DemoNotice.ThemeDark
+                refresh_title = true
+            when WindowEvent.ContentScaleChanged(id = _, x = _, y = _) =>
+                self.notice = DemoNotice.Scale
+                refresh_title = true
+            when WindowEvent.Resized(id = _, width = _, height = _) =>
+                self.notice = DemoNotice.Resize
+                refresh_title = true
+            when WindowEvent.FramebufferResized(id = _, width = _, height = _) =>
+                self.notice = DemoNotice.Resize
+                refresh_title = true
+            when WindowEvent.RedrawRequested(id = _) =>
+                self.notice = DemoNotice.Redraw
+                refresh_title = true
+            when WindowEvent.HoveredFile(id = _, path = _) =>
+                self.notice = DemoNotice.HoveredFile
+                refresh_title = true
+            when WindowEvent.HoveredFileCancelled(id = _) =>
+                self.notice = DemoNotice.HoveredFileCancelled
+                refresh_title = true
+            when WindowEvent.DroppedPaths(id = _, paths = _) =>
+                self.notice = DemoNotice.DroppedPaths
+                refresh_title = true
+            when _ => ()
+        let needs_resize = window_event_requires_presenter_resize :: event :: call
+        let needs_sync = window_event_requires_presenter_sync :: event :: call
+        let wants_present = window_event_requests_present :: event :: call
+        select:
+            when needs_sync =>
+                select sync_presenter_window :: self, app, event_window_id :: call:
+                    when Result.Ok(ready) =>
+                        select:
+                            when ready && needs_resize =>
+                                select app.window :: event_window_id :: method:
+                                    when Result.Ok(window) => window.request_present :: :: method
+                                    when Result.Err(err) => return Result.Err :: err :: call
+                            else => ()
+                    when Result.Err(err) => return Result.Err :: err :: call
+            else => ()
+        select:
+            when !needs_sync && refresh_title =>
+                select app.window :: event_window_id :: method:
+                    when Result.Ok(window) =>
+                        set_demo_title :: window, self :: call
+                        window.request_present :: :: method
+                    when Result.Err(err) => return Result.Err :: err :: call
+            else => ()
+        select:
+            when wants_present =>
+                select sync_presenter_window :: self, app, event_window_id :: call:
+                    when Result.Ok(_) => ()
+                    when Result.Err(err) => return Result.Err :: err :: call
+            else => ()
+        return Result.Ok :: ControlFlow.Wait :: call
+
+    fn about_to_wait(edit self, edit app: App) -> Result[ControlFlow, AppError]:
+        let _ = self
+        let _ = app
+        return Result.Ok :: ControlFlow.Wait :: call
+
+    fn monitor_event(edit self, edit app: App, event: runa_app.MonitorEvent) -> Result[ControlFlow, AppError]:
+        let _ = self
+        let _ = app
+        let _ = event
+        return Result.Ok :: ControlFlow.Wait :: call
+
+    fn joystick_event(edit self, edit app: App, event: runa_app.JoystickEvent) -> Result[ControlFlow, AppError]:
+        let _ = self
+        let _ = app
+        let _ = event
+        return Result.Ok :: ControlFlow.Wait :: call
+
+    fn user_event(edit self, edit app: App, event: runa_app.UserEvent) -> Result[ControlFlow, AppError]:
+        let _ = self
+        let _ = app
+        let _ = event
+        return Result.Ok :: ControlFlow.Wait :: call
+
+    fn idle(edit self, edit app: App) -> Result[ControlFlow, AppError]:
+        let _ = self
+        let _ = app
+        return Result.Ok :: ControlFlow.Wait :: call
+
+    fn exiting(edit self, edit app: App) -> Unit:
+        let _ = self
+        let _ = app
+        return
+
+fn run_presenter_host_demo(take handler: PresenterHostDemo, config: AppInitConfig) -> Result[Unit, AppError]:
+    select app_init_with :: config :: call:
+        when Result.Ok(app) =>
+            let flow = ControlFlow.Wait
+            select handler.started :: app :: method:
+                when Result.Ok(next) => flow = next
+                when Result.Err(err) =>
+                    handler.exiting :: app :: method
+                    app.terminate :: :: method
+                    return Result.Err :: err :: call
+            repeat:
+                select:
+                    when flow.exits :: :: method => break
+                    else => ()
+                select:
+                    when flow.blocks :: :: method && !app.has_pending_events :: :: method =>
+                        select handler.about_to_wait :: app :: method:
+                            when Result.Ok(next) => flow = next
+                            when Result.Err(err) =>
+                                handler.exiting :: app :: method
+                                app.terminate :: :: method
+                                return Result.Err :: err :: call
+                    else => ()
+                select:
+                    when flow.exits :: :: method => break
+                    else => ()
+                let events = app.events_for :: flow :: method
+                select:
+                    when events.is_empty :: :: method =>
+                        select handler.idle :: app :: method:
+                            when Result.Ok(next) => flow = next
+                            when Result.Err(err) =>
+                                handler.exiting :: app :: method
+                                app.terminate :: :: method
+                                return Result.Err :: err :: call
+                    else =>
+                        repeat while !events.is_empty :: :: method:
+                            let event = events.remove :: 0 :: method
+                            select event:
+                                when AppEvent.Window(window_event) =>
+                                    select handler.window_event :: app, window_event :: method:
+                                        when Result.Ok(next) => flow = next
+                                        when Result.Err(err) =>
+                                            handler.exiting :: app :: method
+                                            app.terminate :: :: method
+                                            return Result.Err :: err :: call
+                                when AppEvent.Monitor(monitor_event) =>
+                                    select handler.monitor_event :: app, monitor_event :: method:
+                                        when Result.Ok(next) => flow = next
+                                        when Result.Err(err) =>
+                                            handler.exiting :: app :: method
+                                            app.terminate :: :: method
+                                            return Result.Err :: err :: call
+                                when AppEvent.Joystick(joystick_event) =>
+                                    select handler.joystick_event :: app, joystick_event :: method:
+                                        when Result.Ok(next) => flow = next
+                                        when Result.Err(err) =>
+                                            handler.exiting :: app :: method
+                                            app.terminate :: :: method
+                                            return Result.Err :: err :: call
+                                when AppEvent.User(user_event) =>
+                                    select handler.user_event :: app, user_event :: method:
+                                        when Result.Ok(next) => flow = next
+                                        when Result.Err(err) =>
+                                            handler.exiting :: app :: method
+                                            app.terminate :: :: method
+                                            return Result.Err :: err :: call
+                            select:
+                                when flow.exits :: :: method => break
+                                else => ()
+            handler.exiting :: app :: method
+            app.terminate :: :: method
+            return Result.Ok :: () :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+fn main() -> I32:
+    let config = win32_app_init_config :: :: call
+    let handler = PresenterHostDemo :: :: call
+        window_id = Option.None
+        attached = false
+        attention_armed = false
+        notice = DemoNotice.Starting
+    select run_presenter_host_demo :: handler, config :: call:
+        when Result.Ok(_) => return 0
+        when Result.Err(error) =>
+            select error:
+                when AppError.InitFailed => return 1
+                when AppError.InvalidWindowSpec => return 2
+                when AppError.VideoModeNotFound => return 3
+                when AppError.MailboxAllocFailed => return 4
+                when AppError.WindowCreateFailed => return 5
+                when AppError.WindowLevelApplyFailed => return 20
+                when AppError.WindowOwnerApplyFailed => return 26
+                when AppError.WindowMenuApplyFailed => return 27
+                when AppError.WindowClipChildrenApplyFailed => return 25
+                when AppError.WindowSkipTaskbarApplyFailed => return 22
+                when AppError.WindowTaskbarIconApplyFailed(_) => return 24
+                when AppError.WindowAppearanceApplyFailed(_) => return 23
+                when AppError.WindowThemeApplyFailed(theme_error) =>
+                    select theme_error:
+                        when WindowThemeError.NativeWindowUnavailable => return 141
+                        when WindowThemeError.SystemThemeUnavailable => return 142
+                        when WindowThemeError.ThemeUpdateFailed => return 143
+                        when WindowThemeError.ThemeHookInstallFailed => return 144
+                when AppError.WindowControlHookInstallFailed => return 21
+                when AppError.ImeHookInstallFailed => return 15
+                when AppError.RawInputHookInstallFailed => return 16
+                when AppError.TouchHookInstallFailed => return 17
+                when AppError.DragDropRuntimeInitFailed => return 18
+                when AppError.DragDropHookInstallFailed => return 19
+                when AppError.WindowNotFound => return 6
+                when AppError.TextDecode(_) => return 7
+                when AppError.NoCurrentContext => return 8
+                when AppError.CurrentContextWindowNotTracked => return 9
+                when AppError.MonitorNotFound => return 10
+                when AppError.PrimaryMonitorUnavailable => return 11

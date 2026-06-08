@@ -1,0 +1,72 @@
+use std.Option
+
+pub use window.{CursorPos, FrameSize, KeyboardInputSnapshot, MouseInputSnapshot}
+pub use window.{Point, Rect, Scale, Size, Window, WindowAspectRatio}
+pub use window.{WindowId, WindowInputSnapshot, WindowPlacement, WindowSizeLimits}
+pub use window.Win32HWnd
+pub use window.{point, rect, size, window_aspect_ratio}
+pub use window.{window_aspect_ratio_from_size, window_max_size_limits}
+pub use window.{window_min_size_limits, window_no_size_limits}
+pub use window.{window_placement, window_size_limits}
+
+pub enum WindowPresentationTarget:
+    Win32:
+        pub hwnd: Win32HWnd
+
+pub struct WindowPresentationInfo:
+    pub id: WindowId
+    pub target: Option[WindowPresentationTarget]
+    pub window_size: Size
+    pub surface_size: Size
+    pub content_scale: Scale
+    pub visible: Bool
+    pub close_requested: Bool
+
+impl WindowPresentationInfo:
+    fn has_target(read self) -> Bool:
+        select self.target:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn has_surface(read self) -> Bool:
+        select:
+            when self.surface_size.width <= 0 => return false
+            when self.surface_size.height <= 0 => return false
+            else => return true
+
+    fn ready(read self) -> Bool:
+        select:
+            when self.close_requested => return false
+            when !self.visible => return false
+            when !self.has_target :: :: method => return false
+            when !self.has_surface :: :: method => return false
+            else => return true
+
+impl Window:
+    fn presentation_target(read self) -> Option[WindowPresentationTarget]:
+        let hwnd = self.hwnd :: :: method
+        select:
+            when hwnd.is_null :: :: method => return Option.None
+            else =>
+                let target = WindowPresentationTarget.Win32 :: :: call
+                    hwnd = hwnd
+                return Option.Some :: target :: call
+
+    fn presentation_info(read self) -> WindowPresentationInfo:
+        let info = WindowPresentationInfo :: :: call
+            id = self.id
+            target = self.presentation_target :: :: method
+            window_size = self.size :: :: method
+            surface_size = self.surface_size :: :: method
+            content_scale = self.content_scale :: :: method
+            visible = self.visible :: :: method
+            close_requested = self.should_close :: :: method
+        return info
+
+    fn presentation_ready(read self) -> Bool:
+        let info = self.presentation_info :: :: method
+        return info.ready :: :: method
+
+    fn request_present(read self) -> Unit:
+        self.request_redraw :: :: method
+        return

@@ -32,52 +32,62 @@ pub(package) fn maybe_c_string_local(text: Str) -> Result[MaybeStr, VulkanPresen
     return Result.Ok :: value :: call
 
 pub(package) fn surface_image_shape_from_extent(read extent: VkExtent2D) -> Result[SurfaceImageShape, VulkanPresentError]:
-    let Result.Ok(width) = extent.width as Maybe[Index] else =>
-        let error = VulkanPresentError.SurfaceExtentOutOfRange :: extent.width, extent.height :: call
-        return Result.Err :: error :: call
-    let Result.Ok(height) = extent.height as Maybe[Index] else =>
-        let error = VulkanPresentError.SurfaceExtentOutOfRange :: extent.width, extent.height :: call
-        return Result.Err :: error :: call
     let raw_tight_stride: CUInt = extent.width * 4
-    let Result.Ok(tight_stride) = raw_tight_stride as Maybe[Index] else =>
-        let error = VulkanPresentError.SurfaceExtentOutOfRange :: extent.width, extent.height :: call
-        return Result.Err :: error :: call
     let raw_pixel_count: CUInt = extent.width * extent.height
     let raw_rgba_byte_count: CUInt = raw_pixel_count * 4
-    let Result.Ok(rgba_byte_count) = raw_rgba_byte_count as Maybe[Index] else =>
-        let error = VulkanPresentError.SurfaceExtentOutOfRange :: extent.width, extent.height :: call
-        return Result.Err :: error :: call
-    let shape = SurfaceImageShape :: :: call
-        width = width
-        height = height
-        tight_stride = tight_stride
-        rgba_byte_count = rgba_byte_count
-    return Result.Ok :: shape :: call
+    select either:
+        when width: Result.Ok(width) <- extent.width as Maybe[Index]
+        when height: Result.Ok(height) <- extent.height as Maybe[Index]
+        when tight_stride: Result.Ok(tight_stride) <- raw_tight_stride as Maybe[Index]
+        when rgba_byte_count: Result.Ok(rgba_byte_count) <- raw_rgba_byte_count as Maybe[Index] =>
+            let shape = SurfaceImageShape :: :: call
+                width = width
+                height = height
+                tight_stride = tight_stride
+                rgba_byte_count = rgba_byte_count
+            return Result.Ok :: shape :: call
+
+    with Result.Err(_):
+        width =>
+            let error = VulkanPresentError.SurfaceExtentOutOfRange :: extent.width, extent.height :: call
+            return Result.Err :: error :: call
+        height =>
+            let error = VulkanPresentError.SurfaceExtentOutOfRange :: extent.width, extent.height :: call
+            return Result.Err :: error :: call
+        tight_stride =>
+            let error = VulkanPresentError.SurfaceExtentOutOfRange :: extent.width, extent.height :: call
+            return Result.Err :: error :: call
+        rgba_byte_count =>
+            let error = VulkanPresentError.SurfaceExtentOutOfRange :: extent.width, extent.height :: call
+            return Result.Err :: error :: call
 
 pub(package) fn vulkan_surface_layout(read extent: VkExtent2D, read pixel_format: VulkanPixelFormat) -> Result[VulkanSurfaceLayout, VulkanPresentError]:
-    select surface_image_shape_from_extent :: extent :: call:
-        when Result.Ok(shape) =>
-            let format = copy_surface_pixel_format :: pixel_format :: call
-            let Result.Ok(width_wide) = shape.width as Maybe[USize] else =>
-                let error = VulkanPresentError.PixelExtentOutOfRange :: 0, 0 :: call
-                return Result.Err :: error :: call
-            let Result.Ok(height_wide) = shape.height as Maybe[USize] else =>
-                let error = VulkanPresentError.PixelExtentOutOfRange :: 0, 0 :: call
-                return Result.Err :: error :: call
-            let pixel_count_wide: USize = width_wide * height_wide
-            let Result.Ok(pixel_count) = pixel_count_wide as Maybe[Index] else =>
-                let error = VulkanPresentError.PixelExtentOutOfRange :: 0, 0 :: call
-                return Result.Err :: error :: call
+    select either:
+        when shape: Result.Ok(shape) <- surface_image_shape_from_extent :: extent :: call
+        when width_wide: Result.Ok(width_wide) <- shape.width as Maybe[USize]
+        when height_wide: Result.Ok(height_wide) <- shape.height as Maybe[USize]
+        when pixel_count: Result.Ok(pixel_count) <- (width_wide * height_wide) as Maybe[Index] =>
             let layout = VulkanSurfaceLayout :: :: call
                 extent = extent
                 width = shape.width
                 height = shape.height
-                pixel_format = format
+                pixel_format = copy_surface_pixel_format :: pixel_format :: call
                 pixel_count = pixel_count
                 tight_stride = shape.tight_stride
                 rgba_byte_count = shape.rgba_byte_count
             return Result.Ok :: layout :: call
-        when Result.Err(err) => return Result.Err :: err :: call
+
+    with Result.Err(err):
+        shape => return Result.Err :: err :: call
+        width_wide =>
+            let error = VulkanPresentError.PixelExtentOutOfRange :: 0, 0 :: call
+            return Result.Err :: error :: call
+        height_wide =>
+            let error = VulkanPresentError.PixelExtentOutOfRange :: 0, 0 :: call
+            return Result.Err :: error :: call
+        pixel_count =>
+            let error = VulkanPresentError.PixelExtentOutOfRange :: 0, 0 :: call
+            return Result.Err :: error :: call
 
 pub(package) fn choose_surface_format(read formats: [VkSurfaceFormatKHR; MAX_SURFACE_FORMATS], count: CUInt) -> Result[VkSurfaceFormatKHR, VulkanPresentError]:
     select:
@@ -237,19 +247,22 @@ pub(package) fn choose_window_extent(read window: Window, read capabilities: VkS
         when capabilities.current_extent.width != 4294967295 => return Result.Ok :: capabilities.current_extent :: call
         else => ()
     let window_size = window.framebuffer_size :: :: method
-    let Result.Ok(window_width) = window_size.width as Maybe[CUInt] else =>
-        return Result.Err :: VulkanPresentError.WindowExtentOutOfRange :: call
-    let Result.Ok(window_height) = window_size.height as Maybe[CUInt] else =>
-        return Result.Err :: VulkanPresentError.WindowExtentOutOfRange :: call
-    let chosen = VkExtent2D :: :: call
-        width = window_width
-        height = window_height
-    select:
-        when chosen.width < capabilities.min_image_extent.width => chosen.width = capabilities.min_image_extent.width
-        when chosen.width > capabilities.max_image_extent.width => chosen.width = capabilities.max_image_extent.width
-        else => ()
-    select:
-        when chosen.height < capabilities.min_image_extent.height => chosen.height = capabilities.min_image_extent.height
-        when chosen.height > capabilities.max_image_extent.height => chosen.height = capabilities.max_image_extent.height
-        else => ()
-    return Result.Ok :: chosen :: call
+    select either:
+        when window_width: Result.Ok(window_width) <- window_size.width as Maybe[CUInt]
+        when window_height: Result.Ok(window_height) <- window_size.height as Maybe[CUInt] =>
+            let chosen = VkExtent2D :: :: call
+                width = window_width
+                height = window_height
+            select:
+                when chosen.width < capabilities.min_image_extent.width => chosen.width = capabilities.min_image_extent.width
+                when chosen.width > capabilities.max_image_extent.width => chosen.width = capabilities.max_image_extent.width
+                else => ()
+            select:
+                when chosen.height < capabilities.min_image_extent.height => chosen.height = capabilities.min_image_extent.height
+                when chosen.height > capabilities.max_image_extent.height => chosen.height = capabilities.max_image_extent.height
+                else => ()
+            return Result.Ok :: chosen :: call
+
+    with Result.Err(_):
+        window_width => return Result.Err :: VulkanPresentError.WindowExtentOutOfRange :: call
+        window_height => return Result.Err :: VulkanPresentError.WindowExtentOutOfRange :: call

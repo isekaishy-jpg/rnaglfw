@@ -55,52 +55,81 @@ fn copy_pixel_format(read format: VulkanPixelFormat) -> VulkanPixelFormat:
     return VulkanPixelFormat.Rgba8
 
 fn checked_tight_stride(width: Index, height: Index) -> Result[Index, VulkanPresentError]:
-    let Result.Ok(width_wide) = width as Maybe[USize] else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, 0 :: call
-        return Result.Err :: error :: call
-    let tight_stride_wide: USize = width_wide * PIXEL_CHANNEL_COUNT_RAW
-    let Result.Ok(tight_stride) = tight_stride_wide as Maybe[Index] else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, 0 :: call
-        return Result.Err :: error :: call
-    return Result.Ok :: tight_stride :: call
+    select either:
+        when width_wide: Result.Ok(width_wide) <- width as Maybe[USize]
+        when tight_stride: Result.Ok(tight_stride) <- (width_wide * PIXEL_CHANNEL_COUNT_RAW) as Maybe[Index] =>
+            return Result.Ok :: tight_stride :: call
+
+    with Result.Err(_):
+        width_wide =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, 0 :: call
+            return Result.Err :: error :: call
+        tight_stride =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, 0 :: call
+            return Result.Err :: error :: call
 
 fn checked_required_byte_count(width: Index, height: Index, stride: Index) -> Result[Index, VulkanPresentError]:
-    let Result.Ok(stride_wide) = stride as Maybe[USize] else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
-        return Result.Err :: error :: call
-    let Result.Ok(height_wide) = height as Maybe[USize] else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
-        return Result.Err :: error :: call
-    let required_wide: USize = stride_wide * height_wide
-    let Result.Ok(required) = required_wide as Maybe[Index] else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
-        return Result.Err :: error :: call
-    return Result.Ok :: required :: call
+    select either:
+        when stride_wide: Result.Ok(stride_wide) <- stride as Maybe[USize]
+        when height_wide: Result.Ok(height_wide) <- height as Maybe[USize]
+        when required: Result.Ok(required) <- (stride_wide * height_wide) as Maybe[Index] =>
+            return Result.Ok :: required :: call
+
+    with Result.Err(_):
+        stride_wide =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
+            return Result.Err :: error :: call
+        height_wide =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
+            return Result.Err :: error :: call
+        required =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
+            return Result.Err :: error :: call
 
 fn checked_narrow_index(value: USize, width: Index, height: Index, stride: Index) -> Result[Index, VulkanPresentError]:
-    let Result.Ok(index) = value as Maybe[Index] else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
-        return Result.Err :: error :: call
-    return Result.Ok :: index :: call
+    select either:
+        when index: Result.Ok(index) <- value as Maybe[Index] =>
+            return Result.Ok :: index :: call
+
+    with Result.Err(_):
+        index =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
+            return Result.Err :: error :: call
 
 fn checked_widen_index(value: Index, width: Index, height: Index, stride: Index) -> Result[USize, VulkanPresentError]:
-    let Result.Ok(widened) = value as Maybe[USize] else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
-        return Result.Err :: error :: call
-    return Result.Ok :: widened :: call
+    select either:
+        when widened: Result.Ok(widened) <- value as Maybe[USize] =>
+            return Result.Ok :: widened :: call
+
+    with Result.Err(_):
+        widened =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
+            return Result.Err :: error :: call
 
 fn copy_pixel_bytes(read pixels: ByteBuffer, width: Index, height: Index, stride: Index) -> Result[ByteBuffer, VulkanPresentError]:
     let count = pixels.byte_count :: :: method
     let copied = ByteBuffer :: :: call
     copied.reserve :: count :: method
-    let Result.Ok(limit) = count as Maybe[USize] else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
-        return Result.Err :: error :: call
-    let scan: USize = 0USize
-    repeat while scan < limit:
-        let Result.Ok(index) = scan as Maybe[Index] else =>
+    let limit: USize = 0USize
+    select either:
+        when limit_value: Result.Ok(limit_value) <- count as Maybe[USize] =>
+            limit = limit_value
+
+    with Result.Err(_):
+        limit_value =>
             let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
             return Result.Err :: error :: call
+    let scan: USize = 0USize
+    repeat while scan < limit:
+        let index: Index = 0
+        select either:
+            when index_value: Result.Ok(index_value) <- scan as Maybe[Index] =>
+                index = index_value
+
+        with Result.Err(_):
+            index_value =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
+                return Result.Err :: error :: call
         let value = pixels[index]
         copied.push :: value :: method
         scan = scan + ONE_USIZE
@@ -139,73 +168,86 @@ pub fn vulkan_pixel_frame(width: Index, height: Index, stride: Index, format: Vu
         when width == 0 => return Result.Err :: VulkanPresentError.PixelFrameZeroSize :: call
         when height == 0 => return Result.Err :: VulkanPresentError.PixelFrameZeroSize :: call
         else => ()
-    let Result.Ok(tight_stride) = checked_tight_stride :: width, height :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
-        return Result.Err :: error :: call
-    select:
-        when stride < tight_stride =>
-            let error = VulkanPresentError.PixelFrameStrideTooSmall :: stride, tight_stride :: call
+    select either:
+        when tight_stride: Result.Ok(tight_stride) <- checked_tight_stride :: width, height :: call
+        when required: Result.Ok(required) <- checked_required_byte_count :: width, height, stride :: call =>
+            select:
+                when stride < tight_stride =>
+                    let error = VulkanPresentError.PixelFrameStrideTooSmall :: stride, tight_stride :: call
+                    return Result.Err :: error :: call
+                else => ()
+            let actual = pixels.byte_count :: :: method
+            select:
+                when actual < required =>
+                    let error = VulkanPresentError.PixelFrameBufferTooSmall :: actual, required :: call
+                    return Result.Err :: error :: call
+                else => ()
+            let frame = VulkanPixelFrame :: width, height, stride, format, pixels :: call
+            return Result.Ok :: frame :: call
+
+    with Result.Err(_):
+        tight_stride =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
             return Result.Err :: error :: call
-        else => ()
-    let Result.Ok(required) = checked_required_byte_count :: width, height, stride :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
-        return Result.Err :: error :: call
-    let actual = pixels.byte_count :: :: method
-    select:
-        when actual < required =>
-            let error = VulkanPresentError.PixelFrameBufferTooSmall :: actual, required :: call
+        required =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, stride :: call
             return Result.Err :: error :: call
-        else => ()
-    let frame = VulkanPixelFrame :: width, height, stride, format, pixels :: call
-    return Result.Ok :: frame :: call
 
 pub fn vulkan_pixel_frame_with_color(width: Index, height: Index, format: VulkanPixelFormat, read fill: RgbaColor) -> Result[VulkanPixelFrame, VulkanPresentError]:
-    let Result.Ok(tight_stride) = checked_tight_stride :: width, height :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, 0 :: call
-        return Result.Err :: error :: call
-    let Result.Ok(required) = checked_required_byte_count :: width, height, tight_stride :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, tight_stride :: call
-        return Result.Err :: error :: call
-    let pixels = ByteBuffer :: :: call
-    pixels.reserve :: required :: method
-    let Result.Ok(width_wide) = width as Maybe[USize] else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, tight_stride :: call
-        return Result.Err :: error :: call
-    let Result.Ok(height_wide) = height as Maybe[USize] else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, tight_stride :: call
-        return Result.Err :: error :: call
-    let y: USize = 0USize
-    repeat while y < height_wide:
-        let x: USize = 0USize
-        repeat while x < width_wide:
-            let channels = PixelChannels :: fill.red, fill.green, fill.blue, fill.alpha :: call
-            push_pixel_channels :: pixels, format, channels :: call
-            x = x + ONE_USIZE
-        y = y + ONE_USIZE
-    return vulkan_pixel_frame :: width, height, tight_stride, format, pixels :: call
+    select either:
+        when tight_stride: Result.Ok(tight_stride) <- checked_tight_stride :: width, height :: call
+        when required: Result.Ok(required) <- checked_required_byte_count :: width, height, tight_stride :: call
+        when width_wide: Result.Ok(width_wide) <- width as Maybe[USize]
+        when height_wide: Result.Ok(height_wide) <- height as Maybe[USize] =>
+            let pixels = ByteBuffer :: :: call
+            pixels.reserve :: required :: method
+            let y: USize = 0USize
+            repeat while y < height_wide:
+                let x: USize = 0USize
+                repeat while x < width_wide:
+                    let channels = PixelChannels :: fill.red, fill.green, fill.blue, fill.alpha :: call
+                    push_pixel_channels :: pixels, format, channels :: call
+                    x = x + ONE_USIZE
+                y = y + ONE_USIZE
+            return vulkan_pixel_frame :: width, height, tight_stride, format, pixels :: call
+
+    with Result.Err(_):
+        tight_stride =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, 0 :: call
+            return Result.Err :: error :: call
+        required =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, tight_stride :: call
+            return Result.Err :: error :: call
+        width_wide =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, tight_stride :: call
+            return Result.Err :: error :: call
+        height_wide =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, tight_stride :: call
+            return Result.Err :: error :: call
 
 pub fn vulkan_pixel_frame_from_image(read image: RgbaImage, format: VulkanPixelFormat) -> Result[VulkanPixelFrame, VulkanPresentError]:
-    select image.width_index :: :: method:
-        when Result.Ok(width) =>
-            select image.height_index :: :: method:
-                when Result.Ok(height) =>
-                    let Result.Ok(tight_stride) = checked_tight_stride :: width, height :: call else =>
-                        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, 0 :: call
-                        return Result.Err :: error :: call
-                    select image.copy_pixels :: :: method:
-                        when Result.Ok(pixels) =>
-                            select vulkan_pixel_frame :: width, height, tight_stride, VulkanPixelFormat.Rgba8, pixels :: call:
-                                when Result.Ok(frame) => return frame.converted_frame :: format :: method
-                                when Result.Err(err) => return Result.Err :: err :: call
-                        when Result.Err(err) =>
-                            let error = VulkanPresentError.ImageAccess :: err :: call
-                            return Result.Err :: error :: call
-                when Result.Err(err) =>
-                    let error = VulkanPresentError.ImageAccess :: err :: call
-                    return Result.Err :: error :: call
-        when Result.Err(err) =>
+    select either:
+        when width: Result.Ok(width) <- image.width_index :: :: method
+        when height: Result.Ok(height) <- image.height_index :: :: method
+        when tight_stride: Result.Ok(tight_stride) <- checked_tight_stride :: width, height :: call
+        when pixels: Result.Ok(pixels) <- image.copy_pixels :: :: method
+        when frame: Result.Ok(frame) <- vulkan_pixel_frame :: width, height, tight_stride, VulkanPixelFormat.Rgba8, pixels :: call =>
+            return frame.converted_frame :: format :: method
+
+    with Result.Err(err):
+        width =>
             let error = VulkanPresentError.ImageAccess :: err :: call
             return Result.Err :: error :: call
+        height =>
+            let error = VulkanPresentError.ImageAccess :: err :: call
+            return Result.Err :: error :: call
+        tight_stride =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: width, height, 0 :: call
+            return Result.Err :: error :: call
+        pixels =>
+            let error = VulkanPresentError.ImageAccess :: err :: call
+            return Result.Err :: error :: call
+        frame => return Result.Err :: err :: call
 
 pub(package) fn surface_pixel_frame_from_extent(read extent: VkExtent2D, format: VulkanPixelFormat, take pixels: ByteBuffer) -> Result[VulkanPixelFrame, VulkanPresentError]:
     select surface_image_shape_from_extent :: extent :: call:
@@ -223,18 +265,26 @@ fn checked_pixel_offset(read frame: VulkanPixelFrame, x: Index, y: Index) -> Res
             let error = VulkanPresentError.PixelFrameCoordOutOfRange :: x, y, frame.width, frame.height :: call
             return Result.Err :: error :: call
         else => ()
-    let Result.Ok(x_wide) = checked_widen_index :: x, frame.width, frame.height, frame.stride :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
-        return Result.Err :: error :: call
-    let Result.Ok(y_wide) = checked_widen_index :: y, frame.width, frame.height, frame.stride :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
-        return Result.Err :: error :: call
-    let Result.Ok(stride_wide) = checked_widen_index :: frame.stride, frame.width, frame.height, frame.stride :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
-        return Result.Err :: error :: call
-    let row_start_wide: USize = y_wide * stride_wide
-    let pixel_start_wide: USize = row_start_wide + (x_wide * PIXEL_CHANNEL_COUNT_RAW)
-    return checked_narrow_index :: pixel_start_wide, frame.width, frame.height, frame.stride :: call
+    select either:
+        when x_wide: Result.Ok(x_wide) <- checked_widen_index :: x, frame.width, frame.height, frame.stride :: call
+        when y_wide: Result.Ok(y_wide) <- checked_widen_index :: y, frame.width, frame.height, frame.stride :: call
+        when stride_wide: Result.Ok(stride_wide) <- checked_widen_index :: frame.stride, frame.width, frame.height, frame.stride :: call
+        when pixel_start: Result.Ok(pixel_start) <- checked_narrow_index :: (y_wide * stride_wide) + (x_wide * PIXEL_CHANNEL_COUNT_RAW), frame.width, frame.height, frame.stride :: call =>
+            return Result.Ok :: pixel_start :: call
+
+    with Result.Err(_):
+        x_wide =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
+            return Result.Err :: error :: call
+        y_wide =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
+            return Result.Err :: error :: call
+        stride_wide =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
+            return Result.Err :: error :: call
+        pixel_start =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
+            return Result.Err :: error :: call
 
 fn checked_pixel_rect(read frame: VulkanPixelFrame, x: Index, y: Index, width: Index, height: Index) -> Result[CheckedPixelRect, VulkanPresentError]:
     select:
@@ -243,39 +293,53 @@ fn checked_pixel_rect(read frame: VulkanPixelFrame, x: Index, y: Index, width: I
             let error = VulkanPresentError.PixelFrameCoordOutOfRange :: x, y, frame.width, frame.height :: call
             return Result.Err :: error :: call
         else => ()
-    let Result.Ok(start_x) = checked_widen_index :: x, frame.width, frame.height, frame.stride :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
-        return Result.Err :: error :: call
-    let Result.Ok(start_y) = checked_widen_index :: y, frame.width, frame.height, frame.stride :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
-        return Result.Err :: error :: call
-    let Result.Ok(rect_width) = checked_widen_index :: width, frame.width, frame.height, frame.stride :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
-        return Result.Err :: error :: call
-    let Result.Ok(rect_height) = checked_widen_index :: height, frame.width, frame.height, frame.stride :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
-        return Result.Err :: error :: call
-    let Result.Ok(frame_width) = checked_widen_index :: frame.width, frame.width, frame.height, frame.stride :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
-        return Result.Err :: error :: call
-    let Result.Ok(frame_height) = checked_widen_index :: frame.height, frame.width, frame.height, frame.stride :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
-        return Result.Err :: error :: call
-    let end_x: USize = start_x + rect_width - ONE_USIZE
-    let end_y: USize = start_y + rect_height - ONE_USIZE
-    select:
-        when end_x >= frame_width || end_y >= frame_height =>
-            let Result.Ok(last_x) = checked_narrow_index :: end_x, frame.width, frame.height, frame.stride :: call else =>
-                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
-                return Result.Err :: error :: call
-            let Result.Ok(last_y) = checked_narrow_index :: end_y, frame.width, frame.height, frame.stride :: call else =>
-                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
-                return Result.Err :: error :: call
-            let error = VulkanPresentError.PixelFrameCoordOutOfRange :: last_x, last_y, frame.width, frame.height :: call
+    select either:
+        when start_x: Result.Ok(start_x) <- checked_widen_index :: x, frame.width, frame.height, frame.stride :: call
+        when start_y: Result.Ok(start_y) <- checked_widen_index :: y, frame.width, frame.height, frame.stride :: call
+        when rect_width: Result.Ok(rect_width) <- checked_widen_index :: width, frame.width, frame.height, frame.stride :: call
+        when rect_height: Result.Ok(rect_height) <- checked_widen_index :: height, frame.width, frame.height, frame.stride :: call
+        when frame_width: Result.Ok(frame_width) <- checked_widen_index :: frame.width, frame.width, frame.height, frame.stride :: call
+        when frame_height: Result.Ok(frame_height) <- checked_widen_index :: frame.height, frame.width, frame.height, frame.stride :: call =>
+            let end_x: USize = start_x + rect_width - ONE_USIZE
+            let end_y: USize = start_y + rect_height - ONE_USIZE
+            select:
+                when end_x >= frame_width || end_y >= frame_height =>
+                    select either:
+                        when last_x: Result.Ok(last_x) <- checked_narrow_index :: end_x, frame.width, frame.height, frame.stride :: call
+                        when last_y: Result.Ok(last_y) <- checked_narrow_index :: end_y, frame.width, frame.height, frame.stride :: call =>
+                            let error = VulkanPresentError.PixelFrameCoordOutOfRange :: last_x, last_y, frame.width, frame.height :: call
+                            return Result.Err :: error :: call
+
+                    with Result.Err(_):
+                        last_x =>
+                            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
+                            return Result.Err :: error :: call
+                        last_y =>
+                            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
+                            return Result.Err :: error :: call
+                else => ()
+            let rect = CheckedPixelRect :: start_x, start_y, rect_width, rect_height :: call
+            return Result.Ok :: rect :: call
+
+    with Result.Err(_):
+        start_x =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
             return Result.Err :: error :: call
-        else => ()
-    let rect = CheckedPixelRect :: start_x, start_y, rect_width, rect_height :: call
-    return Result.Ok :: rect :: call
+        start_y =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
+            return Result.Err :: error :: call
+        rect_width =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
+            return Result.Err :: error :: call
+        rect_height =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
+            return Result.Err :: error :: call
+        frame_width =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
+            return Result.Err :: error :: call
+        frame_height =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
+            return Result.Err :: error :: call
 
 fn pixel_abs_delta(value: CInt) -> CInt:
     select:
@@ -291,40 +355,47 @@ fn pixel_step_direction(start: CInt, end: CInt) -> CInt:
     return 0
 
 fn set_pixel_channels(edit frame: VulkanPixelFrame, offset: Index, read channels: PixelChannels) -> Result[Unit, VulkanPresentError]:
-    let Result.Ok(offset_wide) = checked_widen_index :: offset, frame.width, frame.height, frame.stride :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
-        return Result.Err :: error :: call
-    let Result.Ok(second_index) = checked_narrow_index :: offset_wide + ONE_USIZE, frame.width, frame.height, frame.stride :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
-        return Result.Err :: error :: call
-    let Result.Ok(third_index) = checked_narrow_index :: offset_wide + 2USize, frame.width, frame.height, frame.stride :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
-        return Result.Err :: error :: call
-    let Result.Ok(fourth_index) = checked_narrow_index :: offset_wide + 3USize, frame.width, frame.height, frame.stride :: call else =>
-        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
-        return Result.Err :: error :: call
-    select frame.format:
-        when VulkanPixelFormat.Rgba8 =>
-            frame.pixels[offset] = channels.red
-            frame.pixels[second_index] = channels.green
-            frame.pixels[third_index] = channels.blue
-            frame.pixels[fourth_index] = channels.alpha
-        when VulkanPixelFormat.Bgra8 =>
-            frame.pixels[offset] = channels.blue
-            frame.pixels[second_index] = channels.green
-            frame.pixels[third_index] = channels.red
-            frame.pixels[fourth_index] = channels.alpha
-        when VulkanPixelFormat.Rgbx8 =>
-            frame.pixels[offset] = channels.red
-            frame.pixels[second_index] = channels.green
-            frame.pixels[third_index] = channels.blue
-            frame.pixels[fourth_index] = OPAQUE_ALPHA
-        when VulkanPixelFormat.Bgrx8 =>
-            frame.pixels[offset] = channels.blue
-            frame.pixels[second_index] = channels.green
-            frame.pixels[third_index] = channels.red
-            frame.pixels[fourth_index] = OPAQUE_ALPHA
-    return Result.Ok :: :: call
+    select either:
+        when offset_wide: Result.Ok(offset_wide) <- checked_widen_index :: offset, frame.width, frame.height, frame.stride :: call
+        when second_index: Result.Ok(second_index) <- checked_narrow_index :: offset_wide + ONE_USIZE, frame.width, frame.height, frame.stride :: call
+        when third_index: Result.Ok(third_index) <- checked_narrow_index :: offset_wide + 2USize, frame.width, frame.height, frame.stride :: call
+        when fourth_index: Result.Ok(fourth_index) <- checked_narrow_index :: offset_wide + 3USize, frame.width, frame.height, frame.stride :: call =>
+            select frame.format:
+                when VulkanPixelFormat.Rgba8 =>
+                    frame.pixels[offset] = channels.red
+                    frame.pixels[second_index] = channels.green
+                    frame.pixels[third_index] = channels.blue
+                    frame.pixels[fourth_index] = channels.alpha
+                when VulkanPixelFormat.Bgra8 =>
+                    frame.pixels[offset] = channels.blue
+                    frame.pixels[second_index] = channels.green
+                    frame.pixels[third_index] = channels.red
+                    frame.pixels[fourth_index] = channels.alpha
+                when VulkanPixelFormat.Rgbx8 =>
+                    frame.pixels[offset] = channels.red
+                    frame.pixels[second_index] = channels.green
+                    frame.pixels[third_index] = channels.blue
+                    frame.pixels[fourth_index] = OPAQUE_ALPHA
+                when VulkanPixelFormat.Bgrx8 =>
+                    frame.pixels[offset] = channels.blue
+                    frame.pixels[second_index] = channels.green
+                    frame.pixels[third_index] = channels.red
+                    frame.pixels[fourth_index] = OPAQUE_ALPHA
+            return Result.Ok :: :: call
+
+    with Result.Err(_):
+        offset_wide =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
+            return Result.Err :: error :: call
+        second_index =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
+            return Result.Err :: error :: call
+        third_index =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
+            return Result.Err :: error :: call
+        fourth_index =>
+            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: frame.width, frame.height, frame.stride :: call
+            return Result.Err :: error :: call
 
 impl VkSurfaceFormatKHR:
     fn surface_pixel_format(read self) -> Result[VulkanPixelFormat, VulkanPresentError]:
@@ -345,26 +416,32 @@ impl VulkanPresentSnapshot:
     fn surface_pixel_count(read self) -> Result[Index, VulkanPresentError]:
         let raw_width = self.surface_extent.width
         let raw_height = self.surface_extent.height
-        select surface_image_shape_from_extent :: self.surface_extent :: call:
-            when Result.Ok(shape) =>
-                let Result.Ok(pixel_width) = raw_width as Maybe[CInt] else =>
-                    let error = VulkanPresentError.SurfaceExtentOutOfRange :: raw_width, raw_height :: call
-                    return Result.Err :: error :: call
-                let Result.Ok(pixel_height) = raw_height as Maybe[CInt] else =>
-                    let error = VulkanPresentError.SurfaceExtentOutOfRange :: raw_width, raw_height :: call
-                    return Result.Err :: error :: call
-                let Result.Ok(width_wide) = shape.width as Maybe[USize] else =>
-                    let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
-                    return Result.Err :: error :: call
-                let Result.Ok(height_wide) = shape.height as Maybe[USize] else =>
-                    let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
-                    return Result.Err :: error :: call
-                let pixel_count_wide: USize = width_wide * height_wide
-                let Result.Ok(pixel_count) = pixel_count_wide as Maybe[Index] else =>
-                    let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
-                    return Result.Err :: error :: call
+        select either:
+            when shape: Result.Ok(shape) <- surface_image_shape_from_extent :: self.surface_extent :: call
+            when pixel_width: Result.Ok(pixel_width) <- raw_width as Maybe[CInt]
+            when pixel_height: Result.Ok(pixel_height) <- raw_height as Maybe[CInt]
+            when width_wide: Result.Ok(width_wide) <- shape.width as Maybe[USize]
+            when height_wide: Result.Ok(height_wide) <- shape.height as Maybe[USize]
+            when pixel_count: Result.Ok(pixel_count) <- (width_wide * height_wide) as Maybe[Index] =>
                 return Result.Ok :: pixel_count :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+
+        with Result.Err(err):
+            shape => return Result.Err :: err :: call
+            pixel_width =>
+                let error = VulkanPresentError.SurfaceExtentOutOfRange :: raw_width, raw_height :: call
+                return Result.Err :: error :: call
+            pixel_height =>
+                let error = VulkanPresentError.SurfaceExtentOutOfRange :: raw_width, raw_height :: call
+                return Result.Err :: error :: call
+            width_wide =>
+                let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
+                return Result.Err :: error :: call
+            height_wide =>
+                let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
+                return Result.Err :: error :: call
+            pixel_count =>
+                let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
+                return Result.Err :: error :: call
 
     fn surface_tight_stride(read self) -> Result[Index, VulkanPresentError]:
         select surface_image_shape_from_extent :: self.surface_extent :: call:
@@ -385,27 +462,26 @@ impl VulkanPresentSnapshot:
             when Result.Err(err) => return Result.Err :: err :: call
 
     fn surface_pixel_frame_from_image(read self, read image: RgbaImage) -> Result[VulkanPixelFrame, VulkanPresentError]:
-        select image.width_index :: :: method:
-            when Result.Ok(image_width) =>
-                select image.height_index :: :: method:
-                    when Result.Ok(image_height) =>
-                        select surface_image_shape_from_extent :: self.surface_extent :: call:
-                            when Result.Ok(shape) =>
-                                select:
-                                    when image_width != shape.width || image_height != shape.height =>
-                                        let error = VulkanPresentError.PixelFrameExtentMismatch :: image_width, image_height, self.surface_extent.width, self.surface_extent.height :: call
-                                        return Result.Err :: error :: call
-                                    else => ()
-                            when Result.Err(err) => return Result.Err :: err :: call
-                        select self.surface_pixel_format :: :: method:
-                            when Result.Ok(format) => return vulkan_pixel_frame_from_image :: image, format :: call
-                            when Result.Err(err) => return Result.Err :: err :: call
-                    when Result.Err(err) =>
-                        let error = VulkanPresentError.ImageAccess :: err :: call
+        select either:
+            when image_width: Result.Ok(image_width) <- image.width_index :: :: method
+            when image_height: Result.Ok(image_height) <- image.height_index :: :: method
+            when shape: Result.Ok(shape) <- surface_image_shape_from_extent :: self.surface_extent :: call
+            when format: Result.Ok(format) <- self.surface_pixel_format :: :: method =>
+                select:
+                    when image_width != shape.width || image_height != shape.height =>
+                        let error = VulkanPresentError.PixelFrameExtentMismatch :: image_width, image_height, self.surface_extent.width, self.surface_extent.height :: call
                         return Result.Err :: error :: call
-            when Result.Err(err) =>
+                    else => return vulkan_pixel_frame_from_image :: image, format :: call
+
+        with Result.Err(err):
+            image_width =>
                 let error = VulkanPresentError.ImageAccess :: err :: call
                 return Result.Err :: error :: call
+            image_height =>
+                let error = VulkanPresentError.ImageAccess :: err :: call
+                return Result.Err :: error :: call
+            shape => return Result.Err :: err :: call
+            format => return Result.Err :: err :: call
 
     fn surface_pixel_frame_from_pixels(read self, width: Index, height: Index, stride: Index, format: VulkanPixelFormat, take pixels: ByteBuffer) -> Result[VulkanPixelFrame, VulkanPresentError]:
         select surface_image_shape_from_extent :: self.surface_extent :: call:
@@ -434,26 +510,32 @@ impl VulkanPresentContext:
     fn surface_pixel_count(read self) -> Result[Index, VulkanPresentError]:
         let raw_width = self.extent.width
         let raw_height = self.extent.height
-        select surface_image_shape_from_extent :: self.extent :: call:
-            when Result.Ok(shape) =>
-                let Result.Ok(pixel_width) = raw_width as Maybe[CInt] else =>
-                    let error = VulkanPresentError.SurfaceExtentOutOfRange :: raw_width, raw_height :: call
-                    return Result.Err :: error :: call
-                let Result.Ok(pixel_height) = raw_height as Maybe[CInt] else =>
-                    let error = VulkanPresentError.SurfaceExtentOutOfRange :: raw_width, raw_height :: call
-                    return Result.Err :: error :: call
-                let Result.Ok(width_wide) = shape.width as Maybe[USize] else =>
-                    let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
-                    return Result.Err :: error :: call
-                let Result.Ok(height_wide) = shape.height as Maybe[USize] else =>
-                    let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
-                    return Result.Err :: error :: call
-                let pixel_count_wide: USize = width_wide * height_wide
-                let Result.Ok(pixel_count) = pixel_count_wide as Maybe[Index] else =>
-                    let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
-                    return Result.Err :: error :: call
+        select either:
+            when shape: Result.Ok(shape) <- surface_image_shape_from_extent :: self.extent :: call
+            when pixel_width: Result.Ok(pixel_width) <- raw_width as Maybe[CInt]
+            when pixel_height: Result.Ok(pixel_height) <- raw_height as Maybe[CInt]
+            when width_wide: Result.Ok(width_wide) <- shape.width as Maybe[USize]
+            when height_wide: Result.Ok(height_wide) <- shape.height as Maybe[USize]
+            when pixel_count: Result.Ok(pixel_count) <- (width_wide * height_wide) as Maybe[Index] =>
                 return Result.Ok :: pixel_count :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+
+        with Result.Err(err):
+            shape => return Result.Err :: err :: call
+            pixel_width =>
+                let error = VulkanPresentError.SurfaceExtentOutOfRange :: raw_width, raw_height :: call
+                return Result.Err :: error :: call
+            pixel_height =>
+                let error = VulkanPresentError.SurfaceExtentOutOfRange :: raw_width, raw_height :: call
+                return Result.Err :: error :: call
+            width_wide =>
+                let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
+                return Result.Err :: error :: call
+            height_wide =>
+                let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
+                return Result.Err :: error :: call
+            pixel_count =>
+                let error = VulkanPresentError.PixelExtentOutOfRange :: pixel_width, pixel_height :: call
+                return Result.Err :: error :: call
 
     fn surface_tight_stride(read self) -> Result[Index, VulkanPresentError]:
         select surface_image_shape_from_extent :: self.extent :: call:
@@ -474,27 +556,26 @@ impl VulkanPresentContext:
             when Result.Err(err) => return Result.Err :: err :: call
 
     fn surface_pixel_frame_from_image(read self, read image: RgbaImage) -> Result[VulkanPixelFrame, VulkanPresentError]:
-        select image.width_index :: :: method:
-            when Result.Ok(image_width) =>
-                select image.height_index :: :: method:
-                    when Result.Ok(image_height) =>
-                        select surface_image_shape_from_extent :: self.extent :: call:
-                            when Result.Ok(shape) =>
-                                select:
-                                    when image_width != shape.width || image_height != shape.height =>
-                                        let error = VulkanPresentError.PixelFrameExtentMismatch :: image_width, image_height, self.extent.width, self.extent.height :: call
-                                        return Result.Err :: error :: call
-                                    else => ()
-                            when Result.Err(err) => return Result.Err :: err :: call
-                        select self.surface_pixel_format :: :: method:
-                            when Result.Ok(format) => return vulkan_pixel_frame_from_image :: image, format :: call
-                            when Result.Err(err) => return Result.Err :: err :: call
-                    when Result.Err(err) =>
-                        let error = VulkanPresentError.ImageAccess :: err :: call
+        select either:
+            when image_width: Result.Ok(image_width) <- image.width_index :: :: method
+            when image_height: Result.Ok(image_height) <- image.height_index :: :: method
+            when shape: Result.Ok(shape) <- surface_image_shape_from_extent :: self.extent :: call
+            when format: Result.Ok(format) <- self.surface_pixel_format :: :: method =>
+                select:
+                    when image_width != shape.width || image_height != shape.height =>
+                        let error = VulkanPresentError.PixelFrameExtentMismatch :: image_width, image_height, self.extent.width, self.extent.height :: call
                         return Result.Err :: error :: call
-            when Result.Err(err) =>
+                    else => return vulkan_pixel_frame_from_image :: image, format :: call
+
+        with Result.Err(err):
+            image_width =>
                 let error = VulkanPresentError.ImageAccess :: err :: call
                 return Result.Err :: error :: call
+            image_height =>
+                let error = VulkanPresentError.ImageAccess :: err :: call
+                return Result.Err :: error :: call
+            shape => return Result.Err :: err :: call
+            format => return Result.Err :: err :: call
 
     fn surface_pixel_frame_from_pixels(read self, width: Index, height: Index, stride: Index, format: VulkanPixelFormat, take pixels: ByteBuffer) -> Result[VulkanPixelFrame, VulkanPresentError]:
         select surface_image_shape_from_extent :: self.extent :: call:
@@ -555,17 +636,22 @@ impl VulkanPixelFrame:
         return self.height
 
     fn pixel_count(read self) -> Result[Index, VulkanPresentError]:
-        let Result.Ok(width_wide) = checked_widen_index :: self.width, self.width, self.height, self.stride :: call else =>
-            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-            return Result.Err :: error :: call
-        let Result.Ok(height_wide) = checked_widen_index :: self.height, self.width, self.height, self.stride :: call else =>
-            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-            return Result.Err :: error :: call
-        let pixel_count_wide: USize = width_wide * height_wide
-        let Result.Ok(pixel_count) = pixel_count_wide as Maybe[Index] else =>
-            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-            return Result.Err :: error :: call
-        return Result.Ok :: pixel_count :: call
+        select either:
+            when width_wide: Result.Ok(width_wide) <- checked_widen_index :: self.width, self.width, self.height, self.stride :: call
+            when height_wide: Result.Ok(height_wide) <- checked_widen_index :: self.height, self.width, self.height, self.stride :: call
+            when pixel_count: Result.Ok(pixel_count) <- (width_wide * height_wide) as Maybe[Index] =>
+                return Result.Ok :: pixel_count :: call
+
+        with Result.Err(_):
+            width_wide =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
+            height_wide =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
+            pixel_count =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
 
     fn stride(read self) -> Index:
         return self.stride
@@ -574,14 +660,15 @@ impl VulkanPixelFrame:
         return vulkan_pixel_format_code :: self.format :: call
 
     fn pixel(read self, x: Index, y: Index) -> Result[RgbaColor, VulkanPresentError]:
-        select checked_pixel_offset :: self, x, y :: call:
-            when Result.Ok(offset) =>
-                select self.pixel_channels_at :: offset :: method:
-                    when Result.Ok(channels) =>
-                        let color = RgbaColor :: channels.red, channels.green, channels.blue, channels.alpha :: call
-                        return Result.Ok :: color :: call
-                    when Result.Err(err) => return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when offset: Result.Ok(offset) <- checked_pixel_offset :: self, x, y :: call
+            when channels: Result.Ok(channels) <- self.pixel_channels_at :: offset :: method =>
+                let color = RgbaColor :: channels.red, channels.green, channels.blue, channels.alpha :: call
+                return Result.Ok :: color :: call
+
+        with Result.Err(err):
+            offset => return Result.Err :: err :: call
+            channels => return Result.Err :: err :: call
 
     fn byte_count(read self) -> Index:
         return self.pixels.byte_count :: :: method
@@ -603,92 +690,115 @@ impl VulkanPixelFrame:
 
     fn converted_frame(read self, read target_format: VulkanPixelFormat) -> Result[VulkanPixelFrame, VulkanPresentError]:
         let format = copy_pixel_format :: target_format :: call
-        select self.converted_bytes :: format :: method:
-            when Result.Ok(pixels) =>
-                select self.tight_stride :: :: method:
-                    when Result.Ok(tight_stride) => return vulkan_pixel_frame :: self.width, self.height, tight_stride, format, pixels :: call
-                    when Result.Err(err) => return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when pixels: Result.Ok(pixels) <- self.converted_bytes :: format :: method
+            when tight_stride: Result.Ok(tight_stride) <- self.tight_stride :: :: method =>
+                return vulkan_pixel_frame :: self.width, self.height, tight_stride, format, pixels :: call
+
+        with Result.Err(err):
+            pixels => return Result.Err :: err :: call
+            tight_stride => return Result.Err :: err :: call
 
     fn take_pixels(take self) -> ByteBuffer:
         return self.pixels
 
     fn pixel_channels_at(read self, offset: Index) -> Result[PixelChannels, VulkanPresentError]:
-        let Result.Ok(offset_wide) = checked_widen_index :: offset, self.width, self.height, self.stride :: call else =>
-            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-            return Result.Err :: error :: call
-        let Result.Ok(second_index) = checked_narrow_index :: offset_wide + ONE_USIZE, self.width, self.height, self.stride :: call else =>
-            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-            return Result.Err :: error :: call
-        let Result.Ok(third_index) = checked_narrow_index :: offset_wide + 2USize, self.width, self.height, self.stride :: call else =>
-            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-            return Result.Err :: error :: call
-        let Result.Ok(fourth_index) = checked_narrow_index :: offset_wide + 3USize, self.width, self.height, self.stride :: call else =>
-            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-            return Result.Err :: error :: call
-        let first = self.pixels[offset]
-        let second = self.pixels[second_index]
-        let third = self.pixels[third_index]
-        let fourth = self.pixels[fourth_index]
-        select self.format:
-            when VulkanPixelFormat.Rgba8 =>
+        select either:
+            when offset_wide: Result.Ok(offset_wide) <- checked_widen_index :: offset, self.width, self.height, self.stride :: call
+            when second_index: Result.Ok(second_index) <- checked_narrow_index :: offset_wide + ONE_USIZE, self.width, self.height, self.stride :: call
+            when third_index: Result.Ok(third_index) <- checked_narrow_index :: offset_wide + 2USize, self.width, self.height, self.stride :: call
+            when fourth_index: Result.Ok(fourth_index) <- checked_narrow_index :: offset_wide + 3USize, self.width, self.height, self.stride :: call =>
+                let first = self.pixels[offset]
+                let second = self.pixels[second_index]
+                let third = self.pixels[third_index]
+                let fourth = self.pixels[fourth_index]
+                select self.format:
+                    when VulkanPixelFormat.Rgba8 =>
+                        let channels = PixelChannels :: first, second, third, fourth :: call
+                        return Result.Ok :: channels :: call
+                    when VulkanPixelFormat.Bgra8 =>
+                        let channels = PixelChannels :: third, second, first, fourth :: call
+                        return Result.Ok :: channels :: call
+                    when VulkanPixelFormat.Rgbx8 =>
+                        let channels = PixelChannels :: first, second, third, OPAQUE_ALPHA :: call
+                        return Result.Ok :: channels :: call
+                    when VulkanPixelFormat.Bgrx8 =>
+                        let channels = PixelChannels :: third, second, first, OPAQUE_ALPHA :: call
+                        return Result.Ok :: channels :: call
                 let channels = PixelChannels :: first, second, third, fourth :: call
                 return Result.Ok :: channels :: call
-            when VulkanPixelFormat.Bgra8 =>
-                let channels = PixelChannels :: third, second, first, fourth :: call
-                return Result.Ok :: channels :: call
-            when VulkanPixelFormat.Rgbx8 =>
-                let channels = PixelChannels :: first, second, third, OPAQUE_ALPHA :: call
-                return Result.Ok :: channels :: call
-            when VulkanPixelFormat.Bgrx8 =>
-                let channels = PixelChannels :: third, second, first, OPAQUE_ALPHA :: call
-                return Result.Ok :: channels :: call
-        let channels = PixelChannels :: first, second, third, fourth :: call
-        return Result.Ok :: channels :: call
+
+        with Result.Err(_):
+            offset_wide =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
+            second_index =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
+            third_index =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
+            fourth_index =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
 
     fn converted_bytes(read self, read target_format: VulkanPixelFormat) -> Result[ByteBuffer, VulkanPresentError]:
-        let Result.Ok(tight_stride) = self.tight_stride :: :: method else =>
-            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-            return Result.Err :: error :: call
-        let Result.Ok(required) = checked_required_byte_count :: self.width, self.height, tight_stride :: call else =>
-            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, tight_stride :: call
-            return Result.Err :: error :: call
-        let converted = ByteBuffer :: :: call
-        converted.reserve :: required :: method
-        let Result.Ok(width_wide) = self.width as Maybe[USize] else =>
-            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-            return Result.Err :: error :: call
-        let Result.Ok(height_wide) = self.height as Maybe[USize] else =>
-            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-            return Result.Err :: error :: call
-        let Result.Ok(stride_wide) = self.stride as Maybe[USize] else =>
-            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-            return Result.Err :: error :: call
-        let y: USize = 0USize
-        repeat while y < height_wide:
-            let row_start_wide: USize = y * stride_wide
-            let x: USize = 0USize
-            repeat while x < width_wide:
-                let pixel_start_wide: USize = row_start_wide + (x * PIXEL_CHANNEL_COUNT_RAW)
-                let Result.Ok(pixel_start) = checked_narrow_index :: pixel_start_wide, self.width, self.height, self.stride :: call else =>
-                    let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                    return Result.Err :: error :: call
-                select self.pixel_channels_at :: pixel_start :: method:
-                    when Result.Ok(channels) => push_pixel_channels :: converted, target_format, channels :: call
-                    when Result.Err(err) => return Result.Err :: err :: call
-                x = x + ONE_USIZE
-            y = y + ONE_USIZE
-        return Result.Ok :: converted :: call
+        select either:
+            when tight_stride: Result.Ok(tight_stride) <- self.tight_stride :: :: method
+            when required: Result.Ok(required) <- checked_required_byte_count :: self.width, self.height, tight_stride :: call
+            when width_wide: Result.Ok(width_wide) <- self.width as Maybe[USize]
+            when height_wide: Result.Ok(height_wide) <- self.height as Maybe[USize]
+            when stride_wide: Result.Ok(stride_wide) <- self.stride as Maybe[USize] =>
+                let converted = ByteBuffer :: :: call
+                converted.reserve :: required :: method
+                let y: USize = 0USize
+                repeat while y < height_wide:
+                    let row_start_wide: USize = y * stride_wide
+                    let x: USize = 0USize
+                    repeat while x < width_wide:
+                        let pixel_start_wide: USize = row_start_wide + (x * PIXEL_CHANNEL_COUNT_RAW)
+                        select either:
+                            when pixel_start: Result.Ok(pixel_start) <- checked_narrow_index :: pixel_start_wide, self.width, self.height, self.stride :: call
+                            when channels: Result.Ok(channels) <- self.pixel_channels_at :: pixel_start :: method =>
+                                push_pixel_channels :: converted, target_format, channels :: call
+
+                        with Result.Err(err):
+                            pixel_start =>
+                                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                                return Result.Err :: error :: call
+                            channels => return Result.Err :: err :: call
+                        x = x + ONE_USIZE
+                    y = y + ONE_USIZE
+                return Result.Ok :: converted :: call
+
+        with Result.Err(_):
+            tight_stride =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
+            required =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, tight_stride :: call
+                return Result.Err :: error :: call
+            width_wide =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
+            height_wide =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
+            stride_wide =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
 
     fn to_rgba_image(read self) -> Result[RgbaImage, VulkanPresentError]:
-        select self.converted_bytes :: VulkanPixelFormat.Rgba8 :: method:
-            when Result.Ok(pixels) =>
-                select rgba_image :: self.width, self.height, pixels :: call:
-                    when Result.Ok(image) => return Result.Ok :: image :: call
-                    when Result.Err(err) =>
-                        let error = VulkanPresentError.ImageCreate :: err :: call
-                        return Result.Err :: error :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when pixels: Result.Ok(pixels) <- self.converted_bytes :: VulkanPixelFormat.Rgba8 :: method
+            when image: Result.Ok(image) <- rgba_image :: self.width, self.height, pixels :: call =>
+                return Result.Ok :: image :: call
+
+        with Result.Err(err):
+            pixels => return Result.Err :: err :: call
+            image =>
+                let error = VulkanPresentError.ImageCreate :: err :: call
+                return Result.Err :: error :: call
 
     fn to_surface_bytes(read self, read surface_format: VkSurfaceFormatKHR) -> Result[ByteBuffer, VulkanPresentError]:
         select surface_format.surface_pixel_format :: :: method:
@@ -696,42 +806,55 @@ impl VulkanPixelFrame:
             when Result.Err(err) => return Result.Err :: err :: call
 
     fn sub_frame(read self, x: Index, y: Index, width: Index, height: Index) -> Result[VulkanPixelFrame, VulkanPresentError]:
-        select checked_pixel_rect :: self, x, y, width, height :: call:
-            when Result.Ok(rect) =>
-                let Result.Ok(result_width) = rect.width as Maybe[Index] else =>
-                    let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                    return Result.Err :: error :: call
-                let Result.Ok(result_height) = rect.height as Maybe[Index] else =>
-                    let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                    return Result.Err :: error :: call
-                let Result.Ok(tight_stride) = checked_tight_stride :: result_width, result_height :: call else =>
-                    let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                    return Result.Err :: error :: call
-                let Result.Ok(required) = checked_required_byte_count :: result_width, result_height, tight_stride :: call else =>
-                    let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                    return Result.Err :: error :: call
+        select either:
+            when rect: Result.Ok(rect) <- checked_pixel_rect :: self, x, y, width, height :: call
+            when result_width: Result.Ok(result_width) <- rect.width as Maybe[Index]
+            when result_height: Result.Ok(result_height) <- rect.height as Maybe[Index]
+            when tight_stride: Result.Ok(tight_stride) <- checked_tight_stride :: result_width, result_height :: call
+            when required: Result.Ok(required) <- checked_required_byte_count :: result_width, result_height, tight_stride :: call =>
                 let pixels = ByteBuffer :: :: call
                 pixels.reserve :: required :: method
                 let format = copy_pixel_format :: self.format :: call
                 let scan_y: USize = 0USize
                 repeat while scan_y < rect.height:
-                    let Result.Ok(source_y) = checked_narrow_index :: rect.start_y + scan_y, self.width, self.height, self.stride :: call else =>
-                        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                        return Result.Err :: error :: call
-                    let scan_x: USize = 0USize
-                    repeat while scan_x < rect.width:
-                        let Result.Ok(source_x) = checked_narrow_index :: rect.start_x + scan_x, self.width, self.height, self.stride :: call else =>
+                    select either:
+                        when source_y: Result.Ok(source_y) <- checked_narrow_index :: rect.start_y + scan_y, self.width, self.height, self.stride :: call =>
+                            let scan_x: USize = 0USize
+                            repeat while scan_x < rect.width:
+                                select either:
+                                    when source_x: Result.Ok(source_x) <- checked_narrow_index :: rect.start_x + scan_x, self.width, self.height, self.stride :: call
+                                    when color: Result.Ok(color) <- self.pixel :: source_x, source_y :: method =>
+                                        let channels = PixelChannels :: color.red, color.green, color.blue, color.alpha :: call
+                                        push_pixel_channels :: pixels, format, channels :: call
+
+                                with Result.Err(err):
+                                    source_x =>
+                                        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                                        return Result.Err :: error :: call
+                                    color => return Result.Err :: err :: call
+                                scan_x = scan_x + ONE_USIZE
+
+                    with Result.Err(_):
+                        source_y =>
                             let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
                             return Result.Err :: error :: call
-                        select self.pixel :: source_x, source_y :: method:
-                            when Result.Ok(color) =>
-                                let channels = PixelChannels :: color.red, color.green, color.blue, color.alpha :: call
-                                push_pixel_channels :: pixels, format, channels :: call
-                            when Result.Err(err) => return Result.Err :: err :: call
-                        scan_x = scan_x + ONE_USIZE
                     scan_y = scan_y + ONE_USIZE
                 return vulkan_pixel_frame :: result_width, result_height, tight_stride, format, pixels :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+
+        with Result.Err(err):
+            rect => return Result.Err :: err :: call
+            result_width =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
+            result_height =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
+            tight_stride =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
+            required =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
 
     fn set_pixel(edit self, x: Index, y: Index, read color: RgbaColor) -> Result[Unit, VulkanPresentError]:
         let channels = PixelChannels :: color.red, color.green, color.blue, color.alpha :: call
@@ -740,39 +863,50 @@ impl VulkanPixelFrame:
             when Result.Err(err) => return Result.Err :: err :: call
 
     fn blend_pixel(edit self, x: Index, y: Index, read source: RgbaColor) -> Result[Unit, VulkanPresentError]:
-        select self.pixel :: x, y :: method:
-            when Result.Ok(dest) =>
-                select rgba_blend_source_over :: dest, source :: call:
-                    when Result.Ok(blended) => return self.set_pixel :: x, y, blended :: method
-                    when Result.Err(err) =>
-                        let error = VulkanPresentError.ColorBlend :: err :: call
-                        return Result.Err :: error :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when dest: Result.Ok(dest) <- self.pixel :: x, y :: method
+            when blended: Result.Ok(blended) <- rgba_blend_source_over :: dest, source :: call =>
+                return self.set_pixel :: x, y, blended :: method
+
+        with Result.Err(err):
+            dest => return Result.Err :: err :: call
+            blended =>
+                let error = VulkanPresentError.ColorBlend :: err :: call
+                return Result.Err :: error :: call
 
     fn fill_rect(edit self, x: Index, y: Index, width: Index, height: Index, read fill: RgbaColor) -> Result[Unit, VulkanPresentError]:
         let channels = PixelChannels :: fill.red, fill.green, fill.blue, fill.alpha :: call
-        select checked_pixel_rect :: self, x, y, width, height :: call:
-            when Result.Ok(rect) =>
+        select either:
+            when rect: Result.Ok(rect) <- checked_pixel_rect :: self, x, y, width, height :: call =>
                 let scan_y: USize = 0USize
                 repeat while scan_y < rect.height:
-                    let Result.Ok(y_index) = checked_narrow_index :: rect.start_y + scan_y, self.width, self.height, self.stride :: call else =>
-                        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                        return Result.Err :: error :: call
-                    let scan_x: USize = 0USize
-                    repeat while scan_x < rect.width:
-                        let Result.Ok(x_index) = checked_narrow_index :: rect.start_x + scan_x, self.width, self.height, self.stride :: call else =>
+                    select either:
+                        when y_index: Result.Ok(y_index) <- checked_narrow_index :: rect.start_y + scan_y, self.width, self.height, self.stride :: call =>
+                            let scan_x: USize = 0USize
+                            repeat while scan_x < rect.width:
+                                select either:
+                                    when x_index: Result.Ok(x_index) <- checked_narrow_index :: rect.start_x + scan_x, self.width, self.height, self.stride :: call
+                                    when offset: Result.Ok(offset) <- checked_pixel_offset :: self, x_index, y_index :: call
+                                    when written: Result.Ok(_) <- set_pixel_channels :: self, offset, channels :: call =>
+                                        ()
+
+                                with Result.Err(err):
+                                    x_index =>
+                                        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                                        return Result.Err :: error :: call
+                                    offset => return Result.Err :: err :: call
+                                    written => return Result.Err :: err :: call
+                                scan_x = scan_x + ONE_USIZE
+
+                    with Result.Err(_):
+                        y_index =>
                             let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
                             return Result.Err :: error :: call
-                        select checked_pixel_offset :: self, x_index, y_index :: call:
-                            when Result.Ok(offset) =>
-                                select set_pixel_channels :: self, offset, channels :: call:
-                                    when Result.Ok(_) => ()
-                                    when Result.Err(err) => return Result.Err :: err :: call
-                            when Result.Err(err) => return Result.Err :: err :: call
-                        scan_x = scan_x + ONE_USIZE
                     scan_y = scan_y + ONE_USIZE
                 return Result.Ok :: :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+
+        with Result.Err(err):
+            rect => return Result.Err :: err :: call
 
     fn draw_hline(edit self, x: Index, y: Index, width: Index, read color: RgbaColor) -> Result[Unit, VulkanPresentError]:
         return self.fill_rect :: x, y, width, 1, color :: method
@@ -786,232 +920,290 @@ impl VulkanPixelFrame:
                 select:
                     when rect.width == ONE_USIZE || rect.height == ONE_USIZE => return self.fill_rect :: x, y, width, height, color :: method
                     else => ()
-                let Result.Ok(last_x) = checked_narrow_index :: rect.start_x + rect.width - ONE_USIZE, self.width, self.height, self.stride :: call else =>
-                    let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                    return Result.Err :: error :: call
-                let Result.Ok(last_y) = checked_narrow_index :: rect.start_y + rect.height - ONE_USIZE, self.width, self.height, self.stride :: call else =>
-                    let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                    return Result.Err :: error :: call
-                select self.draw_hline :: x, y, width, color :: method:
-                    when Result.Ok(_) => ()
-                    when Result.Err(err) => return Result.Err :: err :: call
-                select self.draw_hline :: x, last_y, width, color :: method:
-                    when Result.Ok(_) => ()
-                    when Result.Err(err) => return Result.Err :: err :: call
-                select self.draw_vline :: x, y, height, color :: method:
-                    when Result.Ok(_) => ()
-                    when Result.Err(err) => return Result.Err :: err :: call
-                return self.draw_vline :: last_x, y, height, color :: method
+                select either:
+                    when last_x: Result.Ok(last_x) <- checked_narrow_index :: rect.start_x + rect.width - ONE_USIZE, self.width, self.height, self.stride :: call
+                    when last_y: Result.Ok(last_y) <- checked_narrow_index :: rect.start_y + rect.height - ONE_USIZE, self.width, self.height, self.stride :: call
+                    when top_drawn: Result.Ok(_) <- self.draw_hline :: x, y, width, color :: method
+                    when bottom_drawn: Result.Ok(_) <- self.draw_hline :: x, last_y, width, color :: method
+                    when left_drawn: Result.Ok(_) <- self.draw_vline :: x, y, height, color :: method =>
+                        return self.draw_vline :: last_x, y, height, color :: method
+
+                with Result.Err(err):
+                    last_x =>
+                        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                        return Result.Err :: error :: call
+                    last_y =>
+                        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                        return Result.Err :: error :: call
+                    top_drawn => return Result.Err :: err :: call
+                    bottom_drawn => return Result.Err :: err :: call
+                    left_drawn => return Result.Err :: err :: call
             when Result.Err(err) => return Result.Err :: err :: call
 
     fn draw_line(edit self, x0: Index, y0: Index, x1: Index, y1: Index, read color: RgbaColor) -> Result[Unit, VulkanPresentError]:
-        let Result.Ok(raw_x0) = x0 as Maybe[CInt] else =>
-            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-            return Result.Err :: error :: call
-        let Result.Ok(raw_y0) = y0 as Maybe[CInt] else =>
-            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-            return Result.Err :: error :: call
-        let Result.Ok(raw_x1) = x1 as Maybe[CInt] else =>
-            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-            return Result.Err :: error :: call
-        let Result.Ok(raw_y1) = y1 as Maybe[CInt] else =>
-            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-            return Result.Err :: error :: call
-        let delta_x = pixel_abs_delta :: raw_x1 - raw_x0 :: call
-        let delta_y = pixel_abs_delta :: raw_y1 - raw_y0 :: call
-        let step_x = pixel_step_direction :: raw_x0, raw_x1 :: call
-        let step_y = pixel_step_direction :: raw_y0, raw_y1 :: call
-        let error_acc = delta_x - delta_y
-        let scan_x = raw_x0
-        let scan_y = raw_y0
-        let active = true
-        repeat while active:
-            let Result.Ok(plot_x) = scan_x as Maybe[Index] else =>
+        select either:
+            when raw_x0: Result.Ok(raw_x0) <- x0 as Maybe[CInt]
+            when raw_y0: Result.Ok(raw_y0) <- y0 as Maybe[CInt]
+            when raw_x1: Result.Ok(raw_x1) <- x1 as Maybe[CInt]
+            when raw_y1: Result.Ok(raw_y1) <- y1 as Maybe[CInt] =>
+                let delta_x = pixel_abs_delta :: raw_x1 - raw_x0 :: call
+                let delta_y = pixel_abs_delta :: raw_y1 - raw_y0 :: call
+                let step_x = pixel_step_direction :: raw_x0, raw_x1 :: call
+                let step_y = pixel_step_direction :: raw_y0, raw_y1 :: call
+                let error_acc = delta_x - delta_y
+                let scan_x = raw_x0
+                let scan_y = raw_y0
+                let active = true
+                repeat while active:
+                    select either:
+                        when plot_x: Result.Ok(plot_x) <- scan_x as Maybe[Index]
+                        when plot_y: Result.Ok(plot_y) <- scan_y as Maybe[Index]
+                        when plotted: Result.Ok(_) <- self.set_pixel :: plot_x, plot_y, color :: method =>
+                            ()
+
+                    with Result.Err(err):
+                        plot_x =>
+                            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                            return Result.Err :: error :: call
+                        plot_y =>
+                            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                            return Result.Err :: error :: call
+                        plotted => return Result.Err :: err :: call
+                    select:
+                        when scan_x == raw_x1 && scan_y == raw_y1 =>
+                            active = false
+                            continue
+                        else => ()
+                    let doubled_error: CInt = error_acc + error_acc
+                    select:
+                        when doubled_error > (0 - delta_y) =>
+                            error_acc = error_acc - delta_y
+                            scan_x = scan_x + step_x
+                        else => ()
+                    select:
+                        when doubled_error < delta_x =>
+                            error_acc = error_acc + delta_x
+                            scan_y = scan_y + step_y
+                        else => ()
+                return Result.Ok :: :: call
+
+        with Result.Err(_):
+            raw_x0 =>
                 let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
                 return Result.Err :: error :: call
-            let Result.Ok(plot_y) = scan_y as Maybe[Index] else =>
+            raw_y0 =>
                 let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
                 return Result.Err :: error :: call
-            select self.set_pixel :: plot_x, plot_y, color :: method:
-                when Result.Ok(_) => ()
-                when Result.Err(err) => return Result.Err :: err :: call
-            select:
-                when scan_x == raw_x1 && scan_y == raw_y1 =>
-                    active = false
-                    continue
-                else => ()
-            let doubled_error: CInt = error_acc + error_acc
-            select:
-                when doubled_error > (0 - delta_y) =>
-                    error_acc = error_acc - delta_y
-                    scan_x = scan_x + step_x
-                else => ()
-            select:
-                when doubled_error < delta_x =>
-                    error_acc = error_acc + delta_x
-                    scan_y = scan_y + step_y
-                else => ()
-        return Result.Ok :: :: call
+            raw_x1 =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
+            raw_y1 =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
 
     fn blend_image(edit self, x: Index, y: Index, read source: RgbaImage) -> Result[Unit, VulkanPresentError]:
-        select source.width_index :: :: method:
-            when Result.Ok(source_width) =>
-                select source.height_index :: :: method:
-                    when Result.Ok(source_height) =>
-                        select checked_pixel_rect :: self, x, y, source_width, source_height :: call:
-                            when Result.Ok(rect) =>
-                                let scan_y: USize = 0USize
-                                repeat while scan_y < rect.height:
-                                    let Result.Ok(source_y) = checked_narrow_index :: scan_y, self.width, self.height, self.stride :: call else =>
+        select either:
+            when source_width: Result.Ok(source_width) <- source.width_index :: :: method
+            when source_height: Result.Ok(source_height) <- source.height_index :: :: method
+            when rect: Result.Ok(rect) <- checked_pixel_rect :: self, x, y, source_width, source_height :: call =>
+                let scan_y: USize = 0USize
+                repeat while scan_y < rect.height:
+                    select either:
+                        when source_y: Result.Ok(source_y) <- checked_narrow_index :: scan_y, self.width, self.height, self.stride :: call
+                        when target_y: Result.Ok(target_y) <- checked_narrow_index :: rect.start_y + scan_y, self.width, self.height, self.stride :: call =>
+                            let scan_x: USize = 0USize
+                            repeat while scan_x < rect.width:
+                                select either:
+                                    when source_x: Result.Ok(source_x) <- checked_narrow_index :: scan_x, self.width, self.height, self.stride :: call
+                                    when target_x: Result.Ok(target_x) <- checked_narrow_index :: rect.start_x + scan_x, self.width, self.height, self.stride :: call
+                                    when color: Result.Ok(color) <- source.pixel :: source_x, source_y :: method
+                                    when blended: Result.Ok(_) <- self.blend_pixel :: target_x, target_y, color :: method =>
+                                        ()
+
+                                with Result.Err(err):
+                                    source_x =>
                                         let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
                                         return Result.Err :: error :: call
-                                    let Result.Ok(target_y) = checked_narrow_index :: rect.start_y + scan_y, self.width, self.height, self.stride :: call else =>
+                                    target_x =>
                                         let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
                                         return Result.Err :: error :: call
-                                    let scan_x: USize = 0USize
-                                    repeat while scan_x < rect.width:
-                                        let Result.Ok(source_x) = checked_narrow_index :: scan_x, self.width, self.height, self.stride :: call else =>
-                                            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                                            return Result.Err :: error :: call
-                                        let Result.Ok(target_x) = checked_narrow_index :: rect.start_x + scan_x, self.width, self.height, self.stride :: call else =>
-                                            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                                            return Result.Err :: error :: call
-                                        select source.pixel :: source_x, source_y :: method:
-                                            when Result.Ok(color) =>
-                                                select self.blend_pixel :: target_x, target_y, color :: method:
-                                                    when Result.Ok(_) => ()
-                                                    when Result.Err(err) => return Result.Err :: err :: call
-                                            when Result.Err(err) =>
-                                                let error = VulkanPresentError.ImageAccess :: err :: call
-                                                return Result.Err :: error :: call
-                                        scan_x = scan_x + ONE_USIZE
-                                    scan_y = scan_y + ONE_USIZE
-                                return Result.Ok :: :: call
-                            when Result.Err(err) => return Result.Err :: err :: call
-                    when Result.Err(err) =>
-                        let error = VulkanPresentError.ImageAccess :: err :: call
-                        return Result.Err :: error :: call
-            when Result.Err(err) =>
+                                    color =>
+                                        let error = VulkanPresentError.ImageAccess :: err :: call
+                                        return Result.Err :: error :: call
+                                    blended => return Result.Err :: err :: call
+                                scan_x = scan_x + ONE_USIZE
+
+                    with Result.Err(err):
+                        source_y =>
+                            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                            return Result.Err :: error :: call
+                        target_y =>
+                            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                            return Result.Err :: error :: call
+                    scan_y = scan_y + ONE_USIZE
+                return Result.Ok :: :: call
+
+        with Result.Err(err):
+            source_width =>
                 let error = VulkanPresentError.ImageAccess :: err :: call
                 return Result.Err :: error :: call
+            source_height =>
+                let error = VulkanPresentError.ImageAccess :: err :: call
+                return Result.Err :: error :: call
+            rect => return Result.Err :: err :: call
 
     fn blit_image(edit self, x: Index, y: Index, read source: RgbaImage) -> Result[Unit, VulkanPresentError]:
-        select source.width_index :: :: method:
-            when Result.Ok(source_width) =>
-                select source.height_index :: :: method:
-                    when Result.Ok(source_height) =>
-                        select checked_pixel_rect :: self, x, y, source_width, source_height :: call:
-                            when Result.Ok(rect) =>
-                                let scan_y: USize = 0USize
-                                repeat while scan_y < rect.height:
-                                    let Result.Ok(source_y) = checked_narrow_index :: scan_y, self.width, self.height, self.stride :: call else =>
+        select either:
+            when source_width: Result.Ok(source_width) <- source.width_index :: :: method
+            when source_height: Result.Ok(source_height) <- source.height_index :: :: method
+            when rect: Result.Ok(rect) <- checked_pixel_rect :: self, x, y, source_width, source_height :: call =>
+                let scan_y: USize = 0USize
+                repeat while scan_y < rect.height:
+                    select either:
+                        when source_y: Result.Ok(source_y) <- checked_narrow_index :: scan_y, self.width, self.height, self.stride :: call
+                        when target_y: Result.Ok(target_y) <- checked_narrow_index :: rect.start_y + scan_y, self.width, self.height, self.stride :: call =>
+                            let scan_x: USize = 0USize
+                            repeat while scan_x < rect.width:
+                                select either:
+                                    when source_x: Result.Ok(source_x) <- checked_narrow_index :: scan_x, self.width, self.height, self.stride :: call
+                                    when target_x: Result.Ok(target_x) <- checked_narrow_index :: rect.start_x + scan_x, self.width, self.height, self.stride :: call
+                                    when color: Result.Ok(color) <- source.pixel :: source_x, source_y :: method
+                                    when written: Result.Ok(_) <- self.set_pixel :: target_x, target_y, color :: method =>
+                                        ()
+
+                                with Result.Err(err):
+                                    source_x =>
                                         let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
                                         return Result.Err :: error :: call
-                                    let Result.Ok(target_y) = checked_narrow_index :: rect.start_y + scan_y, self.width, self.height, self.stride :: call else =>
+                                    target_x =>
                                         let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
                                         return Result.Err :: error :: call
-                                    let scan_x: USize = 0USize
-                                    repeat while scan_x < rect.width:
-                                        let Result.Ok(source_x) = checked_narrow_index :: scan_x, self.width, self.height, self.stride :: call else =>
-                                            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                                            return Result.Err :: error :: call
-                                        let Result.Ok(target_x) = checked_narrow_index :: rect.start_x + scan_x, self.width, self.height, self.stride :: call else =>
-                                            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                                            return Result.Err :: error :: call
-                                        select source.pixel :: source_x, source_y :: method:
-                                            when Result.Ok(color) =>
-                                                select self.set_pixel :: target_x, target_y, color :: method:
-                                                    when Result.Ok(_) => ()
-                                                    when Result.Err(err) => return Result.Err :: err :: call
-                                            when Result.Err(err) =>
-                                                let error = VulkanPresentError.ImageAccess :: err :: call
-                                                return Result.Err :: error :: call
-                                        scan_x = scan_x + ONE_USIZE
-                                    scan_y = scan_y + ONE_USIZE
-                                return Result.Ok :: :: call
-                            when Result.Err(err) => return Result.Err :: err :: call
-                    when Result.Err(err) =>
-                        let error = VulkanPresentError.ImageAccess :: err :: call
-                        return Result.Err :: error :: call
-            when Result.Err(err) =>
+                                    color =>
+                                        let error = VulkanPresentError.ImageAccess :: err :: call
+                                        return Result.Err :: error :: call
+                                    written => return Result.Err :: err :: call
+                                scan_x = scan_x + ONE_USIZE
+
+                    with Result.Err(err):
+                        source_y =>
+                            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                            return Result.Err :: error :: call
+                        target_y =>
+                            let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                            return Result.Err :: error :: call
+                    scan_y = scan_y + ONE_USIZE
+                return Result.Ok :: :: call
+
+        with Result.Err(err):
+            source_width =>
                 let error = VulkanPresentError.ImageAccess :: err :: call
                 return Result.Err :: error :: call
+            source_height =>
+                let error = VulkanPresentError.ImageAccess :: err :: call
+                return Result.Err :: error :: call
+            rect => return Result.Err :: err :: call
 
     fn blit_frame(edit self, x: Index, y: Index, read source: VulkanPixelFrame) -> Result[Unit, VulkanPresentError]:
         let source_width = source.width :: :: method
         let source_height = source.height :: :: method
-        select checked_pixel_rect :: self, x, y, source_width, source_height :: call:
-            when Result.Ok(rect) =>
-                let Result.Ok(source_width_wide) = checked_widen_index :: source_width, self.width, self.height, self.stride :: call else =>
-                    let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                    return Result.Err :: error :: call
-                let Result.Ok(source_height_wide) = checked_widen_index :: source_height, self.width, self.height, self.stride :: call else =>
-                    let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                    return Result.Err :: error :: call
+        select either:
+            when rect: Result.Ok(rect) <- checked_pixel_rect :: self, x, y, source_width, source_height :: call
+            when source_width_wide: Result.Ok(source_width_wide) <- checked_widen_index :: source_width, self.width, self.height, self.stride :: call
+            when source_height_wide: Result.Ok(source_height_wide) <- checked_widen_index :: source_height, self.width, self.height, self.stride :: call =>
                 let scan_y: USize = 0USize
                 repeat while scan_y < source_height_wide:
-                    let Result.Ok(source_y) = checked_narrow_index :: scan_y, source_width, source_height, source.stride :: call else =>
-                        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: source_width, source_height, source.stride :: call
-                        return Result.Err :: error :: call
-                    let Result.Ok(dest_y) = checked_narrow_index :: rect.start_y + scan_y, self.width, self.height, self.stride :: call else =>
-                        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                        return Result.Err :: error :: call
-                    let scan_x: USize = 0USize
-                    repeat while scan_x < source_width_wide:
-                        let Result.Ok(source_x) = checked_narrow_index :: scan_x, source_width, source_height, source.stride :: call else =>
+                    select either:
+                        when source_y: Result.Ok(source_y) <- checked_narrow_index :: scan_y, source_width, source_height, source.stride :: call
+                        when dest_y: Result.Ok(dest_y) <- checked_narrow_index :: rect.start_y + scan_y, self.width, self.height, self.stride :: call =>
+                            let scan_x: USize = 0USize
+                            repeat while scan_x < source_width_wide:
+                                select either:
+                                    when source_x: Result.Ok(source_x) <- checked_narrow_index :: scan_x, source_width, source_height, source.stride :: call
+                                    when dest_x: Result.Ok(dest_x) <- checked_narrow_index :: rect.start_x + scan_x, self.width, self.height, self.stride :: call
+                                    when color: Result.Ok(color) <- source.pixel :: source_x, source_y :: method
+                                    when written: Result.Ok(_) <- self.set_pixel :: dest_x, dest_y, color :: method =>
+                                        ()
+
+                                with Result.Err(err):
+                                    source_x =>
+                                        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: source_width, source_height, source.stride :: call
+                                        return Result.Err :: error :: call
+                                    dest_x =>
+                                        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                                        return Result.Err :: error :: call
+                                    color => return Result.Err :: err :: call
+                                    written => return Result.Err :: err :: call
+                                scan_x = scan_x + ONE_USIZE
+
+                    with Result.Err(_):
+                        source_y =>
                             let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: source_width, source_height, source.stride :: call
                             return Result.Err :: error :: call
-                        let Result.Ok(dest_x) = checked_narrow_index :: rect.start_x + scan_x, self.width, self.height, self.stride :: call else =>
+                        dest_y =>
                             let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
                             return Result.Err :: error :: call
-                        select source.pixel :: source_x, source_y :: method:
-                            when Result.Ok(color) =>
-                                select self.set_pixel :: dest_x, dest_y, color :: method:
-                                    when Result.Ok(_) => ()
-                                    when Result.Err(err) => return Result.Err :: err :: call
-                            when Result.Err(err) => return Result.Err :: err :: call
-                        scan_x = scan_x + ONE_USIZE
                     scan_y = scan_y + ONE_USIZE
                 return Result.Ok :: :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+
+        with Result.Err(err):
+            rect => return Result.Err :: err :: call
+            source_width_wide =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
+            source_height_wide =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
 
     fn blend_frame(edit self, x: Index, y: Index, read source: VulkanPixelFrame) -> Result[Unit, VulkanPresentError]:
         let source_width = source.width :: :: method
         let source_height = source.height :: :: method
-        select checked_pixel_rect :: self, x, y, source_width, source_height :: call:
-            when Result.Ok(rect) =>
-                let Result.Ok(source_width_wide) = checked_widen_index :: source_width, self.width, self.height, self.stride :: call else =>
-                    let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                    return Result.Err :: error :: call
-                let Result.Ok(source_height_wide) = checked_widen_index :: source_height, self.width, self.height, self.stride :: call else =>
-                    let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                    return Result.Err :: error :: call
+        select either:
+            when rect: Result.Ok(rect) <- checked_pixel_rect :: self, x, y, source_width, source_height :: call
+            when source_width_wide: Result.Ok(source_width_wide) <- checked_widen_index :: source_width, self.width, self.height, self.stride :: call
+            when source_height_wide: Result.Ok(source_height_wide) <- checked_widen_index :: source_height, self.width, self.height, self.stride :: call =>
                 let scan_y: USize = 0USize
                 repeat while scan_y < source_height_wide:
-                    let Result.Ok(source_y) = checked_narrow_index :: scan_y, source_width, source_height, source.stride :: call else =>
-                        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: source_width, source_height, source.stride :: call
-                        return Result.Err :: error :: call
-                    let Result.Ok(dest_y) = checked_narrow_index :: rect.start_y + scan_y, self.width, self.height, self.stride :: call else =>
-                        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
-                        return Result.Err :: error :: call
-                    let scan_x: USize = 0USize
-                    repeat while scan_x < source_width_wide:
-                        let Result.Ok(source_x) = checked_narrow_index :: scan_x, source_width, source_height, source.stride :: call else =>
+                    select either:
+                        when source_y: Result.Ok(source_y) <- checked_narrow_index :: scan_y, source_width, source_height, source.stride :: call
+                        when dest_y: Result.Ok(dest_y) <- checked_narrow_index :: rect.start_y + scan_y, self.width, self.height, self.stride :: call =>
+                            let scan_x: USize = 0USize
+                            repeat while scan_x < source_width_wide:
+                                select either:
+                                    when source_x: Result.Ok(source_x) <- checked_narrow_index :: scan_x, source_width, source_height, source.stride :: call
+                                    when dest_x: Result.Ok(dest_x) <- checked_narrow_index :: rect.start_x + scan_x, self.width, self.height, self.stride :: call
+                                    when color: Result.Ok(color) <- source.pixel :: source_x, source_y :: method
+                                    when blended: Result.Ok(_) <- self.blend_pixel :: dest_x, dest_y, color :: method =>
+                                        ()
+
+                                with Result.Err(err):
+                                    source_x =>
+                                        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: source_width, source_height, source.stride :: call
+                                        return Result.Err :: error :: call
+                                    dest_x =>
+                                        let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                                        return Result.Err :: error :: call
+                                    color => return Result.Err :: err :: call
+                                    blended => return Result.Err :: err :: call
+                                scan_x = scan_x + ONE_USIZE
+
+                    with Result.Err(_):
+                        source_y =>
                             let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: source_width, source_height, source.stride :: call
                             return Result.Err :: error :: call
-                        let Result.Ok(dest_x) = checked_narrow_index :: rect.start_x + scan_x, self.width, self.height, self.stride :: call else =>
+                        dest_y =>
                             let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
                             return Result.Err :: error :: call
-                        select source.pixel :: source_x, source_y :: method:
-                            when Result.Ok(color) =>
-                                select self.blend_pixel :: dest_x, dest_y, color :: method:
-                                    when Result.Ok(_) => ()
-                                    when Result.Err(err) => return Result.Err :: err :: call
-                            when Result.Err(err) => return Result.Err :: err :: call
-                        scan_x = scan_x + ONE_USIZE
                     scan_y = scan_y + ONE_USIZE
                 return Result.Ok :: :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+
+        with Result.Err(err):
+            rect => return Result.Err :: err :: call
+            source_width_wide =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
+            source_height_wide =>
+                let error = VulkanPresentError.PixelFrameByteCountOutOfRange :: self.width, self.height, self.stride :: call
+                return Result.Err :: error :: call
 
     fn clear(edit self, read fill: RgbaColor) -> Result[Unit, VulkanPresentError]:
         let width = self.width

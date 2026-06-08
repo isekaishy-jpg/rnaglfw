@@ -1,0 +1,68 @@
+use std.Option
+use wrapper.core.{GlfwCStringList, GlfwVkProc, GlfwWindow, GlfwWindowRaw}
+use wrapper.core.glfw_cint_is_true
+
+pub opaque type GlfwVkInstanceRaw
+pub opaque type GlfwVkPhysicalDeviceRaw
+pub opaque type GlfwVkAllocationCallbacksRaw
+
+pub type GlfwVkInstance = *edit GlfwVkInstanceRaw
+pub type GlfwVkPhysicalDevice = *edit GlfwVkPhysicalDeviceRaw
+pub type GlfwVkSurface = U64
+pub type GlfwVkResult = CInt
+pub type GlfwVkGetInstanceProcAddr = extern["c"] fn(GlfwVkInstance, *read CChar) -> Option[GlfwVkProc]
+
+pub struct GlfwVkSurfaceCreateReport:
+    pub result: GlfwVkResult
+    pub surface: GlfwVkSurface
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwInitVulkanLoader(take loader: Option[GlfwVkGetInstanceProcAddr]) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwVulkanSupported() -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetRequiredInstanceExtensions(count: *edit CUInt) -> *read *read CChar
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetInstanceProcAddress(instance: GlfwVkInstance, procname: *read CChar) -> Option[GlfwVkProc]
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetPhysicalDevicePresentationSupport(instance: GlfwVkInstance, device: GlfwVkPhysicalDevice, queuefamily: CUInt) -> CInt
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwCreateWindowSurface(instance: GlfwVkInstance, window: *edit GlfwWindowRaw, allocator: *read GlfwVkAllocationCallbacksRaw, surface: *edit U64) -> GlfwVkResult
+
+pub fn glfw_init_vulkan_loader(take loader: Option[GlfwVkGetInstanceProcAddr]) -> Unit:
+    #unsafe glfwInitVulkanLoader :: loader :: call
+    return
+
+pub fn glfw_vulkan_supported() -> Bool:
+    let supported: CInt = #unsafe glfwVulkanSupported :: :: call
+    return glfw_cint_is_true :: supported :: call
+
+pub fn glfw_required_instance_extensions() -> GlfwCStringList:
+    let count: CUInt = 0
+    let count_ptr: *edit CUInt = #unsafe &raw edit count
+    let base: *read *read CChar = #unsafe glfwGetRequiredInstanceExtensions :: count_ptr :: call
+    return GlfwCStringList :: base, count :: call
+
+pub fn glfw_get_instance_proc_address(instance: GlfwVkInstance, procname: *read CChar) -> Option[GlfwVkProc]:
+    return #unsafe glfwGetInstanceProcAddress :: instance, procname :: call
+
+pub fn glfw_physical_device_presentation_supported(instance: GlfwVkInstance, device: GlfwVkPhysicalDevice, queuefamily: CUInt) -> Bool:
+    let supported: CInt = #unsafe glfwGetPhysicalDevicePresentationSupport :: instance, device, queuefamily :: call
+    return glfw_cint_is_true :: supported :: call
+
+pub fn glfw_create_window_surface(instance: GlfwVkInstance, read window: GlfwWindow, allocator: *read GlfwVkAllocationCallbacksRaw) -> GlfwVkSurfaceCreateReport:
+    let surface: U64 = 0U64
+    let surface_ptr = #unsafe &raw edit surface
+    let result: GlfwVkResult = #unsafe glfwCreateWindowSurface :: instance, window.raw, allocator, surface_ptr :: call
+    return GlfwVkSurfaceCreateReport :: result, surface :: call

@@ -29,36 +29,38 @@ pub(package) fn lookup_loader_symbol[T](read library: DynamicLibrary, read name:
             return Result.Err :: error :: call
 
 pub(package) fn lookup_instance_symbol[T](read library: DynamicLibrary, instance: GlfwVkInstance, name: Str, unavailable_name: Str) -> Result[T, VulkanPresentError]:
-    select maybe_c_string_local :: name :: call:
-        when Result.Ok(proc_name) =>
-            select #unsafe lookup_symbol[extern["system"] fn(GlfwVkInstance, *read CChar) -> Option[T]] :: library, "vkGetInstanceProcAddr" :: call:
-                when Result.Ok(load_proc) =>
-                    let proc_name_ptr = proc_name.as_ptr :: :: method
-                    select #unsafe (load_proc :: instance, proc_name_ptr :: call):
-                        when Option.Some(symbol) => return Result.Ok :: symbol :: call
-                        when Option.None =>
-                            let error = VulkanPresentError.ProcUnavailable :: unavailable_name :: call
-                            return Result.Err :: error :: call
-                when Result.Err(err) =>
-                    let error = VulkanPresentError.SymbolLookup :: err :: call
+    select either:
+        when proc_name: Result.Ok(proc_name) <- maybe_c_string_local :: name :: call
+        when load_proc: Result.Ok(load_proc) <- #unsafe lookup_symbol[extern["system"] fn(GlfwVkInstance, *read CChar) -> Option[T]] :: library, "vkGetInstanceProcAddr" :: call =>
+            let proc_name_ptr = proc_name.as_ptr :: :: method
+            select #unsafe (load_proc :: instance, proc_name_ptr :: call):
+                when Option.Some(symbol) => return Result.Ok :: symbol :: call
+                when Option.None =>
+                    let error = VulkanPresentError.ProcUnavailable :: unavailable_name :: call
                     return Result.Err :: error :: call
-        when Result.Err(err) => return Result.Err :: err :: call
+
+    with Result.Err(err):
+        proc_name => return Result.Err :: err :: call
+        load_proc =>
+            let error = VulkanPresentError.SymbolLookup :: err :: call
+            return Result.Err :: error :: call
 
 fn lookup_device_symbol[T](read library: DynamicLibrary, device: VkDevice, name: Str, unavailable_name: Str) -> Result[T, VulkanPresentError]:
-    select maybe_c_string_local :: name :: call:
-        when Result.Ok(proc_name) =>
-            select #unsafe lookup_symbol[extern["system"] fn(VkDevice, *read CChar) -> Option[T]] :: library, "vkGetDeviceProcAddr" :: call:
-                when Result.Ok(load_proc) =>
-                    let proc_name_ptr = proc_name.as_ptr :: :: method
-                    select #unsafe (load_proc :: device, proc_name_ptr :: call):
-                        when Option.Some(symbol) => return Result.Ok :: symbol :: call
-                        when Option.None =>
-                            let error = VulkanPresentError.ProcUnavailable :: unavailable_name :: call
-                            return Result.Err :: error :: call
-                when Result.Err(err) =>
-                    let error = VulkanPresentError.SymbolLookup :: err :: call
+    select either:
+        when proc_name: Result.Ok(proc_name) <- maybe_c_string_local :: name :: call
+        when load_proc: Result.Ok(load_proc) <- #unsafe lookup_symbol[extern["system"] fn(VkDevice, *read CChar) -> Option[T]] :: library, "vkGetDeviceProcAddr" :: call =>
+            let proc_name_ptr = proc_name.as_ptr :: :: method
+            select #unsafe (load_proc :: device, proc_name_ptr :: call):
+                when Option.Some(symbol) => return Result.Ok :: symbol :: call
+                when Option.None =>
+                    let error = VulkanPresentError.ProcUnavailable :: unavailable_name :: call
                     return Result.Err :: error :: call
-        when Result.Err(err) => return Result.Err :: err :: call
+
+    with Result.Err(err):
+        proc_name => return Result.Err :: err :: call
+        load_proc =>
+            let error = VulkanPresentError.SymbolLookup :: err :: call
+            return Result.Err :: error :: call
 
 pub(package) fn copy_required_extension_array() -> Result[([*read CChar; 2], [MaybeStr; 2]), VulkanPresentError]:
     select vulkan_required_instance_extensions :: :: call:

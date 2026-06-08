@@ -1,7 +1,5 @@
 pub mod present
 mod auxiliary_support
-mod binding_copy_support
-mod binding_support
 mod buffer_io_support
 mod buffer_support
 mod command_support
@@ -13,20 +11,15 @@ mod image_io_support
 mod image_present_support
 mod image_resource_support
 mod init_support
-mod joystick_support
 mod loader_support
-mod lookup_support
 mod memory_support
 mod mapped_memory_support
 mod modifier_event_support
 mod owned_window
 mod pixel_support
 mod present_resource_support
-mod presence_support
 mod raw_input_event_support
 mod requirements_support
-mod runtime_support
-mod semaphore_support
 mod submission_support
 mod surface_image_support
 mod surface_support

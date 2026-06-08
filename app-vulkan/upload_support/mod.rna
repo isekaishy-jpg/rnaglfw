@@ -486,22 +486,20 @@ impl VulkanPresentContext:
             when Result.Err(err) => return Result.Err :: err :: call
 
     fn surface_transfer_source_buffer_image(read self, read upload: VulkanTransferSourceBuffer) -> Result[RgbaImage, VulkanPresentError]:
-        select self.surface_transfer_source_buffer_pixel_frame :: upload :: method:
-            when Result.Ok(surface_frame) =>
-                select surface_frame.converted_frame :: VulkanPixelFormat.Rgba8 :: method:
-                    when Result.Ok(rgba_frame) =>
-                        let width = rgba_frame.width :: :: method
-                        let height = rgba_frame.height :: :: method
-                        select rgba_frame.copy_pixels :: :: method:
-                            when Result.Ok(rgba_pixels) =>
-                                select rgba_image :: width, height, rgba_pixels :: call:
-                                    when Result.Ok(image) => return Result.Ok :: image :: call
-                                    when Result.Err(err) =>
-                                        let error = VulkanPresentError.ImageCreate :: err :: call
-                                        return Result.Err :: error :: call
-                            when Result.Err(err) => return Result.Err :: err :: call
-                    when Result.Err(err) => return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when surface_frame: Result.Ok(surface_frame) <- self.surface_transfer_source_buffer_pixel_frame :: upload :: method
+            when rgba_frame: Result.Ok(rgba_frame) <- surface_frame.converted_frame :: VulkanPixelFormat.Rgba8 :: method
+            when rgba_pixels: Result.Ok(rgba_pixels) <- rgba_frame.copy_pixels :: :: method
+            when image: Result.Ok(image) <- rgba_image :: rgba_frame.width :: :: method, rgba_frame.height :: :: method, rgba_pixels :: call =>
+                return Result.Ok :: image :: call
+
+        with Result.Err(err):
+            surface_frame => return Result.Err :: err :: call
+            rgba_frame => return Result.Err :: err :: call
+            rgba_pixels => return Result.Err :: err :: call
+            image =>
+                let error = VulkanPresentError.ImageCreate :: err :: call
+                return Result.Err :: error :: call
 
     fn write_surface_transfer_source_buffer(read self, read upload: VulkanTransferSourceBuffer, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
         select self.surface_rgba_byte_count :: :: method:

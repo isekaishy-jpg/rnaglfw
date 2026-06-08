@@ -9,12 +9,12 @@ use joystick.{GamepadAxis, GamepadButton, GamepadState, HatState, Joystick}
 use joystick.{hat_state_from_raw, hat_state_raw, joystick_from_id}
 use mailbox.{WindowMailbox, allocate_window_mailbox, attach_callbacks}
 use mailbox.{clear_user_pointer, drain_window_mailbox, free_window_mailbox}
-use runtime_snapshot_support.{copy_monitor_snapshot, copy_window_snapshot}
-use runtime_window_appearance_support.{WindowAppearanceSettings, apply_window_appearance}
-use runtime_window_hook_support.{attach_window_platform_support, detach_window_platform_support}
-use win32_window_icon_support.destroy_window_taskbar_icon
-use win32_window_control_support.{set_window_menu, set_window_owner_window}
-use win32_drag_drop_support.{initialize_drag_drop_runtime, uninitialize_drag_drop_runtime}
+use runtime.snapshot_support.{copy_monitor_snapshot, copy_window_snapshot}
+use runtime.window_appearance_support.{WindowAppearanceSettings, apply_window_appearance}
+use runtime.window_hook_support.{attach_window_platform_support, detach_window_platform_support}
+use window.platform_win32.window_icon_support.destroy_window_taskbar_icon
+use window.platform_win32.window_control_support.{set_window_menu, set_window_owner_window}
+use window.platform_win32.drag_drop_support.{initialize_drag_drop_runtime, uninitialize_drag_drop_runtime}
 use glfw.{GlfwCursorPos, GlfwMonitor, GlfwMonitorRaw, GlfwPoint, GlfwScale}
 use glfw.{GlfwSize, GlfwWindow, GlfwWindowRaw, glfw_create_window_raw}
 use glfw.glfw_default_window_hints
@@ -28,6 +28,21 @@ use glfw.{glfw_post_empty_event, glfw_terminate, glfw_wait_events}
 use glfw.{glfw_wait_events_timeout, glfw_window_hint, glfw_window_hint_bool}
 use glfw.{glfw_window_hint_no_api, glfw_window_hint_string}
 use glfw.glfw_set_win32_parent_window_hint
+pub(package) mod filtered_event_support
+pub(package) mod joystick_snapshot_support
+pub(package) mod lifecycle_event_support
+pub(package) mod live_index_support
+pub(package) mod live_lookup_support
+pub(package) mod snapshot_support
+pub(package) mod window_appearance_support
+pub(package) mod window_composition_event_support
+pub(package) mod window_hook_support
+pub(package) mod window_hovered_file_event_support
+pub(package) mod window_input_event_support
+pub(package) mod window_modifier_event_support
+pub(package) mod window_raw_input_list_support
+pub(package) mod window_state_event_support
+pub(package) mod window_touch_event_support
 use graphics.Win32MonitorNames
 use system.{Platform, RuntimeErrorInfo, VersionInfo, runtime_last_error}
 use system.{runtime_platform, runtime_platform_raw, runtime_platform_supported}
@@ -38,6 +53,7 @@ use window.{MonitorGammaRamp, OpenGlProfile, Point, Rect, RgbaImage, Scale, Size
 use window.{Window, WindowId, Win32HWnd}
 use window.WindowAppearanceError
 use window.WindowTaskbarIconError
+use window.WindowThemeError
 use window.WindowInputSnapshot
 use window.{client_api_raw, context_creation_api_raw}
 use window.opengl_profile_raw
@@ -76,10 +92,10 @@ pub enum AppError:
     WindowClipChildrenApplyFailed
     WindowTaskbarIconApplyFailed(WindowTaskbarIconError)
     WindowAppearanceApplyFailed(WindowAppearanceError)
+    WindowThemeApplyFailed(WindowThemeError)
     WindowControlHookInstallFailed
     ImeHookInstallFailed
     RawInputHookInstallFailed
-    ThemeHookInstallFailed
     TouchHookInstallFailed
     DragDropRuntimeInitFailed
     DragDropHookInstallFailed
@@ -354,6 +370,10 @@ struct RawWindowCreation:
     window_icon: Option[RgbaImage]
     taskbar_icon: Option[RgbaImage]
     appearance_settings: WindowAppearanceSettings
+struct WindowDisplayPlan:
+    visible: Bool
+    focused: Bool
+    focus_on_show: Bool
 struct MonitorRecord:
     pub(package) raw: *edit GlfwMonitorRaw
     pub(package) id: MonitorId
@@ -1170,10 +1190,10 @@ fn create_raw_window_from_spec(take spec: WindowSpec) -> Result[RawWindowCreatio
             return Result.Err :: AppError.InvalidWindowSpec :: call
         else => ()
     glfw_default_window_hints :: :: call
-    glfw_window_hint_bool :: 0x00020004, spec.visible :: call
+    glfw_window_hint_bool :: 0x00020004, false :: call
     glfw_window_hint_bool :: 0x00020003, spec.resizable :: call
     glfw_window_hint_bool :: 0x00020005, spec.decorated :: call
-    glfw_window_hint_bool :: 0x00020001, spec.focused :: call
+    glfw_window_hint_bool :: 0x00020001, false :: call
     glfw_window_hint_bool :: 0x00020006, spec.auto_iconify :: call
     glfw_window_hint_bool :: 0x00020007, spec.floating :: call
     glfw_window_hint_bool :: 0x00020008, spec.maximized :: call
@@ -1242,10 +1262,10 @@ fn create_raw_window_from_spec(take spec: WindowSpec) -> Result[RawWindowCreatio
                 when Result.Ok(_) => ()
                 when Result.Err(err) => return Result.Err :: err :: call
         when Option.None => ()
-    let Result.Ok(width) = index_to_cint :: spec.width :: call else => return Result.Err :: AppError.InvalidWindowSpec :: call
-    let Result.Ok(height) = index_to_cint :: spec.height :: call else => return Result.Err :: AppError.InvalidWindowSpec :: call
-    select maybe_c_string :: spec.title :: call:
-        when Result.Ok(title) =>
+    select either:
+        when width: Result.Ok(width) <- index_to_cint :: spec.width :: call
+        when height: Result.Ok(height) <- index_to_cint :: spec.height :: call
+        when title: Result.Ok(title) <- maybe_c_string :: spec.title :: call =>
             let title_ptr = title.as_ptr :: :: method
             let raw_window = glfw_create_window_raw :: width, height, title_ptr, spec.monitor, spec.share :: call
             select:
@@ -1264,7 +1284,33 @@ fn create_raw_window_from_spec(take spec: WindowSpec) -> Result[RawWindowCreatio
                         taskbar_icon = spec.win32_taskbar_icon
                         appearance_settings = appearance_settings
                     return Result.Ok :: created :: call
-        when Result.Err(_) => return Result.Err :: AppError.InvalidWindowSpec :: call
+
+    with Result.Err(_):
+        width => return Result.Err :: AppError.InvalidWindowSpec :: call
+        height => return Result.Err :: AppError.InvalidWindowSpec :: call
+        title => return Result.Err :: AppError.InvalidWindowSpec :: call
+
+fn window_display_plan_from_spec(read spec: WindowSpec) -> WindowDisplayPlan:
+    return WindowDisplayPlan :: :: call
+        visible = spec.visible
+        focused = spec.focused
+        focus_on_show = spec.focus_on_show
+
+fn apply_window_display_plan(read window: Window, read display_plan: WindowDisplayPlan) -> Unit:
+    let initial_focus_on_show = false
+    select:
+        when display_plan.visible && display_plan.focused && display_plan.focus_on_show => initial_focus_on_show = true
+        else => ()
+    window.set_focus_on_show :: initial_focus_on_show :: method
+    select:
+        when display_plan.visible => window.show :: :: method
+        else => ()
+    window.set_focus_on_show :: display_plan.focus_on_show :: method
+    select:
+        when display_plan.visible && display_plan.focused && !display_plan.focus_on_show => window.focus :: :: method
+        else => ()
+    return
+
 fn register_created_window(edit app: App, take window: Window, mailbox: *edit WindowMailbox) -> Unit:
     let id = window.id
     let record = window_record :: window, mailbox, 0 :: call
@@ -1275,19 +1321,23 @@ fn register_created_window(edit app: App, take window: Window, mailbox: *edit Wi
     return
 
 fn apply_created_window_taskbar_icon(read window: Window, raw_window: GlfwWindow, mailbox: *edit WindowMailbox, take taskbar_icon: Option[RgbaImage]) -> Result[Unit, AppError]:
-    select taskbar_icon:
-        when Option.Some(image) =>
-            select window.set_taskbar_icon_image :: image :: method:
-                when Result.Ok(_) => return Result.Ok :: () :: call
-                when Result.Err(error) =>
-                    detach_window_platform_support :: window :: call
-                    clear_user_pointer :: raw_window :: call
-                    destroy_window_taskbar_icon :: mailbox :: call
-                    free_window_mailbox :: mailbox :: call
-                    window.destroy :: :: method
-                    let failure = AppError.WindowTaskbarIconApplyFailed :: error :: call
-                    return Result.Err :: failure :: call
-        when Option.None => return Result.Ok :: () :: call
+    select either:
+        when image: Option.Some(image) <- taskbar_icon
+        when applied: Result.Ok(_) <- window.set_taskbar_icon_image :: image :: method =>
+            return Result.Ok :: () :: call
+
+    with Option.None:
+        image => return Result.Ok :: () :: call
+
+    with Result.Err(error):
+        applied =>
+            detach_window_platform_support :: window :: call
+            clear_user_pointer :: raw_window :: call
+            destroy_window_taskbar_icon :: mailbox :: call
+            free_window_mailbox :: mailbox :: call
+            window.destroy :: :: method
+            let failure = AppError.WindowTaskbarIconApplyFailed :: error :: call
+            return Result.Err :: failure :: call
 
 fn destroy_failed_created_window(read window: Window, mailbox: *edit WindowMailbox) -> Unit:
     detach_window_platform_support :: window :: call
@@ -1297,7 +1347,7 @@ fn destroy_failed_created_window(read window: Window, mailbox: *edit WindowMailb
     window.destroy :: :: method
     return
 
-pub fn app_create_window(edit app: App, take spec: WindowSpec) -> Result[Window, AppError]:
+fn create_configured_window(edit app: App, take spec: WindowSpec) -> Result[Window, AppError]:
     let raw_window_level = window_level_raw :: spec.window_level :: call
     let resize_increment_width = spec.resize_increment_width
     let resize_increment_height = spec.resize_increment_height
@@ -1382,12 +1432,23 @@ pub fn app_create_window(edit app: App, take spec: WindowSpec) -> Result[Window,
                     window.destroy :: :: method
                     return Result.Err :: AppError.MailboxAllocFailed :: call
         when Result.Err(err) => return Result.Err :: err :: call
+
+pub fn app_create_window(edit app: App, take spec: WindowSpec) -> Result[Window, AppError]:
+    let display_plan = window_display_plan_from_spec :: spec :: call
+    select create_configured_window :: app, spec :: call:
+        when Result.Ok(window) =>
+            apply_window_display_plan :: window, display_plan :: call
+            return Result.Ok :: window :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
 pub fn app_create_centered_window_on(edit app: App, take spec: WindowSpec, read monitor: Monitor) -> Result[Window, AppError]:
-    select app_create_window :: app, spec :: call:
+    let display_plan = window_display_plan_from_spec :: spec :: call
+    select create_configured_window :: app, spec :: call:
         when Result.Ok(window) =>
             select:
                 when !window.fullscreen :: :: method => window.center_on :: monitor :: method
                 else => ()
+            apply_window_display_plan :: window, display_plan :: call
             return Result.Ok :: window :: call
         when Result.Err(err) => return Result.Err :: err :: call
 pub fn app_create_primary_centered_window(edit app: App, take spec: WindowSpec) -> Result[Window, AppError]:
@@ -2056,23 +2117,31 @@ impl App:
     fn pending_event_count(read self) -> Index:
         return self.pending.count :: :: method
     fn clipboard_string(read self) -> Result[Str, AppClipboardError]:
-        select clipboard_anchor_window :: self :: call:
-            when Option.Some(window) =>
-                select window.clipboard_string :: :: method:
-                    when Result.Ok(text) => return Result.Ok :: text :: call
-                    when Result.Err(err) =>
-                        let value = AppClipboardError.TextDecode :: err :: call
-                        return Result.Err :: value :: call
-            when Option.None => return Result.Err :: AppClipboardError.WindowUnavailable :: call
+        select either:
+            when window: Option.Some(window) <- clipboard_anchor_window :: self :: call
+            when text: Result.Ok(text) <- window.clipboard_string :: :: method =>
+                return Result.Ok :: text :: call
+
+        with Option.None:
+            window => return Result.Err :: AppClipboardError.WindowUnavailable :: call
+
+        with Result.Err(err):
+            text =>
+                let value = AppClipboardError.TextDecode :: err :: call
+                return Result.Err :: value :: call
     fn set_clipboard_string(read self, text: Str) -> Result[Unit, AppClipboardError]:
-        select clipboard_anchor_window :: self :: call:
-            when Option.Some(window) =>
-                select window.set_clipboard_string :: text :: method:
-                    when Result.Ok(_) => return Result.Ok :: () :: call
-                    when Result.Err(err) =>
-                        let value = AppClipboardError.TextDecode :: err :: call
-                        return Result.Err :: value :: call
-            when Option.None => return Result.Err :: AppClipboardError.WindowUnavailable :: call
+        select either:
+            when window: Option.Some(window) <- clipboard_anchor_window :: self :: call
+            when applied: Result.Ok(_) <- window.set_clipboard_string :: text :: method =>
+                return Result.Ok :: () :: call
+
+        with Option.None:
+            window => return Result.Err :: AppClipboardError.WindowUnavailable :: call
+
+        with Result.Err(err):
+            applied =>
+                let value = AppClipboardError.TextDecode :: err :: call
+                return Result.Err :: value :: call
     fn snapshot(read self) -> AppSnapshot:
         let live = self.is_live :: :: method
         let has_pending_events = self.has_pending_events :: :: method

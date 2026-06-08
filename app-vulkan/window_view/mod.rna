@@ -1,7 +1,9 @@
 use std.{List, Option, Result, Str}
 
 use present.VulkanPresentApp
-use runa_app.{AppError, Monitor, VideoMode, Window, WindowId, WindowModeError, WindowSnapshot, WindowSpec}
+use runa_app.{AppClipboardError, AppError, AppSnapshot, Joystick, JoystickId, JoystickSnapshot}
+use runa_app.{Monitor, MonitorId, MonitorSnapshot, Platform, RuntimeErrorInfo, TextDecodeError}
+use runa_app.{VersionInfo, VideoMode, Window, WindowId, WindowModeError, WindowSnapshot, WindowSpec}
 
 impl VulkanPresentApp:
     fn window_by_id(read self, id: WindowId) -> Result[Window, AppError]:
@@ -271,3 +273,172 @@ impl VulkanPresentApp:
 
     fn create_primary_centered_opengl_compat_debug_srgb_window(edit self, take title: Str, width: Index, height: Index, major: CInt, minor: CInt) -> Result[Window, AppError]:
         return self.app.create_primary_centered_opengl_compat_debug_srgb_window :: title, width, height, major, minor :: method
+
+    fn snapshot(read self) -> AppSnapshot:
+        return self.app.snapshot :: :: method
+
+    fn version_info(read self) -> VersionInfo:
+        return self.app.version_info :: :: method
+
+    fn version_string(read self) -> Result[Str, TextDecodeError]:
+        return self.app.version_string :: :: method
+
+    fn current_platform(read self) -> Platform:
+        return self.app.current_platform :: :: method
+
+    fn platform_supported(read self, read platform: Platform) -> Bool:
+        return self.app.platform_supported :: platform :: method
+
+    fn last_error(read self) -> Result[Option[RuntimeErrorInfo], TextDecodeError]:
+        return self.app.last_error :: :: method
+
+    fn clipboard_string(read self) -> Result[Str, AppClipboardError]:
+        return self.app.clipboard_string :: :: method
+
+    fn set_clipboard_string(read self, text: Str) -> Result[Unit, AppClipboardError]:
+        return self.app.set_clipboard_string :: text :: method
+
+    fn time(read self) -> F64:
+        return self.app.time :: :: method
+
+    fn set_time(read self, time_value: F64) -> Unit:
+        self.app.set_time :: time_value :: method
+        return
+
+    fn timer_value(read self) -> U64:
+        return self.app.timer_value :: :: method
+
+    fn timer_frequency(read self) -> U64:
+        return self.app.timer_frequency :: :: method
+
+    fn window_by_id_option(read self, id: WindowId) -> Option[Window]:
+        return self.app.window_option :: id :: method
+
+    fn window_snapshot_by_id_option(read self, id: WindowId) -> Option[WindowSnapshot]:
+        return self.app.window_snapshot_option :: id :: method
+
+    fn current_context_window_option(read self) -> Option[Window]:
+        return self.app.current_context_window_option :: :: method
+
+    fn current_context_window_snapshot_option(read self) -> Option[WindowSnapshot]:
+        return self.app.current_context_window_snapshot_option :: :: method
+
+    fn primary_monitor_option(read self) -> Option[Monitor]:
+        return self.app.primary_monitor_option :: :: method
+
+    fn monitor_option(read self, id: MonitorId) -> Option[Monitor]:
+        return self.app.monitor_option :: id :: method
+
+    fn monitor_snapshot_option(read self, id: MonitorId) -> Option[MonitorSnapshot]:
+        return self.app.monitor_snapshot_option :: id :: method
+
+    fn primary_monitor_id_option(read self) -> Option[MonitorId]:
+        return self.app.primary_monitor_id_option :: :: method
+
+    fn primary_monitor_snapshot_option(read self) -> Option[MonitorSnapshot]:
+        return self.app.primary_monitor_snapshot_option :: :: method
+
+    fn monitor(read self, id: MonitorId) -> Result[Monitor, AppError]:
+        return self.app.monitor :: id :: method
+
+    fn monitor_snapshot(read self, id: MonitorId) -> Result[MonitorSnapshot, AppError]:
+        return self.app.monitor_snapshot :: id :: method
+
+    fn primary_monitor(read self) -> Result[Monitor, AppError]:
+        return self.app.primary_monitor :: :: method
+
+    fn primary_monitor_id(read self) -> Result[MonitorId, AppError]:
+        return self.app.primary_monitor_id :: :: method
+
+    fn primary_monitor_snapshot(read self) -> Result[MonitorSnapshot, AppError]:
+        return self.app.primary_monitor_snapshot :: :: method
+
+    fn monitor_index(read self, id: MonitorId) -> Option[Index]:
+        return self.app.monitor_index :: id :: method
+
+    fn has_monitor(read self, id: MonitorId) -> Bool:
+        return self.app.has_monitor :: id :: method
+
+    fn primary_monitor_index(read self) -> Option[Index]:
+        return self.app.primary_monitor_index :: :: method
+
+    fn has_monitors(read self) -> Bool:
+        return self.app.has_monitors :: :: method
+
+    fn has_joysticks(read self) -> Bool:
+        return self.app.has_joysticks :: :: method
+
+    fn has_current_context_window(read self) -> Bool:
+        return self.app.has_current_context_window :: :: method
+
+    fn has_primary_monitor(read self) -> Bool:
+        return self.app.has_primary_monitor :: :: method
+
+    fn monitor_count(read self) -> Index:
+        return self.app.monitor_count :: :: method
+
+    fn monitor_ids(read self) -> List[MonitorId]:
+        return self.app.monitor_ids :: :: method
+
+    fn monitors_snapshot(read self) -> List[Monitor]:
+        return self.app.monitors_snapshot :: :: method
+
+    fn monitor_snapshots(read self) -> List[MonitorSnapshot]:
+        return self.app.monitor_snapshots :: :: method
+
+    fn joystick_index(read self, id: JoystickId) -> Option[Index]:
+        return self.app.joystick_index :: id :: method
+
+    fn has_joystick(read self, id: JoystickId) -> Bool:
+        return self.app.has_joystick :: id :: method
+
+    fn connected_joystick_count(read self) -> Index:
+        return self.app.connected_joystick_count :: :: method
+
+    fn connected_joystick_ids(read self) -> List[JoystickId]:
+        return self.app.connected_joystick_ids :: :: method
+
+    fn joystick_option(read self, id: JoystickId) -> Option[Joystick]:
+        return self.app.joystick_option :: id :: method
+
+    fn joystick_snapshot_option(read self, id: JoystickId) -> Option[JoystickSnapshot]:
+        return self.app.joystick_snapshot_option :: id :: method
+
+    fn joystick(read self, id: JoystickId) -> Joystick:
+        return self.app.joystick :: id :: method
+
+    fn joystick_snapshot(read self, id: JoystickId) -> JoystickSnapshot:
+        return self.app.joystick_snapshot :: id :: method
+
+    fn gamepad(read self, id: JoystickId) -> Option[Joystick]:
+        return self.app.gamepad :: id :: method
+
+    fn gamepad_snapshot(read self, id: JoystickId) -> Option[JoystickSnapshot]:
+        return self.app.gamepad_snapshot :: id :: method
+
+    fn gamepad_index(read self, id: JoystickId) -> Option[Index]:
+        return self.app.gamepad_index :: id :: method
+
+    fn has_gamepad(read self, id: JoystickId) -> Bool:
+        return self.app.has_gamepad :: id :: method
+
+    fn gamepad_count(read self) -> Index:
+        return self.app.gamepad_count :: :: method
+
+    fn has_gamepads(read self) -> Bool:
+        return self.app.has_gamepads :: :: method
+
+    fn gamepad_ids(read self) -> List[JoystickId]:
+        return self.app.gamepad_ids :: :: method
+
+    fn connected_joysticks(read self) -> List[Joystick]:
+        return self.app.connected_joysticks :: :: method
+
+    fn joystick_snapshots(read self) -> List[JoystickSnapshot]:
+        return self.app.joystick_snapshots :: :: method
+
+    fn gamepads(read self) -> List[Joystick]:
+        return self.app.gamepads :: :: method
+
+    fn gamepad_snapshots(read self) -> List[JoystickSnapshot]:
+        return self.app.gamepad_snapshots :: :: method

@@ -3,34 +3,37 @@ use bridge.{TextDecodeError, bool_to_cint, maybe_c_string}
 use bridge.index_to_cint
 use bridge.copy_c_string
 use mailbox.{current_window_size_limits, request_window_refresh, set_window_size_limits}
-use win32_window_appearance_support.{current_window_border_color, current_window_corner_preference}
-use win32_window_appearance_support.{current_window_system_backdrop, current_window_title_background_color}
-use win32_window_appearance_support.{current_window_title_text_color, current_window_undecorated_shadow}
-use win32_drag_drop_support.{current_window_drag_drop_enabled, set_window_drag_drop_enabled}
-use win32_ime_support.{current_window_ime_allowed, current_window_ime_cursor_area}
-use win32_ime_support.{set_window_ime_allowed, set_window_ime_cursor_area}
-use win32_theme_support.{current_window_theme, set_window_theme}
-use win32_window_icon_support.{clear_window_taskbar_icon, set_window_taskbar_icon}
-use win32_window_appearance_support.{set_window_border_color, set_window_corner_preference}
-use win32_window_appearance_support.{set_window_system_backdrop, set_window_title_background_color}
-use win32_window_appearance_support.{set_window_title_text_color, set_window_undecorated_shadow}
-use win32_window_control_support.{current_window_buttons, current_window_content_protected}
-use win32_window_control_support.{current_window_clip_children, current_window_no_redirection_bitmap}
-use win32_window_control_support.{current_window_enabled, current_window_owner_window, current_window_skip_taskbar}
-use win32_window_control_support.current_window_level
-use win32_window_control_support.current_window_resize_increments
-use win32_window_control_support.{drag_resize_window_interaction, set_window_content_protected}
-use win32_window_control_support.{drag_window_interaction, set_window_buttons}
-use win32_window_control_support.set_window_clip_children
-use win32_window_control_support.set_window_resize_increments
-use win32_window_control_support.{set_window_enabled, set_window_skip_taskbar}
-use win32_window_control_support.{set_window_level, sync_window_level_for_floating}
-use win32_window_control_support.{request_window_attention, show_window_system_menu}
+use window.platform_win32.window_appearance_support.{current_window_border_color, current_window_corner_preference}
+use window.platform_win32.window_appearance_support.{current_window_system_backdrop, current_window_title_background_color}
+use window.platform_win32.window_appearance_support.{current_window_title_text_color, current_window_undecorated_shadow}
+use window.platform_win32.drag_drop_support.{current_window_drag_drop_enabled, set_window_drag_drop_enabled}
+use window.platform_win32.ime_support.{current_window_ime_allowed, current_window_ime_cursor_area}
+use window.platform_win32.ime_support.{set_window_ime_allowed, set_window_ime_cursor_area}
+use window.platform_win32.theme_support.{current_window_theme, set_window_theme}
+use window.platform_win32.window_icon_support.{clear_window_taskbar_icon, set_window_taskbar_icon}
+use window.platform_win32.window_appearance_support.{set_window_border_color, set_window_corner_preference}
+use window.platform_win32.window_appearance_support.{set_window_system_backdrop, set_window_title_background_color}
+use window.platform_win32.window_appearance_support.{set_window_title_text_color, set_window_undecorated_shadow}
+use window.platform_win32.window_control_support.{current_window_buttons, current_window_content_protected}
+use window.platform_win32.window_control_support.{current_window_clip_children, current_window_no_redirection_bitmap}
+use window.platform_win32.window_control_support.{current_window_enabled, current_window_owner_window, current_window_skip_taskbar}
+use window.platform_win32.window_control_support.current_window_level
+use window.platform_win32.window_control_support.current_window_resize_increments
+use window.platform_win32.window_control_support.{drag_resize_window_interaction, set_window_content_protected}
+use window.platform_win32.window_control_support.{drag_window_interaction, set_window_buttons}
+use window.platform_win32.window_control_support.set_window_clip_children
+use window.platform_win32.window_control_support.set_window_resize_increments
+use window.platform_win32.window_control_support.{set_window_enabled, set_window_skip_taskbar}
+use window.platform_win32.window_control_support.{set_window_level, sync_window_level_for_floating}
+use window.platform_win32.window_control_support.{request_window_attention, show_window_system_menu}
+use window.rgba_support.gamma_ramp_channel_count
+pub use window.rgba_support.{MonitorGammaRamp, MonitorGammaRampError, RgbaColor, RgbaImage, RgbaImageError}
+pub use window.rgba_support.{monitor_gamma_ramp, rgba_blend_source_over, rgba_color, rgba_image, solid_rgba_image}
 use glfw.{GlfwCursor, GlfwCursorPos, GlfwFrameSize, GlfwGammaRamp, GlfwImage}
 use glfw.{GlfwMonitor, GlfwRect}
 use glfw.{GlfwMonitorRaw, GlfwPoint, GlfwScale, GlfwSize, GlfwVideoMode}
 use glfw.{GlfwWin32HWnd, GlfwWindow, GlfwWindowMonitorSpec, GlfwWindowRaw}
-use glfw.{glfw_create_cursor, glfw_image}
+use glfw.glfw_create_cursor
 use glfw.{glfw_create_standard_cursor, glfw_cursor_none, glfw_monitor_none}
 use glfw.{glfw_monitors, glfw_post_empty_event}
 use glfw.{glfw_monitor_raw_handle, glfw_window_raw_handle}
@@ -38,6 +41,13 @@ use input.{InputAction, KeyCode, MouseButton, ScanCode}
 use input.{input_action_from_raw, key_from_raw, key_raw, key_scancode}
 use input.{mouse_button_from_raw, mouse_button_raw}
 use glfw.{glfw_primary_monitor, glfw_raw_mouse_motion_supported, glfw_swap_interval}
+
+pub mod spec
+pub mod host
+pub mod interop
+pub mod monitor
+pub mod platform_win32
+pub mod rgba_support
 pub type WindowId = USize
 pub type Point = GlfwPoint
 pub type Size = GlfwSize
@@ -110,16 +120,6 @@ pub enum ContextCreationApi:
 pub enum WindowModeError:
     MissingVideoMode
     SizeOutOfRange
-pub enum MonitorGammaRampError:
-    Empty
-    ChannelLengthMismatch
-    ChannelCountOutOfRange
-pub enum RgbaImageError:
-    ZeroSize
-    SizeOutOfRange
-    PixelCountMismatch
-    CoordOutOfRange(Index, Index, CInt, CInt)
-    RectZeroSize
 pub enum WindowIconError:
     CountOutOfRange
 pub enum WindowTaskbarIconError:
@@ -146,7 +146,9 @@ pub enum WindowControlError:
     AttentionRequestFailed
 pub enum WindowThemeError:
     NativeWindowUnavailable
+    SystemThemeUnavailable
     ThemeUpdateFailed
+    ThemeHookInstallFailed
 pub enum WindowAppearanceError:
     NativeWindowUnavailable
     UndecoratedShadowUpdateFailed
@@ -155,11 +157,6 @@ pub enum WindowAppearanceError:
     TitleBackgroundColorUpdateFailed
     TitleTextColorUpdateFailed
     CornerPreferenceUpdateFailed
-pub struct RgbaColor:
-    pub red: U8
-    pub green: U8
-    pub blue: U8
-    pub alpha: U8
 pub struct WindowButtons:
     pub close: Bool
     pub minimize: Bool
@@ -173,10 +170,6 @@ pub enum WindowResizeDirection:
     NorthEast
     SouthWest
     SouthEast
-pub struct MonitorGammaRamp:
-    pub red: List[CUShort]
-    pub green: List[CUShort]
-    pub blue: List[CUShort]
 pub struct WindowPlacement:
     pub pos: Point
     pub size: Size
@@ -188,20 +181,6 @@ pub struct WindowSizeLimits:
 pub struct WindowAspectRatio:
     pub numerator: CInt
     pub denominator: CInt
-pub struct RgbaImage:
-    pub(package) width: CInt
-    pub(package) height: CInt
-    pub(package) pixels: ByteBuffer
-struct CheckedRgbaRect:
-    start_x: CInt
-    start_y: CInt
-    width: CInt
-    height: CInt
-struct BlendFactors:
-    dest_alpha: USize
-    source_alpha: USize
-    inv_source_alpha: USize
-    out_alpha: USize
 pub struct WindowSpec:
     pub title: Str
     pub width: Index
@@ -287,36 +266,6 @@ const FIRST_KEY_RAW: CInt = 32
 const LAST_KEY_RAW: CInt = 348
 const FIRST_MOUSE_BUTTON_RAW: CInt = 0
 const LAST_MOUSE_BUTTON_RAW: CInt = 7
-fn gamma_channel_slot_at(base: *edit CUShort, index: CUInt) -> *edit CUShort:
-    let slot: *edit CUShort = base
-    let scan: CUInt = 0
-    repeat while scan < index:
-        slot = #unsafe slot.offset :: POINTER_OFFSET_STEP :: method
-        scan = scan + 1
-    return slot
-fn copy_gamma_channel(base: *edit CUShort, count: CUInt) -> List[CUShort]:
-    let values = List[CUShort] :: :: call
-    select:
-        when base.is_null :: :: method => return values
-        else => ()
-    let scan: CUInt = 0
-    repeat while scan < count:
-        let slot = gamma_channel_slot_at :: base, scan :: call
-        let value: CUShort = #unsafe slot.load :: :: method
-        values.push :: value :: method
-        scan = scan + 1
-    return values
-fn gamma_ramp_channel_count(read ramp: MonitorGammaRamp) -> Result[CUInt, MonitorGammaRampError]:
-    let red_count = ramp.red.count :: :: method
-    let green_count = ramp.green.count :: :: method
-    let blue_count = ramp.blue.count :: :: method
-    select:
-        when red_count == 0 => return Result.Err :: MonitorGammaRampError.Empty :: call
-        when green_count != red_count => return Result.Err :: MonitorGammaRampError.ChannelLengthMismatch :: call
-        when blue_count != red_count => return Result.Err :: MonitorGammaRampError.ChannelLengthMismatch :: call
-        else => ()
-    let Result.Ok(count) = red_count as Maybe[CUInt] else => return Result.Err :: MonitorGammaRampError.ChannelCountOutOfRange :: call
-    return Result.Ok :: count :: call
 fn known_key_code(raw: CInt) -> Option[KeyCode]:
     let key = key_from_raw :: raw :: call
     select key:
@@ -348,86 +297,6 @@ fn mouse_button_list_contains(read values: List[MouseButton], read button: Mouse
             when current_raw == target_raw => return true
             else => scan = scan + 1
     return false
-fn rgba_expected_byte_count(raw_width: CInt, raw_height: CInt) -> Result[Index, RgbaImageError]:
-    let raw_pixel_count: CInt = raw_width * raw_height
-    let raw_byte_count: CInt = raw_pixel_count * 4
-    let Result.Ok(expected) = raw_byte_count as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    return Result.Ok :: expected :: call
-fn rgba_checked_offset(read image: RgbaImage, x: Index, y: Index) -> Result[Index, RgbaImageError]:
-    let Result.Ok(raw_x) = index_to_cint :: x :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let Result.Ok(raw_y) = index_to_cint :: y :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    select:
-        when raw_x >= image.width || raw_y >= image.height =>
-            let error = RgbaImageError.CoordOutOfRange :: x, y, image.width, image.height :: call
-            return Result.Err :: error :: call
-        else => ()
-    let raw_offset: CInt = ((raw_y * image.width) + raw_x) * 4
-    let Result.Ok(offset) = raw_offset as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    return Result.Ok :: offset :: call
-fn rgba_channel_index(offset: Index, delta: USize) -> Result[Index, RgbaImageError]:
-    let Result.Ok(offset_wide) = offset as Maybe[USize] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let target_wide: USize = offset_wide + delta
-    let Result.Ok(target) = target_wide as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    return Result.Ok :: target :: call
-fn rgba_checked_rect(read image: RgbaImage, x: Index, y: Index, width: Index, height: Index) -> Result[CheckedRgbaRect, RgbaImageError]:
-    select:
-        when width == 0 || height == 0 => return Result.Err :: RgbaImageError.RectZeroSize :: call
-        else => ()
-    let Result.Ok(raw_x) = index_to_cint :: x :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let Result.Ok(raw_y) = index_to_cint :: y :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let Result.Ok(raw_width) = index_to_cint :: width :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let Result.Ok(raw_height) = index_to_cint :: height :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    select:
-        when raw_x >= image.width || raw_y >= image.height =>
-            let error = RgbaImageError.CoordOutOfRange :: x, y, image.width, image.height :: call
-            return Result.Err :: error :: call
-        else => ()
-    let end_x: CInt = raw_x + raw_width - 1
-    let end_y: CInt = raw_y + raw_height - 1
-    select:
-        when end_x >= image.width || end_y >= image.height =>
-            let Result.Ok(last_x) = end_x as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-            let Result.Ok(last_y) = end_y as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-            let error = RgbaImageError.CoordOutOfRange :: last_x, last_y, image.width, image.height :: call
-            return Result.Err :: error :: call
-        else => ()
-    let rect = CheckedRgbaRect :: raw_x, raw_y, raw_width, raw_height :: call
-    return Result.Ok :: rect :: call
-fn copy_rgba_bytes(read source: ByteBuffer) -> Result[ByteBuffer, RgbaImageError]:
-    let count = source.byte_count :: :: method
-    let copied = ByteBuffer :: :: call
-    copied.reserve :: count :: method
-    let Result.Ok(limit) = count as Maybe[USize] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let scan: USize = 0USize
-    repeat while scan < limit:
-        let Result.Ok(index) = scan as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-        let value = source[index]
-        copied.push :: value :: method
-        scan = scan + 1USize
-    return Result.Ok :: copied :: call
-pub fn rgba_image(width: Index, height: Index, take pixels: ByteBuffer) -> Result[RgbaImage, RgbaImageError]:
-    select:
-        when width == 0 => return Result.Err :: RgbaImageError.ZeroSize :: call
-        when height == 0 => return Result.Err :: RgbaImageError.ZeroSize :: call
-        else => ()
-    let Result.Ok(raw_width) = index_to_cint :: width :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let Result.Ok(raw_height) = index_to_cint :: height :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let Result.Ok(expected) = rgba_expected_byte_count :: raw_width, raw_height :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let actual = pixels.byte_count :: :: method
-    select:
-        when actual != expected => return Result.Err :: RgbaImageError.PixelCountMismatch :: call
-        else => ()
-    let image = RgbaImage :: :: call
-        width = raw_width
-        height = raw_height
-        pixels = pixels
-    return Result.Ok :: image :: call
-pub fn rgba_color(red: U8, green: U8, blue: U8, alpha: U8) -> RgbaColor:
-    return RgbaColor :: :: call
-        red = red
-        green = green
-        blue = blue
-        alpha = alpha
 pub fn theme_from_raw(raw: CInt) -> Theme:
     select:
         when raw == 0 => return Theme.Dark
@@ -476,73 +345,6 @@ pub fn window_corner_preference_raw(read preference: WindowCornerPreference) -> 
         when WindowCornerPreference.Round => return 2
         when WindowCornerPreference.RoundSmall => return 3
     return 0
-fn rgba_widen_channel(value: U8) -> Result[USize, RgbaImageError]:
-    let Result.Ok(widened) = value as Maybe[USize] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    return Result.Ok :: widened :: call
-fn rgba_narrow_channel(value: USize) -> Result[U8, RgbaImageError]:
-    let Result.Ok(narrowed) = value as Maybe[U8] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    return Result.Ok :: narrowed :: call
-fn rgba_blend_channel(dest: U8, source: U8, read factors: BlendFactors) -> Result[U8, RgbaImageError]:
-    select:
-        when factors.out_alpha == 0USize => return Result.Ok :: 0U8 :: call
-        else => ()
-    let Result.Ok(dest_wide) = rgba_widen_channel :: dest :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let Result.Ok(source_wide) = rgba_widen_channel :: source :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let source_premul: USize = source_wide * factors.source_alpha
-    let dest_premul: USize = (dest_wide * factors.dest_alpha * factors.inv_source_alpha + 127USize) / 255USize
-    let out_premul: USize = source_premul + dest_premul
-    let out_value: USize = (out_premul + (factors.out_alpha / 2USize)) / factors.out_alpha
-    return rgba_narrow_channel :: out_value :: call
-fn rgba_abs_delta(value: CInt) -> CInt:
-    select:
-        when value < 0 => return 0 - value
-        else => return value
-    return value
-fn rgba_step_direction(start: CInt, end: CInt) -> CInt:
-    select:
-        when start < end => return 1
-        when start > end => return -1
-        else => return 0
-    return 0
-pub fn rgba_blend_source_over(read dest: RgbaColor, read source: RgbaColor) -> Result[RgbaColor, RgbaImageError]:
-    let Result.Ok(dest_alpha) = rgba_widen_channel :: dest.alpha :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let Result.Ok(source_alpha) = rgba_widen_channel :: source.alpha :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let inv_source_alpha: USize = 255USize - source_alpha
-    let out_alpha_wide: USize = source_alpha + ((dest_alpha * inv_source_alpha + 127USize) / 255USize)
-    let Result.Ok(out_alpha) = rgba_narrow_channel :: out_alpha_wide :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let factors = BlendFactors :: dest_alpha, source_alpha, inv_source_alpha, out_alpha_wide :: call
-    let Result.Ok(out_red) = rgba_blend_channel :: dest.red, source.red, factors :: call else =>
-        return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let Result.Ok(out_green) = rgba_blend_channel :: dest.green, source.green, factors :: call else =>
-        return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let Result.Ok(out_blue) = rgba_blend_channel :: dest.blue, source.blue, factors :: call else =>
-        return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let color = rgba_color :: out_red, out_green, out_blue, out_alpha :: call
-    return Result.Ok :: color :: call
-pub fn monitor_gamma_ramp(take red: List[CUShort], take green: List[CUShort], take blue: List[CUShort]) -> Result[MonitorGammaRamp, MonitorGammaRampError]:
-    let ramp = MonitorGammaRamp :: red, green, blue :: call
-    select gamma_ramp_channel_count :: ramp :: call:
-        when Result.Ok(_) => return Result.Ok :: ramp :: call
-        when Result.Err(error) => return Result.Err :: error :: call
-pub fn solid_rgba_image(width: Index, height: Index, read fill: RgbaColor) -> Result[RgbaImage, RgbaImageError]:
-    select:
-        when width == 0 => return Result.Err :: RgbaImageError.ZeroSize :: call
-        when height == 0 => return Result.Err :: RgbaImageError.ZeroSize :: call
-        else => ()
-    let Result.Ok(raw_width) = index_to_cint :: width :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let Result.Ok(raw_height) = index_to_cint :: height :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let raw_pixel_count: CInt = raw_width * raw_height
-    let Result.Ok(expected) = rgba_expected_byte_count :: raw_width, raw_height :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-    let pixels = ByteBuffer :: :: call
-    pixels.reserve :: expected :: method
-    let scan: CInt = 0
-    repeat while scan < raw_pixel_count:
-        pixels.push :: fill.red :: method
-        pixels.push :: fill.green :: method
-        pixels.push :: fill.blue :: method
-        pixels.push :: fill.alpha :: method
-        scan = scan + 1
-    return rgba_image :: width, height, pixels :: call
 pub fn create_cursor_image(edit image: RgbaImage, xhot: CInt, yhot: CInt) -> Option[GlfwCursor]:
     let raw = image.raw_image :: :: method
     return glfw_create_cursor :: raw, xhot, yhot :: call
@@ -609,91 +411,6 @@ pub fn window_placement(pos: Point, size: Size) -> WindowPlacement:
     return WindowPlacement :: :: call
         pos = pos
         size = size
-fn rect_right(read value: Rect) -> CInt:
-    return value.x + value.width
-fn rect_bottom(read value: Rect) -> CInt:
-    return value.y + value.height
-fn rect_center_x(read value: Rect) -> CInt:
-    return value.x + value.width / 2
-fn rect_center_y(read value: Rect) -> CInt:
-    return value.y + value.height / 2
-fn rect_intersection_area(read left: Rect, read right: Rect) -> CInt:
-    let overlap_left = left.x
-    select:
-        when right.x > overlap_left => overlap_left = right.x
-        else => ()
-    let overlap_top = left.y
-    select:
-        when right.y > overlap_top => overlap_top = right.y
-        else => ()
-    let overlap_right = rect_right :: left :: call
-    let right_right = rect_right :: right :: call
-    select:
-        when right_right < overlap_right => overlap_right = right_right
-        else => ()
-    let overlap_bottom = rect_bottom :: left :: call
-    let right_bottom = rect_bottom :: right :: call
-    select:
-        when right_bottom < overlap_bottom => overlap_bottom = right_bottom
-        else => ()
-    select:
-        when overlap_right <= overlap_left => return 0
-        when overlap_bottom <= overlap_top => return 0
-        else => return (overlap_right - overlap_left) * (overlap_bottom - overlap_top)
-fn cint_to_i64(value: CInt) -> I64:
-    let Result.Ok(widened) = value as Maybe[I64] else => return 0I64
-    return widened
-fn point_distance_squared(ax: CInt, ay: CInt, bx: CInt, by: CInt) -> I64:
-    let dx = cint_to_i64 :: ax - bx :: call
-    let dy = cint_to_i64 :: ay - by :: call
-    return dx * dx + dy * dy
-fn monitor_display_rect(read monitor: Monitor) -> Rect:
-    let pos = monitor.screen_pos :: :: method
-    select monitor.current_video_mode :: :: method:
-        when Option.Some(mode) => return rect :: pos.x, pos.y, mode.width, mode.height :: call
-        when Option.None => return monitor.work_rect :: :: method
-fn current_monitor_for_window(read window: Window) -> Option[Monitor]:
-    let placement = window.outer_placement :: :: method
-    let window_rect = rect :: placement.pos.x, placement.pos.y, placement.size.width, placement.size.height :: call
-    let window_center_x = rect_center_x :: window_rect :: call
-    let window_center_y = rect_center_y :: window_rect :: call
-    let monitors = glfw_monitors :: :: call
-    let count = monitors.count :: :: method
-    let best_monitor = glfw_monitor_none :: :: call
-    let best_overlap: CInt = -1
-    let best_distance: I64 = -1I64
-    let scan: CInt = 0
-    repeat while scan < count:
-        let monitor = monitors.at :: scan :: method
-        select:
-            when !monitor.available :: :: method => ()
-            else =>
-                let display_rect = monitor_display_rect :: monitor :: call
-                let overlap = rect_intersection_area :: window_rect, display_rect :: call
-                let monitor_center_x = rect_center_x :: display_rect :: call
-                let monitor_center_y = rect_center_y :: display_rect :: call
-                let distance = point_distance_squared :: window_center_x, window_center_y, monitor_center_x, monitor_center_y :: call
-                select:
-                    when best_monitor.is_null :: :: method =>
-                        best_monitor = monitor
-                        best_overlap = overlap
-                        best_distance = distance
-                    when overlap > best_overlap =>
-                        best_monitor = monitor
-                        best_overlap = overlap
-                        best_distance = distance
-                    when overlap == best_overlap =>
-                        select:
-                            when best_overlap <= 0 && (best_distance < 0I64 || distance < best_distance) =>
-                                best_monitor = monitor
-                                best_overlap = overlap
-                                best_distance = distance
-                            else => ()
-                    else => ()
-        scan = scan + 1
-    select:
-        when best_monitor.is_null :: :: method => return Option.None
-        else => return Option.Some :: best_monitor :: call
 pub fn window_buttons(close: Bool, minimize: Bool, maximize: Bool) -> WindowButtons:
     return WindowButtons :: :: call
         close = close
@@ -1184,11 +901,16 @@ pub fn window_monitor_spec(monitor: Monitor, pos: Point, size: Size, refresh_rat
 pub fn fullscreen_window_spec(title: Str, read monitor: Monitor) -> Result[WindowSpec, WindowModeError]:
     select monitor.current_video_mode :: :: method:
         when Option.Some(mode) =>
-            let Result.Ok(width) = mode.width as Maybe[Index] else => return Result.Err :: WindowModeError.SizeOutOfRange :: call
-            let Result.Ok(height) = mode.height as Maybe[Index] else => return Result.Err :: WindowModeError.SizeOutOfRange :: call
-            let spec = window_spec :: title, width, height :: call
-            let Result.Ok(_) = spec.fullscreen_using_current_video_mode :: monitor :: method else => return Result.Err :: WindowModeError.MissingVideoMode :: call
-            return Result.Ok :: spec :: call
+            select either:
+                when width: Result.Ok(width) <- mode.width as Maybe[Index]
+                when height: Result.Ok(height) <- mode.height as Maybe[Index] =>
+                    let spec = window_spec :: title, width, height :: call
+                    let Result.Ok(_) = spec.fullscreen_using_current_video_mode :: monitor :: method else => return Result.Err :: WindowModeError.MissingVideoMode :: call
+                    return Result.Ok :: spec :: call
+
+            with Result.Err(_):
+                width => return Result.Err :: WindowModeError.SizeOutOfRange :: call
+                height => return Result.Err :: WindowModeError.SizeOutOfRange :: call
         when Option.None => return Result.Err :: WindowModeError.MissingVideoMode :: call
 pub fn fullscreen_window_spec_with_video_mode(title: Str, read monitor: Monitor, read mode: VideoMode) -> Result[WindowSpec, WindowModeError]:
     let spec = window_spec :: title, 1, 1 :: call
@@ -1561,22 +1283,32 @@ impl WindowSpec:
     fn fullscreen_using_current_video_mode(edit self, read monitor: Monitor) -> Result[Unit, WindowModeError]:
         select monitor.current_video_mode :: :: method:
             when Option.Some(mode) =>
-                let Result.Ok(width) = mode.width as Maybe[Index] else => return Result.Err :: WindowModeError.SizeOutOfRange :: call
-                let Result.Ok(height) = mode.height as Maybe[Index] else => return Result.Err :: WindowModeError.SizeOutOfRange :: call
+                select either:
+                    when width: Result.Ok(width) <- mode.width as Maybe[Index]
+                    when height: Result.Ok(height) <- mode.height as Maybe[Index] =>
+                        self.width = width
+                        self.height = height
+                        self.refresh_rate = mode.refresh_rate
+                        self.fullscreen_on :: monitor :: method
+                        return Result.Ok :: () :: call
+
+                with Result.Err(_):
+                    width => return Result.Err :: WindowModeError.SizeOutOfRange :: call
+                    height => return Result.Err :: WindowModeError.SizeOutOfRange :: call
+            when Option.None => return Result.Err :: WindowModeError.MissingVideoMode :: call
+    fn fullscreen_with_video_mode(edit self, read monitor: Monitor, read mode: VideoMode) -> Result[Unit, WindowModeError]:
+        select either:
+            when width: Result.Ok(width) <- mode.width as Maybe[Index]
+            when height: Result.Ok(height) <- mode.height as Maybe[Index] =>
                 self.width = width
                 self.height = height
                 self.refresh_rate = mode.refresh_rate
                 self.fullscreen_on :: monitor :: method
                 return Result.Ok :: () :: call
-            when Option.None => return Result.Err :: WindowModeError.MissingVideoMode :: call
-    fn fullscreen_with_video_mode(edit self, read monitor: Monitor, read mode: VideoMode) -> Result[Unit, WindowModeError]:
-        let Result.Ok(width) = mode.width as Maybe[Index] else => return Result.Err :: WindowModeError.SizeOutOfRange :: call
-        let Result.Ok(height) = mode.height as Maybe[Index] else => return Result.Err :: WindowModeError.SizeOutOfRange :: call
-        self.width = width
-        self.height = height
-        self.refresh_rate = mode.refresh_rate
-        self.fullscreen_on :: monitor :: method
-        return Result.Ok :: () :: call
+
+        with Result.Err(_):
+            width => return Result.Err :: WindowModeError.SizeOutOfRange :: call
+            height => return Result.Err :: WindowModeError.SizeOutOfRange :: call
     fn windowed(edit self) -> Unit:
         self.monitor = null
         return
@@ -1900,235 +1632,6 @@ impl WindowSpec:
     fn enable_context_no_error(edit self) -> Unit:
         self.context_no_error = true
         return
-impl RgbaImage:
-    fn width(read self) -> CInt:
-        return self.width
-    fn height(read self) -> CInt:
-        return self.height
-    fn width_index(read self) -> Result[Index, RgbaImageError]:
-        let Result.Ok(width) = self.width as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-        return Result.Ok :: width :: call
-    fn height_index(read self) -> Result[Index, RgbaImageError]:
-        let Result.Ok(height) = self.height as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-        return Result.Ok :: height :: call
-    fn pixel_count(read self) -> Result[Index, RgbaImageError]:
-        let raw_pixel_count: CInt = self.width * self.height
-        let Result.Ok(pixel_count) = raw_pixel_count as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-        return Result.Ok :: pixel_count :: call
-    fn pixel(read self, x: Index, y: Index) -> Result[RgbaColor, RgbaImageError]:
-        select rgba_checked_offset :: self, x, y :: call:
-            when Result.Ok(offset) =>
-                let red = self.pixels[offset]
-                let Result.Ok(green_index) = rgba_channel_index :: offset, 1USize :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                let Result.Ok(blue_index) = rgba_channel_index :: offset, 2USize :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                let Result.Ok(alpha_index) = rgba_channel_index :: offset, 3USize :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                let green = self.pixels[green_index]
-                let blue = self.pixels[blue_index]
-                let alpha = self.pixels[alpha_index]
-                let color = rgba_color :: red, green, blue, alpha :: call
-                return Result.Ok :: color :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-    fn set_pixel(edit self, x: Index, y: Index, read color: RgbaColor) -> Result[Unit, RgbaImageError]:
-        select rgba_checked_offset :: self, x, y :: call:
-            when Result.Ok(offset) =>
-                let Result.Ok(green_index) = rgba_channel_index :: offset, 1USize :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                let Result.Ok(blue_index) = rgba_channel_index :: offset, 2USize :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                let Result.Ok(alpha_index) = rgba_channel_index :: offset, 3USize :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                self.pixels[offset] = color.red
-                self.pixels[green_index] = color.green
-                self.pixels[blue_index] = color.blue
-                self.pixels[alpha_index] = color.alpha
-                return Result.Ok :: :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-    fn blend_pixel(edit self, x: Index, y: Index, read source: RgbaColor) -> Result[Unit, RgbaImageError]:
-        select self.pixel :: x, y :: method:
-            when Result.Ok(dest) =>
-                select rgba_blend_source_over :: dest, source :: call:
-                    when Result.Ok(blended) => return self.set_pixel :: x, y, blended :: method
-                    when Result.Err(err) => return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-    fn fill_rect(edit self, x: Index, y: Index, width: Index, height: Index, read fill: RgbaColor) -> Result[Unit, RgbaImageError]:
-        select rgba_checked_rect :: self, x, y, width, height :: call:
-            when Result.Ok(rect) =>
-                let scan_y: CInt = 0
-                repeat while scan_y < rect.height:
-                    let row_y: CInt = rect.start_y + scan_y
-                    let Result.Ok(row_y_index) = row_y as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                    let scan_x: CInt = 0
-                    repeat while scan_x < rect.width:
-                        let row_x: CInt = rect.start_x + scan_x
-                        let Result.Ok(row_x_index) = row_x as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                        select self.set_pixel :: row_x_index, row_y_index, fill :: method:
-                            when Result.Ok(_) => ()
-                            when Result.Err(err) => return Result.Err :: err :: call
-                        scan_x = scan_x + 1
-                    scan_y = scan_y + 1
-                return Result.Ok :: :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-    fn draw_hline(edit self, x: Index, y: Index, width: Index, read color: RgbaColor) -> Result[Unit, RgbaImageError]:
-        return self.fill_rect :: x, y, width, 1, color :: method
-    fn draw_vline(edit self, x: Index, y: Index, height: Index, read color: RgbaColor) -> Result[Unit, RgbaImageError]:
-        return self.fill_rect :: x, y, 1, height, color :: method
-    fn stroke_rect(edit self, x: Index, y: Index, width: Index, height: Index, read color: RgbaColor) -> Result[Unit, RgbaImageError]:
-        select rgba_checked_rect :: self, x, y, width, height :: call:
-            when Result.Ok(rect) =>
-                select:
-                    when rect.width == 1 || rect.height == 1 => return self.fill_rect :: x, y, width, height, color :: method
-                    else => ()
-                let last_x_raw: CInt = rect.start_x + rect.width - 1
-                let last_y_raw: CInt = rect.start_y + rect.height - 1
-                let Result.Ok(last_x) = last_x_raw as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                let Result.Ok(last_y) = last_y_raw as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                select self.draw_hline :: x, y, width, color :: method:
-                    when Result.Ok(_) => ()
-                    when Result.Err(err) => return Result.Err :: err :: call
-                select self.draw_hline :: x, last_y, width, color :: method:
-                    when Result.Ok(_) => ()
-                    when Result.Err(err) => return Result.Err :: err :: call
-                select self.draw_vline :: x, y, height, color :: method:
-                    when Result.Ok(_) => ()
-                    when Result.Err(err) => return Result.Err :: err :: call
-                return self.draw_vline :: last_x, y, height, color :: method
-            when Result.Err(err) => return Result.Err :: err :: call
-    fn draw_line(edit self, x0: Index, y0: Index, x1: Index, y1: Index, read color: RgbaColor) -> Result[Unit, RgbaImageError]:
-        let Result.Ok(raw_x0) = x0 as Maybe[CInt] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-        let Result.Ok(raw_y0) = y0 as Maybe[CInt] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-        let Result.Ok(raw_x1) = x1 as Maybe[CInt] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-        let Result.Ok(raw_y1) = y1 as Maybe[CInt] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-        let delta_x = rgba_abs_delta :: raw_x1 - raw_x0 :: call
-        let delta_y = rgba_abs_delta :: raw_y1 - raw_y0 :: call
-        let step_x = rgba_step_direction :: raw_x0, raw_x1 :: call
-        let step_y = rgba_step_direction :: raw_y0, raw_y1 :: call
-        let error = delta_x - delta_y
-        let scan_x = raw_x0
-        let scan_y = raw_y0
-        let active = true
-        repeat while active:
-            let Result.Ok(plot_x) = scan_x as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-            let Result.Ok(plot_y) = scan_y as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-            select self.set_pixel :: plot_x, plot_y, color :: method:
-                when Result.Ok(_) => ()
-                when Result.Err(err) => return Result.Err :: err :: call
-            select:
-                when scan_x == raw_x1 && scan_y == raw_y1 =>
-                    active = false
-                    continue
-                else => ()
-            let doubled_error: CInt = error + error
-            select:
-                when doubled_error > (0 - delta_y) =>
-                    error = error - delta_y
-                    scan_x = scan_x + step_x
-                else => ()
-            select:
-                when doubled_error < delta_x =>
-                    error = error + delta_x
-                    scan_y = scan_y + step_y
-                else => ()
-        return Result.Ok :: :: call
-    fn blend_image(edit self, x: Index, y: Index, read source: RgbaImage) -> Result[Unit, RgbaImageError]:
-        let Result.Ok(source_width) = source.width as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-        let Result.Ok(source_height) = source.height as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-        select rgba_checked_rect :: self, x, y, source_width, source_height :: call:
-            when Result.Ok(rect) =>
-                let scan_y: CInt = 0
-                repeat while scan_y < source.height:
-                    let Result.Ok(source_y) = scan_y as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                    let row_y: CInt = rect.start_y + scan_y
-                    let Result.Ok(dest_y) = row_y as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                    let scan_x: CInt = 0
-                    repeat while scan_x < source.width:
-                        let Result.Ok(source_x) = scan_x as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                        let row_x: CInt = rect.start_x + scan_x
-                        let Result.Ok(dest_x) = row_x as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                        select source.pixel :: source_x, source_y :: method:
-                            when Result.Ok(color) =>
-                                select self.blend_pixel :: dest_x, dest_y, color :: method:
-                                    when Result.Ok(_) => ()
-                                    when Result.Err(err) => return Result.Err :: err :: call
-                            when Result.Err(err) => return Result.Err :: err :: call
-                        scan_x = scan_x + 1
-                    scan_y = scan_y + 1
-                return Result.Ok :: :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-    fn blit_image(edit self, x: Index, y: Index, read source: RgbaImage) -> Result[Unit, RgbaImageError]:
-        let Result.Ok(source_width) = source.width as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-        let Result.Ok(source_height) = source.height as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-        select rgba_checked_rect :: self, x, y, source_width, source_height :: call:
-            when Result.Ok(rect) =>
-                let scan_y: CInt = 0
-                repeat while scan_y < source.height:
-                    let Result.Ok(source_y) = scan_y as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                    let row_y: CInt = rect.start_y + scan_y
-                    let Result.Ok(dest_y) = row_y as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                    let scan_x: CInt = 0
-                    repeat while scan_x < source.width:
-                        let Result.Ok(source_x) = scan_x as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                        let row_x: CInt = rect.start_x + scan_x
-                        let Result.Ok(dest_x) = row_x as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                        select source.pixel :: source_x, source_y :: method:
-                            when Result.Ok(color) =>
-                                select self.set_pixel :: dest_x, dest_y, color :: method:
-                                    when Result.Ok(_) => ()
-                                    when Result.Err(err) => return Result.Err :: err :: call
-                            when Result.Err(err) => return Result.Err :: err :: call
-                        scan_x = scan_x + 1
-                    scan_y = scan_y + 1
-                return Result.Ok :: :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-    fn clear(edit self, read fill: RgbaColor) -> Result[Unit, RgbaImageError]:
-        let Result.Ok(width) = self.width as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-        let Result.Ok(height) = self.height as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-        return self.fill_rect :: 0, 0, width, height, fill :: method
-    fn copy_pixels(read self) -> Result[ByteBuffer, RgbaImageError]:
-        return copy_rgba_bytes :: self.pixels :: call
-    fn copy_image(read self) -> Result[RgbaImage, RgbaImageError]:
-        let Result.Ok(width) = self.width as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-        let Result.Ok(height) = self.height as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-        select self.copy_pixels :: :: method:
-            when Result.Ok(pixels) => return rgba_image :: width, height, pixels :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-    fn sub_image(read self, x: Index, y: Index, width: Index, height: Index) -> Result[RgbaImage, RgbaImageError]:
-        select rgba_checked_rect :: self, x, y, width, height :: call:
-            when Result.Ok(rect) =>
-                let pixels = ByteBuffer :: :: call
-                let Result.Ok(expected) = rgba_expected_byte_count :: rect.width, rect.height :: call else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                pixels.reserve :: expected :: method
-                let scan_y: CInt = 0
-                repeat while scan_y < rect.height:
-                    let row_y: CInt = rect.start_y + scan_y
-                    let Result.Ok(source_y) = row_y as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                    let scan_x: CInt = 0
-                    repeat while scan_x < rect.width:
-                        let row_x: CInt = rect.start_x + scan_x
-                        let Result.Ok(source_x) = row_x as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                        select self.pixel :: source_x, source_y :: method:
-                            when Result.Ok(color) =>
-                                pixels.push :: color.red :: method
-                                pixels.push :: color.green :: method
-                                pixels.push :: color.blue :: method
-                                pixels.push :: color.alpha :: method
-                            when Result.Err(err) => return Result.Err :: err :: call
-                        scan_x = scan_x + 1
-                    scan_y = scan_y + 1
-                let Result.Ok(result_width) = rect.width as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                let Result.Ok(result_height) = rect.height as Maybe[Index] else => return Result.Err :: RgbaImageError.SizeOutOfRange :: call
-                return rgba_image :: result_width, result_height, pixels :: call
-            when Result.Err(err) => return Result.Err :: err :: call
-    fn byte_count(read self) -> Index:
-        return self.pixels.byte_count :: :: method
-    fn take_pixels(take self) -> ByteBuffer:
-        return self.pixels
-    fn raw_image(edit self) -> GlfwImage:
-        let bytes_ptr: *edit U8 = #unsafe &raw edit self.pixels[0]
-        let bytes_address = #unsafe raw_pointer_address_edit :: bytes_ptr :: call
-        let pixels_ptr = #unsafe raw_pointer_from_address_edit[CUnsignedChar] :: bytes_address :: call
-        return glfw_image :: self.width, self.height, pixels_ptr :: call
-    fn raw_image_view(read self) -> GlfwImage:
-        let bytes_ptr: *read U8 = #unsafe &raw read self.pixels[0]
-        let bytes_address = #unsafe raw_pointer_address_read :: bytes_ptr :: call
-        let pixels_ptr = #unsafe raw_pointer_from_address_edit[CUnsignedChar] :: bytes_address :: call
-        return glfw_image :: self.width, self.height, pixels_ptr :: call
 impl Window:
     fn raw_handle(read self) -> *edit GlfwWindowRaw:
         return glfw_window_raw_handle :: self.raw :: call
@@ -2306,180 +1809,10 @@ impl Window:
     fn request_attention(read self) -> Unit:
         self.raw.request_attention :: :: method
         return
-    fn request_user_attention(read self, read request: Option[UserAttentionType]) -> Result[Unit, WindowControlError]:
-        return request_window_attention :: self.raw, request :: call
-    fn drag_window(read self) -> Result[Unit, WindowControlError]:
-        return drag_window_interaction :: self.raw :: call
-    fn drag_resize_window(read self, read direction: WindowResizeDirection) -> Result[Unit, WindowControlError]:
-        return drag_resize_window_interaction :: self.raw, direction :: call
-    fn show_window_menu(read self, x: CInt, y: CInt) -> Result[Unit, WindowControlError]:
-        let position = GlfwPoint :: x, y :: call
-        return show_window_system_menu :: self.raw, position :: call
-    fn show_window_menu_at(read self, read position: Point) -> Result[Unit, WindowControlError]:
-        return show_window_system_menu :: self.raw, position :: call
     fn request_redraw(read self) -> Unit:
         request_window_refresh :: self.raw :: call
         glfw_post_empty_event :: :: call
         return
-    fn theme(read self) -> Option[Theme]:
-        return current_window_theme :: self.raw :: call
-    fn set_theme(read self, read theme: Option[Theme]) -> Result[Unit, WindowThemeError]:
-        return set_window_theme :: self.raw, theme :: call
-    fn undecorated_shadow(read self) -> Bool:
-        return current_window_undecorated_shadow :: self.raw :: call
-    fn system_backdrop(read self) -> WindowSystemBackdrop:
-        return current_window_system_backdrop :: self.raw :: call
-    fn border_color(read self) -> Option[RgbaColor]:
-        return current_window_border_color :: self.raw :: call
-    fn title_background_color(read self) -> Option[RgbaColor]:
-        return current_window_title_background_color :: self.raw :: call
-    fn title_text_color(read self) -> Option[RgbaColor]:
-        return current_window_title_text_color :: self.raw :: call
-    fn corner_preference(read self) -> WindowCornerPreference:
-        return current_window_corner_preference :: self.raw :: call
-    fn window_level(read self) -> WindowLevel:
-        return current_window_level :: self.raw :: call
-    fn set_window_level(read self, read level: WindowLevel) -> Result[Unit, WindowControlError]:
-        return set_window_level :: self.raw, level :: call
-    fn enabled_buttons(read self) -> Result[WindowButtons, WindowControlError]:
-        return current_window_buttons :: self.raw :: call
-    fn enabled(read self) -> Result[Bool, WindowControlError]:
-        return current_window_enabled :: self.raw :: call
-    fn skip_taskbar(read self) -> Result[Bool, WindowControlError]:
-        return current_window_skip_taskbar :: self.raw :: call
-    fn owner_window(read self) -> Result[Option[Win32HWnd], WindowControlError]:
-        return current_window_owner_window :: self.raw :: call
-    fn clip_children(read self) -> Result[Bool, WindowControlError]:
-        return current_window_clip_children :: self.raw :: call
-    fn no_redirection_bitmap(read self) -> Result[Bool, WindowControlError]:
-        return current_window_no_redirection_bitmap :: self.raw :: call
-
-    fn content_protected(read self) -> Result[Bool, WindowControlError]:
-        return current_window_content_protected :: self.raw :: call
-    fn ime_allowed(read self) -> Bool:
-        return current_window_ime_allowed :: self.raw :: call
-    fn set_ime_allowed(read self, allowed: Bool) -> Unit:
-        set_window_ime_allowed :: self.raw, allowed :: call
-        return
-    fn ime_cursor_area(read self) -> Option[Rect]:
-        return current_window_ime_cursor_area :: self.raw :: call
-    fn set_ime_cursor_area(read self, x: CInt, y: CInt, width: CInt, height: CInt) -> Unit:
-        let area = GlfwRect :: x, y, width, height :: call
-        set_window_ime_cursor_area :: self.raw, area :: call
-        return
-    fn apply_ime_cursor_area(read self, read area: Rect) -> Unit:
-        set_window_ime_cursor_area :: self.raw, area :: call
-        return
-    fn set_enabled_buttons(read self, read buttons: WindowButtons) -> Result[Unit, WindowControlError]:
-        return set_window_buttons :: self.raw, buttons :: call
-    fn set_enabled(read self, enabled: Bool) -> Result[Unit, WindowControlError]:
-        return set_window_enabled :: self.raw, enabled :: call
-    fn set_skip_taskbar(read self, skip: Bool) -> Result[Unit, WindowControlError]:
-        return set_window_skip_taskbar :: self.raw, skip :: call
-    fn set_clip_children(read self, enabled: Bool) -> Result[Unit, WindowControlError]:
-        return set_window_clip_children :: self.raw, enabled :: call
-
-    fn set_content_protected(read self, enabled: Bool) -> Result[Unit, WindowControlError]:
-        return set_window_content_protected :: self.raw, enabled :: call
-    fn set_undecorated_shadow(read self, shadow: Bool) -> Result[Unit, WindowAppearanceError]:
-        return set_window_undecorated_shadow :: self.raw, shadow :: call
-    fn set_system_backdrop(read self, read backdrop: WindowSystemBackdrop) -> Result[Unit, WindowAppearanceError]:
-        return set_window_system_backdrop :: self.raw, backdrop :: call
-    fn set_border_color(read self, read color: Option[RgbaColor]) -> Result[Unit, WindowAppearanceError]:
-        return set_window_border_color :: self.raw, color :: call
-    fn set_title_background_color(read self, read color: Option[RgbaColor]) -> Result[Unit, WindowAppearanceError]:
-        return set_window_title_background_color :: self.raw, color :: call
-    fn set_title_text_color(read self, read color: Option[RgbaColor]) -> Result[Unit, WindowAppearanceError]:
-        return set_window_title_text_color :: self.raw, color :: call
-    fn set_corner_preference(read self, read preference: WindowCornerPreference) -> Result[Unit, WindowAppearanceError]:
-        return set_window_corner_preference :: self.raw, preference :: call
-    fn monitor(read self) -> Monitor:
-        return self.raw.monitor :: :: method
-    fn current_monitor(read self) -> Option[Monitor]:
-        let monitor = self.monitor :: :: method
-        select:
-            when !monitor.is_null :: :: method => return Option.Some :: monitor :: call
-            else => return current_monitor_for_window :: self :: call
-    fn drag_and_drop_enabled(read self) -> Bool:
-        return current_window_drag_drop_enabled :: self.raw :: call
-    fn set_drag_and_drop_enabled(read self, enabled: Bool) -> Bool:
-        return set_window_drag_drop_enabled :: self.raw, enabled :: call
-    fn disable_drag_and_drop(read self) -> Bool:
-        return self.set_drag_and_drop_enabled :: false :: method
-    fn enable_drag_and_drop(read self) -> Bool:
-        return self.set_drag_and_drop_enabled :: true :: method
-    fn primary_monitor(read self) -> Option[Monitor]:
-        let _ = self
-        let monitor = glfw_primary_monitor :: :: call
-        select:
-            when monitor.is_null :: :: method => return Option.None
-            else => return Option.Some :: monitor :: call
-    fn available_monitors(read self) -> List[Monitor]:
-        let _ = self
-        let available = List[Monitor] :: :: call
-        let monitors = glfw_monitors :: :: call
-        let count = monitors.count :: :: method
-        let scan: CInt = 0
-        repeat while scan < count:
-            let monitor = monitors.at :: scan :: method
-            select:
-                when monitor.available :: :: method => available.push :: monitor :: method
-                else => ()
-            scan = scan + 1
-        return available
-    fn fullscreen(read self) -> Bool:
-        let monitor = self.monitor :: :: method
-        return !monitor.is_null :: :: method
-    fn set_monitor(read self, read spec: WindowMonitorSpec) -> Unit:
-        self.raw.set_monitor :: spec :: method
-        return
-    fn enter_fullscreen_on(read self, read monitor: Monitor) -> Result[Unit, WindowModeError]:
-        let Result.Ok(spec) = monitor.fullscreen_spec :: :: method else => return Result.Err :: WindowModeError.MissingVideoMode :: call
-        self.raw.set_monitor :: spec :: method
-        return Result.Ok :: () :: call
-    fn enter_fullscreen_with_video_mode(read self, read monitor: Monitor, read mode: VideoMode) -> Result[Unit, WindowModeError]:
-        let Result.Ok(spec) = monitor.fullscreen_spec_with_video_mode :: mode :: method else => return Result.Err :: WindowModeError.SizeOutOfRange :: call
-        self.raw.set_monitor :: spec :: method
-        return Result.Ok :: () :: call
-    fn exit_fullscreen(read self, x: CInt, y: CInt, width: CInt, height: CInt) -> Unit:
-        self.exit_fullscreen_with_refresh_rate :: x, y, width, height, 0 - 1 :: method
-        return
-    fn exit_fullscreen_with_refresh_rate(read self, x: CInt, y: CInt, width: CInt, height: CInt, refresh_rate: CInt) -> Unit:
-        let monitor = glfw_monitor_none :: :: call
-        let pos = GlfwPoint :: x, y :: call
-        let size = GlfwSize :: width, height :: call
-        let spec = window_monitor_spec :: monitor, pos, size, refresh_rate :: call
-        self.raw.set_monitor :: spec :: method
-        return
-    fn client_api_raw(read self) -> CInt:
-        return self.raw.attrib :: 0x00022001 :: method
-    fn client_api(read self) -> ClientApi:
-        let raw = self.client_api_raw :: :: method
-        return client_api_from_raw :: raw :: call
-    fn opengl_profile_raw(read self) -> CInt:
-        return self.raw.attrib :: 0x00022008 :: method
-    fn opengl_profile(read self) -> OpenGlProfile:
-        let raw = self.opengl_profile_raw :: :: method
-        return opengl_profile_from_raw :: raw :: call
-    fn context_creation_api_raw(read self) -> CInt:
-        return self.raw.attrib :: 0x0002200B :: method
-    fn context_creation_api(read self) -> ContextCreationApi:
-        let raw = self.context_creation_api_raw :: :: method
-        return context_creation_api_from_raw :: raw :: call
-    fn context_version_major(read self) -> CInt:
-        return self.raw.attrib :: 0x00022002 :: method
-    fn context_version_minor(read self) -> CInt:
-        return self.raw.attrib :: 0x00022003 :: method
-    fn opengl_forward_compat(read self) -> Bool:
-        return self.raw.attrib_bool :: 0x00022006 :: method
-    fn opengl_debug_context(read self) -> Bool:
-        return self.raw.attrib_bool :: 0x00022007 :: method
-    fn context_no_error(read self) -> Bool:
-        return self.raw.attrib_bool :: 0x0002200A :: method
-    fn srgb_capable(read self) -> Bool:
-        return self.raw.attrib_bool :: 0x0002100E :: method
-    fn doublebuffered(read self) -> Bool:
-        return self.raw.attrib_bool :: 0x00021010 :: method
     fn visible(read self) -> Bool:
         return self.raw.attrib_bool :: 0x00020004 :: method
     fn set_visible(read self, value: Bool) -> Unit:
@@ -2786,21 +2119,9 @@ impl Window:
                 self.raw.set_clipboard_string :: pointer :: method
                 return Result.Ok :: () :: call
             when Result.Err(err) => return Result.Err :: err :: call
-    fn hwnd(read self) -> Win32HWnd:
-        return self.raw.win32_window :: :: method
     fn scancode(read self, read key: KeyCode) -> ScanCode:
         let _ = self
         return key_scancode :: key :: call
-    fn make_context_current(read self) -> Unit:
-        self.raw.make_context_current :: :: method
-        return
-    fn swap_interval(read self, interval: CInt) -> Unit:
-        self.make_context_current :: :: method
-        glfw_swap_interval :: interval :: call
-        return
-    fn swap_buffers(read self) -> Unit:
-        self.raw.swap_buffers :: :: method
-        return
 impl KeyboardInputSnapshot:
     fn key_state(read self, read key: KeyCode) -> InputAction:
         select:
@@ -2839,148 +2160,3 @@ impl WindowInputSnapshot:
         return self.mouse.button_pressed :: button :: method
     fn mouse_button_down(read self, read button: MouseButton) -> Bool:
         return self.mouse.button_down :: button :: method
-impl GlfwMonitor:
-    fn available(read self) -> Bool:
-        return !self.is_null :: :: method
-    fn primary(read self) -> Bool:
-        let primary = glfw_primary_monitor :: :: call
-        let left_raw = glfw_monitor_raw_handle :: self :: call
-        let right_raw = glfw_monitor_raw_handle :: primary :: call
-        return left_raw == right_raw
-    fn name_text(read self) -> Result[Str, TextDecodeError]:
-        let raw_name = self.name :: :: method
-        return copy_c_string :: raw_name :: call
-    fn screen_pos(read self) -> Point:
-        return self.pos :: :: method
-    fn work_rect(read self) -> Rect:
-        return self.workarea :: :: method
-    fn physical_size_mm(read self) -> Size:
-        return self.physical_size :: :: method
-    fn desktop_scale(read self) -> Scale:
-        return self.content_scale :: :: method
-    fn current_video_mode(read self) -> Option[VideoMode]:
-        return self.video_mode :: :: method
-    fn fullscreen_spec(read self) -> Result[WindowMonitorSpec, WindowModeError]:
-        select self.current_video_mode :: :: method:
-            when Option.Some(mode) =>
-                let pos = self.pos :: :: method
-                let size = GlfwSize :: mode.width, mode.height :: call
-                let monitor_raw = glfw_monitor_raw_handle :: self :: call
-                let monitor = GlfwMonitor :: monitor_raw :: call
-                let spec = window_monitor_spec :: monitor, pos, size, mode.refresh_rate :: call
-                return Result.Ok :: spec :: call
-            when Option.None => return Result.Err :: WindowModeError.MissingVideoMode :: call
-    fn fullscreen_spec_with_video_mode(read self, read mode: VideoMode) -> Result[WindowMonitorSpec, WindowModeError]:
-        let pos = self.pos :: :: method
-        let size = GlfwSize :: mode.width, mode.height :: call
-        let monitor_raw = glfw_monitor_raw_handle :: self :: call
-        let monitor = GlfwMonitor :: monitor_raw :: call
-        let spec = window_monitor_spec :: monitor, pos, size, mode.refresh_rate :: call
-        return Result.Ok :: spec :: call
-    fn video_mode_count(read self) -> CInt:
-        let modes = self.video_modes :: :: method
-        return modes.count :: :: method
-    fn first_video_mode(read self) -> Option[VideoMode]:
-        return self.video_mode_at :: 0 :: method
-    fn video_mode_at(read self, index: CInt) -> Option[VideoMode]:
-        let modes = self.video_modes :: :: method
-        return modes.at :: index :: method
-    fn video_modes_snapshot(read self) -> List[VideoMode]:
-        let values = List[VideoMode] :: :: call
-        let modes = self.video_modes :: :: method
-        let count = modes.count :: :: method
-        let scan: CInt = 0
-        repeat while scan < count:
-            select modes.at :: scan :: method:
-                when Option.Some(mode) => values.push :: mode :: method
-                when Option.None => ()
-            scan = scan + 1
-        return values
-    fn video_mode_matching(read self, width: CInt, height: CInt, refresh_rate: CInt) -> Option[VideoMode]:
-        let modes = self.video_modes :: :: method
-        let count = modes.count :: :: method
-        let scan: CInt = 0
-        repeat while scan < count:
-            select modes.at :: scan :: method:
-                when Option.Some(mode) =>
-                    select:
-                        when mode.width == width && mode.height == height && mode.refresh_rate == refresh_rate =>
-                            return Option.Some :: mode :: call
-                        else => ()
-                when Option.None => ()
-            scan = scan + 1
-        return Option.None
-    fn video_mode_with_max_refresh(read self, width: CInt, height: CInt) -> Option[VideoMode]:
-        let modes = self.video_modes :: :: method
-        let count = modes.count :: :: method
-        let best_index: CInt = -1
-        let best_refresh_rate: CInt = -1
-        let scan: CInt = 0
-        repeat while scan < count:
-            select modes.at :: scan :: method:
-                when Option.Some(mode) =>
-                    select:
-                        when mode.width == width && mode.height == height =>
-                            select:
-                                when best_index < 0 || mode.refresh_rate > best_refresh_rate =>
-                                    best_index = scan
-                                    best_refresh_rate = mode.refresh_rate
-                                else => ()
-                        else => ()
-                when Option.None => ()
-            scan = scan + 1
-        select:
-            when best_index >= 0 => return modes.at :: best_index :: method
-            else => return Option.None
-    fn supports_video_mode(read self, read mode: VideoMode) -> Bool:
-        select self.video_mode_matching :: mode.width, mode.height, mode.refresh_rate :: method:
-            when Option.Some(_) => return true
-            when Option.None => return false
-    fn gamma_ramp_snapshot(read self) -> Option[MonitorGammaRamp]:
-        select self.gamma_ramp :: :: method:
-            when Option.Some(ramp) =>
-                let red = copy_gamma_channel :: ramp.red, ramp.size :: call
-                let green = copy_gamma_channel :: ramp.green, ramp.size :: call
-                let blue = copy_gamma_channel :: ramp.blue, ramp.size :: call
-                let snapshot = MonitorGammaRamp :: red, green, blue :: call
-                return Option.Some :: snapshot :: call
-            when Option.None => return Option.None
-    fn apply_gamma_ramp(read self, edit ramp: MonitorGammaRamp) -> Result[Unit, MonitorGammaRampError]:
-        select ramp.raw_gamma_ramp :: :: method:
-            when Result.Ok(raw_ramp) =>
-                self.set_gamma_ramp :: raw_ramp :: method
-                return Result.Ok :: () :: call
-            when Result.Err(error) => return Result.Err :: error :: call
-    fn apply_gamma(read self, gamma: F32) -> Unit:
-        self.set_gamma :: gamma :: method
-        return
-impl MonitorGammaRamp:
-    fn raw_gamma_ramp(edit self) -> Result[GlfwGammaRamp, MonitorGammaRampError]:
-        select gamma_ramp_channel_count :: self :: call:
-            when Result.Ok(size) =>
-                let red_ptr: *edit CUShort = #unsafe &raw edit self.red[0]
-                let green_ptr: *edit CUShort = #unsafe &raw edit self.green[0]
-                let blue_ptr: *edit CUShort = #unsafe &raw edit self.blue[0]
-                let raw = GlfwGammaRamp :: red_ptr, green_ptr, blue_ptr, size :: call
-                return Result.Ok :: raw :: call
-            when Result.Err(error) => return Result.Err :: error :: call
-    fn size(read self) -> Index:
-        return self.red.count :: :: method
-    fn empty(read self) -> Bool:
-        return self.red.is_empty :: :: method
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

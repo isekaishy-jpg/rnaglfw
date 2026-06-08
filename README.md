@@ -11,14 +11,15 @@ Current verified scope:
 Module layout:
 
 - [lib.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\lib.rna)
-- [core/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\core\mod.rna)
-- [window/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\window\mod.rna)
-- [monitor/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\monitor\mod.rna)
-- [input/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\input\mod.rna)
-- [joystick/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\joystick\mod.rna)
-- [vulkan/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\vulkan\mod.rna)
-- [native/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\native\mod.rna)
-- [constants/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\constants\mod.rna)
+- [wrapper/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\wrapper\mod.rna)
+- [wrapper/core/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\wrapper\core\mod.rna)
+- [wrapper/window/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\wrapper\window\mod.rna)
+- [wrapper/monitor/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\wrapper\monitor\mod.rna)
+- [wrapper/input/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\wrapper\input\mod.rna)
+- [wrapper/joystick/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\wrapper\joystick\mod.rna)
+- [wrapper/vulkan/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\wrapper\vulkan\mod.rna)
+- [wrapper/native/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\wrapper\native\mod.rna)
+- [wrapper/constants/mod.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\wrapper\constants\mod.rna)
 
 Authority:
 
@@ -58,10 +59,26 @@ Smoke consumer:
 - [examples/surface-smoke/main.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\examples\surface-smoke\main.rna)
 - [examples/surface-smoke/runa.toml](C:\Users\Weaver\Documents\GitHub\rnaglfw\examples\surface-smoke\runa.toml)
 
+Current app example:
+
+- [examples/app-presenter-host-smoke/main.rna](C:\Users\Weaver\Documents\GitHub\rnaglfw\examples\app-presenter-host-smoke\main.rna)
+- [examples/app-presenter-host-smoke/runa.toml](C:\Users\Weaver\Documents\GitHub\rnaglfw\examples\app-presenter-host-smoke\runa.toml)
+- Demonstrates a regular `runa_app` host window with no canvas attached.
+- Exercises presenter-host queries, theme events, drag/drop events, IME toggling, and Win32 window-level control.
+- Runtime keys:
+  - `T` cycles theme preference: `System -> Light -> Dark`
+  - `D` toggles drag/drop
+  - `I` toggles IME
+  - `L` cycles window level: `Normal -> Top -> Bottom`
+  - `A` arms or requests a critical attention flash
+  - `Esc` exits
+
 Checks:
 
 ```powershell
 runa check
 cd examples/surface-smoke
+runa check
+cd ../app-presenter-host-smoke
 runa check
 ```

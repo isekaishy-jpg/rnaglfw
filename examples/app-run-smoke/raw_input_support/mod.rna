@@ -1,7 +1,7 @@
 use std.{List, Option}
-use runa_app_run.InputAction
-use runa_app_run.{AppEvent, WindowEvent, WindowEventKind}
-use runa_app_run.app_event_batch_from_events
+use runa_app.InputAction
+use runa_app.{AppEvent, WindowEvent, WindowEventKind}
+use runa_app.app_event_batch_from_events
 
 pub fn check_raw_mouse_batch_helpers() -> I32:
     let raw_event = WindowEvent.RawMouseMotion :: :: call
@@ -267,20 +267,20 @@ pub fn check_raw_mouse_batch_helpers() -> I32:
 
     let raw_button_event = WindowEvent.RawMouseButtonChanged :: :: call
         id = 101
-        button = runa_app_run.MouseButton.Button4
+        button = runa_app.MouseButton.Button4
         action = InputAction.Press
     let raw_button_kind_event = WindowEvent.RawMouseButtonChanged :: :: call
         id = 101
-        button = runa_app_run.MouseButton.Button4
+        button = runa_app.MouseButton.Button4
         action = InputAction.Press
     let raw_button_batch_event = WindowEvent.RawMouseButtonChanged :: :: call
         id = 101
-        button = runa_app_run.MouseButton.Button4
+        button = runa_app.MouseButton.Button4
         action = InputAction.Press
     select raw_button_event.raw_mouse_button_data :: :: method:
         when Option.Some(data) =>
             select data.button:
-                when runa_app_run.MouseButton.Button4 => ()
+                when runa_app.MouseButton.Button4 => ()
                 when _ => return 3555
             select data.action:
                 when InputAction.Press => ()
@@ -328,7 +328,7 @@ pub fn check_raw_mouse_batch_helpers() -> I32:
     let filtered_raw_pointer_events = List[AppEvent] :: :: call
     let filtered_raw_button_a = WindowEvent.RawMouseButtonChanged :: :: call
         id = 111
-        button = runa_app_run.MouseButton.Left
+        button = runa_app.MouseButton.Left
         action = InputAction.Release
     let filtered_raw_wheel_b = WindowEvent.RawMouseWheel :: :: call
         id = 112
@@ -346,7 +346,7 @@ pub fn check_raw_mouse_batch_helpers() -> I32:
     let popped_raw_button_events = List[AppEvent] :: :: call
     let pop_raw_button_event = WindowEvent.RawMouseButtonChanged :: :: call
         id = 121
-        button = runa_app_run.MouseButton.Right
+        button = runa_app.MouseButton.Right
         action = InputAction.Release
     popped_raw_button_events.push :: AppEvent.Window :: pop_raw_button_event :: call :: method
     let popped_raw_button_batch = app_event_batch_from_events :: popped_raw_button_events :: call
@@ -355,7 +355,7 @@ pub fn check_raw_mouse_batch_helpers() -> I32:
             select event.raw_mouse_button_data :: :: method:
                 when Option.Some(data) =>
                     select data.button:
-                        when runa_app_run.MouseButton.Right => ()
+                        when runa_app.MouseButton.Right => ()
                         when _ => return 3569
                     select data.action:
                         when InputAction.Release => ()

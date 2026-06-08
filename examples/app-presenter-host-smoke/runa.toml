@@ -1,0 +1,12 @@
+[package]
+name = "app-presenter-host-smoke"
+version = "2026.0.02"
+edition = "2026"
+lang_version = "2026.0.02"
+
+[dependencies]
+runa_app = { path = "../../app" }
+
+[[products]]
+kind = "bin"
+root = "main.rna"

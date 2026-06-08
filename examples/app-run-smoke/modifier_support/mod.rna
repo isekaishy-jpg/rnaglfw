@@ -1,6 +1,6 @@
 use std.{List, Option}
-use runa_app_run.{AppEvent, WindowEvent, WindowEventKind, app_event_batch_from_events}
-use runa_app_run.modifiers_from_raw
+use runa_app.{AppEvent, WindowEvent, WindowEventKind, app_event_batch_from_events}
+use runa_app.modifiers_from_raw
 
 pub fn check_modifier_batch_helpers() -> I32:
     let direct_event = WindowEvent.ModifiersChanged :: :: call

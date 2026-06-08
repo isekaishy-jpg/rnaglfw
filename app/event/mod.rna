@@ -4,6 +4,9 @@ use input.{modifiers_from_raw, modifiers_raw, mouse_button_from_raw, mouse_butto
 use input.{touch_phase_from_raw, touch_phase_raw}
 use std.{List, Option, Result, Str}
 use window.{Theme, WindowId, theme_from_raw, theme_raw}
+pub(package) mod lifecycle_support
+pub mod presenter_support
+pub(package) mod window
 pub type MonitorId = USize
 pub type JoystickId = CInt
 pub type UserEventId = USize
@@ -232,45 +235,36 @@ pub enum AppEventKind:
     Monitor
     Joystick
     User
-
 pub enum AppEvent:
     Window(WindowEvent)
     Monitor(MonitorEvent)
     Joystick(JoystickEvent)
     User(UserEvent)
-
 pub fn app_event_batch() -> AppEventBatch:
     let events = List[AppEvent] :: :: call
     return AppEventBatch :: :: call
         events = events
-
 pub fn app_event_batch_from_events(take events: List[AppEvent]) -> AppEventBatch:
     return split_app_events :: events :: call
-
 pub(package) fn split_app_events(take events: List[AppEvent]) -> AppEventBatch:
     return AppEventBatch :: :: call
         events = events
-
 fn batch_push_window(edit events: List[AppEvent], event: WindowEvent) -> Unit:
     let wrapped = AppEvent.Window :: event :: call
     events.push :: wrapped :: method
     return
-
 fn batch_push_monitor(edit events: List[AppEvent], event: MonitorEvent) -> Unit:
     let wrapped = AppEvent.Monitor :: event :: call
     events.push :: wrapped :: method
     return
-
 fn batch_push_joystick(edit events: List[AppEvent], event: JoystickEvent) -> Unit:
     let wrapped = AppEvent.Joystick :: event :: call
     events.push :: wrapped :: method
     return
-
 fn batch_push_user(edit events: List[AppEvent], event: UserEvent) -> Unit:
     let wrapped = AppEvent.User :: event :: call
     events.push :: wrapped :: method
     return
-
 fn copy_monitor_event(read event: MonitorEvent) -> MonitorEvent:
     select event:
         when MonitorEvent.Connected(id = id) =>
@@ -279,7 +273,6 @@ fn copy_monitor_event(read event: MonitorEvent) -> MonitorEvent:
         when MonitorEvent.Disconnected(id = id) =>
             return MonitorEvent.Disconnected :: :: call
                 id = id
-
 fn copy_joystick_event(read event: JoystickEvent) -> JoystickEvent:
     select event:
         when JoystickEvent.Connected(id = id, gamepad = gamepad) =>

@@ -1,0 +1,125 @@
+use std.{Option, Result, Str}
+use bridge.TextDecodeError
+pub use graphics.{GlfwEglContext, GlfwEglDisplay, GlfwEglSurface, GlfwGlProc}
+pub use graphics.{GlfwOSMesaColorBuffer, GlfwOSMesaDepthBuffer}
+pub use graphics.{GlfwOsMesaContext, GlfwVkAllocationCallbacksRaw}
+pub use graphics.{GlfwVkGetInstanceProcAddr, GlfwVkInstance, GlfwVkPhysicalDevice}
+pub use graphics.{GlfwVkProc, GlfwVkResult, GlfwVkSurface}
+pub use graphics.{GlfwVkSurfaceCreateReport, GlfwWglContext}
+pub use graphics.{VulkanPresentReport, VulkanWindowSupportReport}
+pub use graphics.{egl_display, gl_extension_supported, gl_proc_address, init_vulkan_loader}
+pub use graphics.{vulkan_instance_proc_address, vulkan_physical_device_presentation_supported}
+pub use graphics.{vulkan_present_report, vulkan_required_instance_extensions}
+pub use graphics.{vulkan_supported, vulkan_window_support_report}
+use glfw.{glfw_create_window_surface, glfw_get_current_context, glfw_swap_interval}
+use window.{ClientApi, ContextCreationApi, OpenGlProfile, Window}
+use window.{client_api_from_raw, context_creation_api_from_raw, opengl_profile_from_raw}
+
+impl Window:
+    fn current_context(read self) -> Bool:
+        let current = glfw_get_current_context :: :: call
+        let left_raw = current.raw_handle :: :: method
+        let right_raw = self.raw.raw_handle :: :: method
+        return left_raw == right_raw
+
+    fn gl_extension_supported(read self, extension: Str) -> Result[Bool, TextDecodeError]:
+        let _ = self
+        return gl_extension_supported :: extension :: call
+
+    fn gl_proc_address(read self, procname: Str) -> Result[Option[GlfwGlProc], TextDecodeError]:
+        let _ = self
+        return gl_proc_address :: procname :: call
+
+    fn vulkan_surface(read self, instance: GlfwVkInstance, allocator: *read GlfwVkAllocationCallbacksRaw) -> GlfwVkSurfaceCreateReport:
+        return glfw_create_window_surface :: instance, self.raw, allocator :: call
+
+    fn vulkan_window_support_report(read self) -> Result[VulkanWindowSupportReport, TextDecodeError]:
+        let _ = self
+        return vulkan_window_support_report :: :: call
+
+    fn vulkan_present_report(read self, instance: GlfwVkInstance, device: GlfwVkPhysicalDevice, queuefamily: CUInt, allocator: *read GlfwVkAllocationCallbacksRaw) -> Result[VulkanPresentReport, TextDecodeError]:
+        return vulkan_present_report :: self, instance, device, queuefamily, allocator :: call
+
+    fn vulkan_present_supported(read self, instance: GlfwVkInstance, device: GlfwVkPhysicalDevice, queuefamily: CUInt) -> Bool:
+        let _ = self
+        return vulkan_physical_device_presentation_supported :: instance, device, queuefamily :: call
+
+    fn vulkan_ready_for_presenting(read self, instance: GlfwVkInstance, device: GlfwVkPhysicalDevice, queuefamily: CUInt, allocator: *read GlfwVkAllocationCallbacksRaw) -> Result[Bool, TextDecodeError]:
+        select vulkan_present_report :: self, instance, device, queuefamily, allocator :: call:
+            when Result.Ok(report) =>
+                let ready = report.ready_for_presenting :: :: method
+                return Result.Ok :: ready :: call
+            when Result.Err(err) => return Result.Err :: err :: call
+
+    fn wgl_context(read self) -> GlfwWglContext:
+        return self.raw.wgl_context :: :: method
+
+    fn egl_context(read self) -> GlfwEglContext:
+        return self.raw.egl_context :: :: method
+
+    fn egl_surface(read self) -> GlfwEglSurface:
+        return self.raw.egl_surface :: :: method
+
+    fn osmesa_context(read self) -> GlfwOsMesaContext:
+        return self.raw.osmesa_context :: :: method
+
+    fn osmesa_color_buffer(read self) -> Option[GlfwOSMesaColorBuffer]:
+        return self.raw.osmesa_color_buffer :: :: method
+
+    fn osmesa_depth_buffer(read self) -> Option[GlfwOSMesaDepthBuffer]:
+        return self.raw.osmesa_depth_buffer :: :: method
+
+    fn client_api_raw(read self) -> CInt:
+        return self.raw.attrib :: 0x00022001 :: method
+
+    fn client_api(read self) -> ClientApi:
+        let raw = self.client_api_raw :: :: method
+        return client_api_from_raw :: raw :: call
+
+    fn opengl_profile_raw(read self) -> CInt:
+        return self.raw.attrib :: 0x00022008 :: method
+
+    fn opengl_profile(read self) -> OpenGlProfile:
+        let raw = self.opengl_profile_raw :: :: method
+        return opengl_profile_from_raw :: raw :: call
+
+    fn context_creation_api_raw(read self) -> CInt:
+        return self.raw.attrib :: 0x0002200B :: method
+
+    fn context_creation_api(read self) -> ContextCreationApi:
+        let raw = self.context_creation_api_raw :: :: method
+        return context_creation_api_from_raw :: raw :: call
+
+    fn context_version_major(read self) -> CInt:
+        return self.raw.attrib :: 0x00022002 :: method
+
+    fn context_version_minor(read self) -> CInt:
+        return self.raw.attrib :: 0x00022003 :: method
+
+    fn opengl_forward_compat(read self) -> Bool:
+        return self.raw.attrib_bool :: 0x00022006 :: method
+
+    fn opengl_debug_context(read self) -> Bool:
+        return self.raw.attrib_bool :: 0x00022007 :: method
+
+    fn context_no_error(read self) -> Bool:
+        return self.raw.attrib_bool :: 0x0002200A :: method
+
+    fn srgb_capable(read self) -> Bool:
+        return self.raw.attrib_bool :: 0x0002100E :: method
+
+    fn doublebuffered(read self) -> Bool:
+        return self.raw.attrib_bool :: 0x00021010 :: method
+
+    fn make_context_current(read self) -> Unit:
+        self.raw.make_context_current :: :: method
+        return
+
+    fn swap_interval(read self, interval: CInt) -> Unit:
+        self.make_context_current :: :: method
+        glfw_swap_interval :: interval :: call
+        return
+
+    fn swap_buffers(read self) -> Unit:
+        self.raw.swap_buffers :: :: method
+        return

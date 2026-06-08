@@ -1,0 +1,303 @@
+use std.Option
+use wrapper.core.{GlfwMonitor, GlfwMonitorRaw, glfw_monitor_none}
+use wrapper.window.{GlfwPoint, GlfwRect, GlfwScale, GlfwSize}
+
+pub struct GlfwMonitorList:
+    pub(package) base: *read *edit GlfwMonitorRaw
+    pub(package) count_value: CInt
+
+pub struct GlfwVideoModeList:
+    pub(package) base: *read GlfwVideoMode
+    pub(package) count_value: CInt
+
+const POINTER_OFFSET_STEP: ISize = 1
+
+fn monitor_slot_at(base: *read *edit GlfwMonitorRaw, index: CInt) -> *read *edit GlfwMonitorRaw:
+    let slot: *read *edit GlfwMonitorRaw = base
+    let scan: CInt = 0
+    repeat while scan < index:
+        slot = #unsafe slot.offset :: POINTER_OFFSET_STEP :: method
+        scan = scan + 1
+    return slot
+
+fn video_mode_slot_at(base: *read GlfwVideoMode, index: CInt) -> *read GlfwVideoMode:
+    let slot: *read GlfwVideoMode = base
+    let scan: CInt = 0
+    repeat while scan < index:
+        slot = #unsafe slot.offset :: POINTER_OFFSET_STEP :: method
+        scan = scan + 1
+    return slot
+
+#repr[c]
+pub struct GlfwVideoMode:
+    pub width: CInt
+    pub height: CInt
+    pub red_bits: CInt
+    pub green_bits: CInt
+    pub blue_bits: CInt
+    pub refresh_rate: CInt
+
+#repr[c]
+pub struct GlfwGammaRamp:
+    pub red: *edit CUShort
+    pub green: *edit CUShort
+    pub blue: *edit CUShort
+    pub size: CUInt
+
+impl GlfwVideoMode:
+    fn width_value(read self) -> CInt:
+        return self.width
+
+    fn height_value(read self) -> CInt:
+        return self.height
+
+    fn red_bits_value(read self) -> CInt:
+        return self.red_bits
+
+    fn green_bits_value(read self) -> CInt:
+        return self.green_bits
+
+    fn blue_bits_value(read self) -> CInt:
+        return self.blue_bits
+
+    fn refresh_rate_value(read self) -> CInt:
+        return self.refresh_rate
+
+impl GlfwGammaRamp:
+    fn red_ptr(read self) -> *edit CUShort:
+        return self.red
+
+    fn green_ptr(read self) -> *edit CUShort:
+        return self.green
+
+    fn blue_ptr(read self) -> *edit CUShort:
+        return self.blue
+
+    fn size_value(read self) -> CUInt:
+        return self.size
+
+pub fn glfw_video_mode_width(read mode: GlfwVideoMode) -> CInt:
+    return mode.width
+
+pub fn glfw_video_mode_height(read mode: GlfwVideoMode) -> CInt:
+    return mode.height
+
+pub fn glfw_video_mode_red_bits(read mode: GlfwVideoMode) -> CInt:
+    return mode.red_bits
+
+pub fn glfw_video_mode_green_bits(read mode: GlfwVideoMode) -> CInt:
+    return mode.green_bits
+
+pub fn glfw_video_mode_blue_bits(read mode: GlfwVideoMode) -> CInt:
+    return mode.blue_bits
+
+pub fn glfw_video_mode_refresh_rate(read mode: GlfwVideoMode) -> CInt:
+    return mode.refresh_rate
+
+pub fn glfw_gamma_ramp_red(read ramp: GlfwGammaRamp) -> *edit CUShort:
+    return ramp.red
+
+pub fn glfw_gamma_ramp_green(read ramp: GlfwGammaRamp) -> *edit CUShort:
+    return ramp.green
+
+pub fn glfw_gamma_ramp_blue(read ramp: GlfwGammaRamp) -> *edit CUShort:
+    return ramp.blue
+
+pub fn glfw_gamma_ramp_size(read ramp: GlfwGammaRamp) -> CUInt:
+    return ramp.size
+
+pub type GlfwMonitorCallback = extern["c"] fn(*edit GlfwMonitorRaw, CInt) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetMonitors(count: *edit CInt) -> *read *edit GlfwMonitorRaw
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetPrimaryMonitor() -> *edit GlfwMonitorRaw
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetMonitorPos(monitor: *edit GlfwMonitorRaw, x: *edit CInt, y: *edit CInt) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetMonitorWorkarea(monitor: *edit GlfwMonitorRaw, x: *edit CInt, y: *edit CInt, width: *edit CInt, height: *edit CInt) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetMonitorPhysicalSize(monitor: *edit GlfwMonitorRaw, width_mm: *edit CInt, height_mm: *edit CInt) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetMonitorContentScale(monitor: *edit GlfwMonitorRaw, x: *edit F32, y: *edit F32) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetMonitorName(monitor: *edit GlfwMonitorRaw) -> *read CChar
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetMonitorUserPointer(monitor: *edit GlfwMonitorRaw, pointer: *edit CVoid) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetMonitorUserPointer(monitor: *edit GlfwMonitorRaw) -> *edit CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetMonitorCallback(take callback: Option[GlfwMonitorCallback]) -> Option[GlfwMonitorCallback]
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetVideoModes(monitor: *edit GlfwMonitorRaw, count: *edit CInt) -> *read GlfwVideoMode
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetVideoMode(monitor: *edit GlfwMonitorRaw) -> *read GlfwVideoMode
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetGamma(monitor: *edit GlfwMonitorRaw, gamma: F32) -> CVoid
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetGammaRamp(monitor: *edit GlfwMonitorRaw) -> *read GlfwGammaRamp
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwSetGammaRamp(monitor: *edit GlfwMonitorRaw, ramp: *read GlfwGammaRamp) -> CVoid
+
+pub fn glfw_monitors() -> GlfwMonitorList:
+    let count: CInt = 0
+    let count_ptr: *edit CInt = #unsafe &raw edit count
+    let base: *read *edit GlfwMonitorRaw = #unsafe glfwGetMonitors :: count_ptr :: call
+    return GlfwMonitorList :: base, count :: call
+
+pub fn glfw_primary_monitor() -> GlfwMonitor:
+    let raw: *edit GlfwMonitorRaw = #unsafe glfwGetPrimaryMonitor :: :: call
+    return GlfwMonitor :: raw :: call
+
+pub fn glfw_set_monitor_callback(take callback: Option[GlfwMonitorCallback]) -> Option[GlfwMonitorCallback]:
+    return #unsafe glfwSetMonitorCallback :: callback :: call
+
+impl GlfwMonitor:
+    fn pos(read self) -> GlfwPoint:
+        let x: CInt = 0
+        let y: CInt = 0
+        let x_ptr: *edit CInt = #unsafe &raw edit x
+        let y_ptr: *edit CInt = #unsafe &raw edit y
+        #unsafe glfwGetMonitorPos :: self.raw, x_ptr, y_ptr :: call
+        return GlfwPoint :: x, y :: call
+
+    fn workarea(read self) -> GlfwRect:
+        let x: CInt = 0
+        let y: CInt = 0
+        let width: CInt = 0
+        let height: CInt = 0
+        let x_ptr: *edit CInt = #unsafe &raw edit x
+        let y_ptr: *edit CInt = #unsafe &raw edit y
+        let width_ptr: *edit CInt = #unsafe &raw edit width
+        let height_ptr: *edit CInt = #unsafe &raw edit height
+        #unsafe glfwGetMonitorWorkarea :: self.raw, x_ptr, y_ptr, width_ptr, height_ptr :: call
+        return GlfwRect :: x, y, width, height :: call
+
+    fn physical_size(read self) -> GlfwSize:
+        let width: CInt = 0
+        let height: CInt = 0
+        let width_ptr: *edit CInt = #unsafe &raw edit width
+        let height_ptr: *edit CInt = #unsafe &raw edit height
+        #unsafe glfwGetMonitorPhysicalSize :: self.raw, width_ptr, height_ptr :: call
+        return GlfwSize :: width, height :: call
+
+    fn content_scale(read self) -> GlfwScale:
+        let x: F32 = 0.0
+        let y: F32 = 0.0
+        let x_ptr: *edit F32 = #unsafe &raw edit x
+        let y_ptr: *edit F32 = #unsafe &raw edit y
+        #unsafe glfwGetMonitorContentScale :: self.raw, x_ptr, y_ptr :: call
+        return GlfwScale :: x, y :: call
+
+    fn name(read self) -> *read CChar:
+        return #unsafe glfwGetMonitorName :: self.raw :: call
+
+    fn set_user_pointer(read self, pointer: *edit CVoid) -> Unit:
+        #unsafe glfwSetMonitorUserPointer :: self.raw, pointer :: call
+        return
+
+    fn user_pointer(read self) -> *edit CVoid:
+        return #unsafe glfwGetMonitorUserPointer :: self.raw :: call
+
+    fn video_modes(read self) -> GlfwVideoModeList:
+        let count: CInt = 0
+        let count_ptr: *edit CInt = #unsafe &raw edit count
+        let base: *read GlfwVideoMode = #unsafe glfwGetVideoModes :: self.raw, count_ptr :: call
+        return GlfwVideoModeList :: base, count :: call
+
+    fn video_mode(read self) -> Option[GlfwVideoMode]:
+        let ptr: *read GlfwVideoMode = #unsafe glfwGetVideoMode :: self.raw :: call
+        select:
+            when ptr.is_null :: :: method => return Option.None
+            else =>
+                let mode: GlfwVideoMode = #unsafe ptr.load :: :: method
+                return Option.Some :: mode :: call
+
+    fn set_gamma(read self, gamma: F32) -> Unit:
+        #unsafe glfwSetGamma :: self.raw, gamma :: call
+        return
+
+    fn gamma_ramp_ptr(read self) -> *read GlfwGammaRamp:
+        return #unsafe glfwGetGammaRamp :: self.raw :: call
+
+    fn gamma_ramp(read self) -> Option[GlfwGammaRamp]:
+        let ptr: *read GlfwGammaRamp = self.gamma_ramp_ptr :: :: method
+        select:
+            when ptr.is_null :: :: method => return Option.None
+            else =>
+                let ramp: GlfwGammaRamp = #unsafe ptr.load :: :: method
+                return Option.Some :: ramp :: call
+
+    fn set_gamma_ramp(read self, read ramp: GlfwGammaRamp) -> Unit:
+        let ramp_ptr: *read GlfwGammaRamp = #unsafe &raw read ramp
+        #unsafe glfwSetGammaRamp :: self.raw, ramp_ptr :: call
+        return
+
+impl GlfwMonitorList:
+    fn count(read self) -> CInt:
+        return self.count_value
+
+    fn raw_at(read self, index: CInt) -> GlfwMonitor:
+        select:
+            when self.base.is_null :: :: method => return glfw_monitor_none :: :: call
+            when index < 0 => return glfw_monitor_none :: :: call
+            when index >= self.count_value => return glfw_monitor_none :: :: call
+            else =>
+                let slot: *read *edit GlfwMonitorRaw = monitor_slot_at :: self.base, index :: call
+                let raw: *edit GlfwMonitorRaw = #unsafe slot.load :: :: method
+                return GlfwMonitor :: raw :: call
+
+    fn at(read self, index: CInt) -> GlfwMonitor:
+        return self.raw_at :: index :: method
+
+    fn first(read self) -> GlfwMonitor:
+        return self.at :: 0 :: method
+
+impl GlfwVideoModeList:
+    fn count(read self) -> CInt:
+        return self.count_value
+
+    fn raw_at(read self, index: CInt) -> GlfwVideoMode:
+        let slot: *read GlfwVideoMode = video_mode_slot_at :: self.base, index :: call
+        return #unsafe slot.load :: :: method
+
+    fn at(read self, index: CInt) -> Option[GlfwVideoMode]:
+        select:
+            when self.base.is_null :: :: method => return Option.None
+            when index < 0 => return Option.None
+            when index >= self.count_value => return Option.None
+            else =>
+                let mode = self.raw_at :: index :: method
+                return Option.Some :: mode :: call
+
+    fn first(read self) -> Option[GlfwVideoMode]:
+        return self.at :: 0 :: method

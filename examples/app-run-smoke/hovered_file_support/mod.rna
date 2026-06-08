@@ -1,6 +1,6 @@
 use std.{List, Option}
-use runa_app_run.{AppEvent, WindowEvent, WindowEventKind}
-use runa_app_run.app_event_batch_from_events
+use runa_app.{AppEvent, WindowEvent, WindowEventKind}
+use runa_app.app_event_batch_from_events
 
 pub fn check_hovered_file_batch_helpers() -> I32:
     let hovered_event = WindowEvent.HoveredFile :: :: call

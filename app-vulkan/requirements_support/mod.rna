@@ -37,18 +37,19 @@ impl VkPhysicalDeviceMemoryProperties:
         select:
             when !self.memory_type_supported :: memory_type_index, requirements.memory_type_bits :: method => return Option.None
             else => ()
-        select self.memory_type :: memory_type_index :: method:
-            when Option.Some(memory_type) =>
-                select self.memory_heap :: memory_type.heap_index :: method:
-                    when Option.Some(memory_heap) =>
-                        let plan = VulkanMemoryAllocationPlan :: :: call
-                            requirements = requirements
-                            memory_type_index = memory_type_index
-                            memory_type = memory_type
-                            memory_heap = memory_heap
-                        return Option.Some :: plan :: call
-                    when Option.None => return Option.None
-            when Option.None => return Option.None
+        select either:
+            when memory_type: Option.Some(memory_type) <- self.memory_type :: memory_type_index :: method
+            when memory_heap: Option.Some(memory_heap) <- self.memory_heap :: memory_type.heap_index :: method =>
+                let plan = VulkanMemoryAllocationPlan :: :: call
+                    requirements = requirements
+                    memory_type_index = memory_type_index
+                    memory_type = memory_type
+                    memory_heap = memory_heap
+                return Option.Some :: plan :: call
+
+        with Option.None:
+            memory_type => return Option.None
+            memory_heap => return Option.None
 
     fn compatible_allocation_plan(read self, read requirements: VkMemoryRequirements, memory_type_index: Option[CUInt]) -> Option[VulkanMemoryAllocationPlan]:
         select memory_type_index:

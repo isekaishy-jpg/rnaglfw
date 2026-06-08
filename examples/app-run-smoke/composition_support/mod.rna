@@ -1,6 +1,6 @@
 use std.{List, Option, Str}
 
-use runa_app_run.{AppEvent, WindowEvent, WindowEventKind, app_event_batch_from_events}
+use runa_app.{AppEvent, WindowEvent, WindowEventKind, app_event_batch_from_events}
 
 fn text_matches(read actual: Str, read expected: Str) -> Bool:
     select actual.find :: expected :: method:

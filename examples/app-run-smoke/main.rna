@@ -6,11 +6,11 @@ mod raw_input_support
 mod touch_support
 
 use std.{List, Option, Result, Str}
-use runa_app_run.{AppEvent, InputAction, JoystickEvent, JoystickEventKind, KeyCode, MonitorEvent}
-use runa_app_run.{MouseButton, UserEvent, WindowEvent, WindowEventKind}
-use runa_app_run.{MonitorEventKind, UserEventKind}
-use runa_app_run.{ControlFlow, run_with_config_and_flow, win32_app_init_config}
-use runa_app_run.{app_event_batch_from_events, modifiers_from_raw}
+use runa_app.{AppEvent, InputAction, JoystickEvent, JoystickEventKind, KeyCode, MonitorEvent}
+use runa_app.{MouseButton, UserEvent, WindowEvent, WindowEventKind}
+use runa_app.{MonitorEventKind, UserEventKind}
+use runa_app.{ControlFlow, run_with_config_and_flow, win32_app_init_config}
+use runa_app.{app_event_batch_from_events, modifiers_from_raw}
 use composition_support.check_composition_batch_helpers
 use handler.SmokeHandler
 use hovered_file_support.check_hovered_file_batch_helpers

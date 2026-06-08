@@ -1,0 +1,340 @@
+use std.{List, Option, Result, Str}
+use bridge.{TextDecodeError, copy_c_string}
+use window.rgba_support.gamma_ramp_channel_count
+use glfw.{GlfwGammaRamp, GlfwMonitor, GlfwPoint, GlfwSize}
+use glfw.{glfw_monitor_none, glfw_monitor_raw_handle, glfw_monitors, glfw_primary_monitor}
+use window.{Point, Rect, Scale, Size}
+use window.{Window, WindowModeError, WindowMonitorSpec, rect, window_monitor_spec}
+
+pub use window.{Monitor, MonitorGammaRamp, MonitorGammaRampError, VideoMode}
+pub use window.monitor_gamma_ramp
+
+const POINTER_OFFSET_STEP: ISize = 1
+
+fn gamma_channel_slot_at(base: *edit CUShort, index: CUInt) -> *edit CUShort:
+    let slot: *edit CUShort = base
+    let scan: CUInt = 0
+    repeat while scan < index:
+        slot = #unsafe slot.offset :: POINTER_OFFSET_STEP :: method
+        scan = scan + 1
+    return slot
+
+fn copy_gamma_channel(base: *edit CUShort, count: CUInt) -> List[CUShort]:
+    let values = List[CUShort] :: :: call
+    select:
+        when base.is_null :: :: method => return values
+        else => ()
+    let scan: CUInt = 0
+    repeat while scan < count:
+        let slot = gamma_channel_slot_at :: base, scan :: call
+        let value: CUShort = #unsafe slot.load :: :: method
+        values.push :: value :: method
+        scan = scan + 1
+    return values
+
+fn rect_right(read value: Rect) -> CInt:
+    return value.x + value.width
+
+fn rect_bottom(read value: Rect) -> CInt:
+    return value.y + value.height
+
+fn rect_center_x(read value: Rect) -> CInt:
+    return value.x + (value.width / 2)
+
+fn rect_center_y(read value: Rect) -> CInt:
+    return value.y + (value.height / 2)
+
+fn rect_intersection_area(read left: Rect, read right: Rect) -> CInt:
+    let overlap_left = left.x
+    select:
+        when right.x > overlap_left => overlap_left = right.x
+        else => ()
+    let overlap_top = left.y
+    select:
+        when right.y > overlap_top => overlap_top = right.y
+        else => ()
+    let overlap_right = rect_right :: left :: call
+    let right_edge = rect_right :: right :: call
+    select:
+        when right_edge < overlap_right => overlap_right = right_edge
+        else => ()
+    let overlap_bottom = rect_bottom :: left :: call
+    let bottom_edge = rect_bottom :: right :: call
+    select:
+        when bottom_edge < overlap_bottom => overlap_bottom = bottom_edge
+        else => ()
+    select:
+        when overlap_right <= overlap_left => return 0
+        when overlap_bottom <= overlap_top => return 0
+        else => return (overlap_right - overlap_left) * (overlap_bottom - overlap_top)
+
+fn cint_to_i64(value: CInt) -> I64:
+    let Result.Ok(widened) = value as Maybe[I64] else => return 0I64
+    return widened
+
+fn point_distance_squared(ax: CInt, ay: CInt, bx: CInt, by: CInt) -> I64:
+    let dx = cint_to_i64 :: ax - bx :: call
+    let dy = cint_to_i64 :: ay - by :: call
+    return dx * dx + dy * dy
+
+fn monitor_display_rect(read monitor: Monitor) -> Rect:
+    let pos = monitor.screen_pos :: :: method
+    select monitor.current_video_mode :: :: method:
+        when Option.Some(mode) => return rect :: pos.x, pos.y, mode.width, mode.height :: call
+        when Option.None => return monitor.work_rect :: :: method
+
+fn current_monitor_for_window(read window: Window) -> Option[Monitor]:
+    let placement = window.outer_placement :: :: method
+    let window_rect = rect :: placement.pos.x, placement.pos.y, placement.size.width, placement.size.height :: call
+    let window_center_x = rect_center_x :: window_rect :: call
+    let window_center_y = rect_center_y :: window_rect :: call
+    let monitors = glfw_monitors :: :: call
+    let count = monitors.count :: :: method
+    let best_monitor = glfw_monitor_none :: :: call
+    let best_overlap: CInt = -1
+    let best_distance: I64 = -1I64
+    let scan: CInt = 0
+    repeat while scan < count:
+        let monitor = monitors.at :: scan :: method
+        select:
+            when !monitor.available :: :: method => ()
+            else =>
+                let display_rect = monitor_display_rect :: monitor :: call
+                let overlap = rect_intersection_area :: window_rect, display_rect :: call
+                let monitor_center_x = rect_center_x :: display_rect :: call
+                let monitor_center_y = rect_center_y :: display_rect :: call
+                let distance = point_distance_squared :: window_center_x, window_center_y, monitor_center_x, monitor_center_y :: call
+                select:
+                    when best_monitor.is_null :: :: method =>
+                        best_monitor = monitor
+                        best_overlap = overlap
+                        best_distance = distance
+                    when overlap > best_overlap =>
+                        best_monitor = monitor
+                        best_overlap = overlap
+                        best_distance = distance
+                    when overlap == best_overlap =>
+                        select:
+                            when best_overlap <= 0 && (best_distance < 0I64 || distance < best_distance) =>
+                                best_monitor = monitor
+                                best_overlap = overlap
+                                best_distance = distance
+                            else => ()
+                    else => ()
+        scan = scan + 1
+    select:
+        when best_monitor.is_null :: :: method => return Option.None
+        else => return Option.Some :: best_monitor :: call
+
+impl Window:
+    fn monitor(read self) -> Monitor:
+        return self.raw.monitor :: :: method
+
+    fn current_monitor(read self) -> Option[Monitor]:
+        let monitor = self.monitor :: :: method
+        select:
+            when !monitor.is_null :: :: method => return Option.Some :: monitor :: call
+            else => return current_monitor_for_window :: self :: call
+
+    fn primary_monitor(read self) -> Option[Monitor]:
+        let _ = self
+        let monitor = glfw_primary_monitor :: :: call
+        select:
+            when monitor.is_null :: :: method => return Option.None
+            else => return Option.Some :: monitor :: call
+
+    fn available_monitors(read self) -> List[Monitor]:
+        let _ = self
+        let available = List[Monitor] :: :: call
+        let monitors = glfw_monitors :: :: call
+        let count = monitors.count :: :: method
+        let scan: CInt = 0
+        repeat while scan < count:
+            let monitor = monitors.at :: scan :: method
+            select:
+                when monitor.available :: :: method => available.push :: monitor :: method
+                else => ()
+            scan = scan + 1
+        return available
+
+    fn fullscreen(read self) -> Bool:
+        let monitor = self.monitor :: :: method
+        return !monitor.is_null :: :: method
+
+    fn set_monitor(read self, read spec: WindowMonitorSpec) -> Unit:
+        self.raw.set_monitor :: spec :: method
+        return
+
+    fn enter_fullscreen_on(read self, read monitor: Monitor) -> Result[Unit, WindowModeError]:
+        let Result.Ok(spec) = monitor.fullscreen_spec :: :: method else => return Result.Err :: WindowModeError.MissingVideoMode :: call
+        self.raw.set_monitor :: spec :: method
+        return Result.Ok :: () :: call
+
+    fn enter_fullscreen_with_video_mode(read self, read monitor: Monitor, read mode: VideoMode) -> Result[Unit, WindowModeError]:
+        let Result.Ok(spec) = monitor.fullscreen_spec_with_video_mode :: mode :: method else => return Result.Err :: WindowModeError.SizeOutOfRange :: call
+        self.raw.set_monitor :: spec :: method
+        return Result.Ok :: () :: call
+
+    fn exit_fullscreen(read self, x: CInt, y: CInt, width: CInt, height: CInt) -> Unit:
+        self.exit_fullscreen_with_refresh_rate :: x, y, width, height, 0 - 1 :: method
+        return
+
+    fn exit_fullscreen_with_refresh_rate(read self, x: CInt, y: CInt, width: CInt, height: CInt, refresh_rate: CInt) -> Unit:
+        let monitor = glfw_monitor_none :: :: call
+        let pos = GlfwPoint :: x, y :: call
+        let size = GlfwSize :: width, height :: call
+        let spec = window_monitor_spec :: monitor, pos, size, refresh_rate :: call
+        self.raw.set_monitor :: spec :: method
+        return
+
+impl GlfwMonitor:
+    fn available(read self) -> Bool:
+        return !self.is_null :: :: method
+
+    fn primary(read self) -> Bool:
+        let primary = glfw_primary_monitor :: :: call
+        let left_raw = glfw_monitor_raw_handle :: self :: call
+        let right_raw = glfw_monitor_raw_handle :: primary :: call
+        return left_raw == right_raw
+
+    fn name_text(read self) -> Result[Str, TextDecodeError]:
+        let raw_name = self.name :: :: method
+        return copy_c_string :: raw_name :: call
+
+    fn screen_pos(read self) -> Point:
+        return self.pos :: :: method
+
+    fn work_rect(read self) -> Rect:
+        return self.workarea :: :: method
+
+    fn physical_size_mm(read self) -> Size:
+        return self.physical_size :: :: method
+
+    fn desktop_scale(read self) -> Scale:
+        return self.content_scale :: :: method
+
+    fn current_video_mode(read self) -> Option[VideoMode]:
+        return self.video_mode :: :: method
+
+    fn fullscreen_spec(read self) -> Result[WindowMonitorSpec, WindowModeError]:
+        select self.current_video_mode :: :: method:
+            when Option.Some(mode) =>
+                let pos = self.pos :: :: method
+                let size = GlfwSize :: mode.width, mode.height :: call
+                let monitor_raw = glfw_monitor_raw_handle :: self :: call
+                let monitor = GlfwMonitor :: monitor_raw :: call
+                let spec = window_monitor_spec :: monitor, pos, size, mode.refresh_rate :: call
+                return Result.Ok :: spec :: call
+            when Option.None => return Result.Err :: WindowModeError.MissingVideoMode :: call
+
+    fn fullscreen_spec_with_video_mode(read self, read mode: VideoMode) -> Result[WindowMonitorSpec, WindowModeError]:
+        let pos = self.pos :: :: method
+        let size = GlfwSize :: mode.width, mode.height :: call
+        let monitor_raw = glfw_monitor_raw_handle :: self :: call
+        let monitor = GlfwMonitor :: monitor_raw :: call
+        let spec = window_monitor_spec :: monitor, pos, size, mode.refresh_rate :: call
+        return Result.Ok :: spec :: call
+
+    fn video_mode_count(read self) -> CInt:
+        let modes = self.video_modes :: :: method
+        return modes.count :: :: method
+
+    fn first_video_mode(read self) -> Option[VideoMode]:
+        return self.video_mode_at :: 0 :: method
+
+    fn video_mode_at(read self, index: CInt) -> Option[VideoMode]:
+        let modes = self.video_modes :: :: method
+        return modes.at :: index :: method
+
+    fn video_modes_snapshot(read self) -> List[VideoMode]:
+        let values = List[VideoMode] :: :: call
+        let modes = self.video_modes :: :: method
+        let count = modes.count :: :: method
+        let scan: CInt = 0
+        repeat while scan < count:
+            select modes.at :: scan :: method:
+                when Option.Some(mode) => values.push :: mode :: method
+                when Option.None => ()
+            scan = scan + 1
+        return values
+
+    fn video_mode_matching(read self, width: CInt, height: CInt, refresh_rate: CInt) -> Option[VideoMode]:
+        let modes = self.video_modes :: :: method
+        let count = modes.count :: :: method
+        let scan: CInt = 0
+        repeat while scan < count:
+            select modes.at :: scan :: method:
+                when Option.Some(mode) =>
+                    select:
+                        when mode.width == width && mode.height == height && mode.refresh_rate == refresh_rate =>
+                            return Option.Some :: mode :: call
+                        else => ()
+                when Option.None => ()
+            scan = scan + 1
+        return Option.None
+
+    fn video_mode_with_max_refresh(read self, width: CInt, height: CInt) -> Option[VideoMode]:
+        let modes = self.video_modes :: :: method
+        let count = modes.count :: :: method
+        let best_index: CInt = -1
+        let best_refresh_rate: CInt = -1
+        let scan: CInt = 0
+        repeat while scan < count:
+            select modes.at :: scan :: method:
+                when Option.Some(mode) =>
+                    select:
+                        when mode.width == width && mode.height == height =>
+                            select:
+                                when best_index < 0 || mode.refresh_rate > best_refresh_rate =>
+                                    best_index = scan
+                                    best_refresh_rate = mode.refresh_rate
+                                else => ()
+                        else => ()
+                when Option.None => ()
+            scan = scan + 1
+        select:
+            when best_index >= 0 => return modes.at :: best_index :: method
+            else => return Option.None
+
+    fn supports_video_mode(read self, read mode: VideoMode) -> Bool:
+        select self.video_mode_matching :: mode.width, mode.height, mode.refresh_rate :: method:
+            when Option.Some(_) => return true
+            when Option.None => return false
+
+    fn gamma_ramp_snapshot(read self) -> Option[MonitorGammaRamp]:
+        select self.gamma_ramp :: :: method:
+            when Option.Some(ramp) =>
+                let red = copy_gamma_channel :: ramp.red, ramp.size :: call
+                let green = copy_gamma_channel :: ramp.green, ramp.size :: call
+                let blue = copy_gamma_channel :: ramp.blue, ramp.size :: call
+                let snapshot = MonitorGammaRamp :: red, green, blue :: call
+                return Option.Some :: snapshot :: call
+            when Option.None => return Option.None
+
+    fn apply_gamma_ramp(read self, edit ramp: MonitorGammaRamp) -> Result[Unit, MonitorGammaRampError]:
+        select ramp.raw_gamma_ramp :: :: method:
+            when Result.Ok(raw_ramp) =>
+                self.set_gamma_ramp :: raw_ramp :: method
+                return Result.Ok :: () :: call
+            when Result.Err(error) => return Result.Err :: error :: call
+
+    fn apply_gamma(read self, gamma: F32) -> Unit:
+        self.set_gamma :: gamma :: method
+        return
+
+impl MonitorGammaRamp:
+    fn raw_gamma_ramp(edit self) -> Result[GlfwGammaRamp, MonitorGammaRampError]:
+        select gamma_ramp_channel_count :: self :: call:
+            when Result.Ok(size) =>
+                let red_ptr: *edit CUShort = #unsafe &raw edit self.red[0]
+                let green_ptr: *edit CUShort = #unsafe &raw edit self.green[0]
+                let blue_ptr: *edit CUShort = #unsafe &raw edit self.blue[0]
+                let raw = GlfwGammaRamp :: red_ptr, green_ptr, blue_ptr, size :: call
+                return Result.Ok :: raw :: call
+            when Result.Err(error) => return Result.Err :: error :: call
+
+    fn size(read self) -> Index:
+        return self.red.count :: :: method
+
+    fn empty(read self) -> Bool:
+        return self.red.is_empty :: :: method

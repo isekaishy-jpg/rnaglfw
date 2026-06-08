@@ -44,16 +44,17 @@ impl VulkanPresentContext:
         return finish_recording_command_resources_sync :: self, resources :: call
 
     fn finish_recording_command_resources_async(read self, take resources: VulkanCommandResources, read wait: Option[VulkanSemaphoreResource], wait_stage_mask: CUInt, read signal: Option[VulkanSemaphoreResource]) -> Result[Unit, VulkanPresentError]:
-        select self.end_command_resources :: resources :: method:
-            when Result.Ok(_) =>
-                select self.submit_command_resources_async :: resources, wait, wait_stage_mask, signal :: method:
-                    when Result.Ok(_) =>
-                        self.destroy_command_resources :: resources :: method
-                        return Result.Ok :: :: call
-                    when Result.Err(err) =>
-                        self.destroy_command_resources :: resources :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) =>
+        select either:
+            when ended: Result.Ok(_) <- self.end_command_resources :: resources :: method
+            when submitted: Result.Ok(_) <- self.submit_command_resources_async :: resources, wait, wait_stage_mask, signal :: method =>
+                self.destroy_command_resources :: resources :: method
+                return Result.Ok :: :: call
+
+        with Result.Err(err):
+            ended =>
+                self.destroy_command_resources :: resources :: method
+                return Result.Err :: err :: call
+            submitted =>
                 self.destroy_command_resources :: resources :: method
                 return Result.Err :: err :: call
 
@@ -127,30 +128,32 @@ impl VulkanPresentContext:
             else => return Result.Ok :: :: call
 
     fn finish_recording_command_resources_with_fence(read self, take resources: VulkanCommandResources, read fence: VulkanFenceResource) -> Result[Unit, VulkanPresentError]:
-        select self.end_command_resources :: resources :: method:
-            when Result.Ok(_) =>
-                select self.submit_command_resources_with_fence :: resources, fence :: method:
-                    when Result.Ok(_) =>
-                        self.destroy_command_resources :: resources :: method
-                        return Result.Ok :: :: call
-                    when Result.Err(err) =>
-                        self.destroy_command_resources :: resources :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) =>
+        select either:
+            when ended: Result.Ok(_) <- self.end_command_resources :: resources :: method
+            when submitted: Result.Ok(_) <- self.submit_command_resources_with_fence :: resources, fence :: method =>
+                self.destroy_command_resources :: resources :: method
+                return Result.Ok :: :: call
+
+        with Result.Err(err):
+            ended =>
+                self.destroy_command_resources :: resources :: method
+                return Result.Err :: err :: call
+            submitted =>
                 self.destroy_command_resources :: resources :: method
                 return Result.Err :: err :: call
 
     fn finish_recording_command_resources_async_with_fence(read self, take resources: VulkanCommandResources, read wait: Option[VulkanSemaphoreResource], wait_stage_mask: CUInt, read signal: Option[VulkanSemaphoreResource], read fence: VulkanFenceResource) -> Result[Unit, VulkanPresentError]:
-        select self.end_command_resources :: resources :: method:
-            when Result.Ok(_) =>
-                select self.submit_command_resources_async_with_fence :: resources, wait, wait_stage_mask, signal, fence :: method:
-                    when Result.Ok(_) =>
-                        self.destroy_command_resources :: resources :: method
-                        return Result.Ok :: :: call
-                    when Result.Err(err) =>
-                        self.destroy_command_resources :: resources :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) =>
+        select either:
+            when ended: Result.Ok(_) <- self.end_command_resources :: resources :: method
+            when submitted: Result.Ok(_) <- self.submit_command_resources_async_with_fence :: resources, wait, wait_stage_mask, signal, fence :: method =>
+                self.destroy_command_resources :: resources :: method
+                return Result.Ok :: :: call
+
+        with Result.Err(err):
+            ended =>
+                self.destroy_command_resources :: resources :: method
+                return Result.Err :: err :: call
+            submitted =>
                 self.destroy_command_resources :: resources :: method
                 return Result.Err :: err :: call
 

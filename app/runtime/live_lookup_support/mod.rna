@@ -1,0 +1,72 @@
+use std.{Option, Result}
+use event.{JoystickId, MonitorId}
+use joystick.Joystick
+use runtime.{App, JoystickSnapshot, MonitorSnapshot, WindowSnapshot}
+use window.{Monitor, Window, WindowId}
+
+impl App:
+    fn window_option(read self, id: WindowId) -> Option[Window]:
+        select self.window :: id :: method:
+            when Result.Ok(window) => return Option.Some :: window :: call
+            when Result.Err(_) => return Option.None
+
+    fn window_snapshot_option(read self, id: WindowId) -> Option[WindowSnapshot]:
+        select self.window_snapshot :: id :: method:
+            when Result.Ok(snapshot) => return Option.Some :: snapshot :: call
+            when Result.Err(_) => return Option.None
+
+    fn current_context_window_option(read self) -> Option[Window]:
+        select self.current_context_window :: :: method:
+            when Result.Ok(window) => return Option.Some :: window :: call
+            when Result.Err(_) => return Option.None
+
+    fn current_context_window_snapshot_option(read self) -> Option[WindowSnapshot]:
+        select either:
+            when window: Option.Some(window) <- self.current_context_window_option :: :: method
+            when snapshot: Result.Ok(snapshot) <- self.window_snapshot :: window.id :: method =>
+                return Option.Some :: snapshot :: call
+
+        with Option.None:
+            window => return Option.None
+
+        with Result.Err(_):
+            snapshot => return Option.None
+
+    fn primary_monitor_option(read self) -> Option[Monitor]:
+        select self.primary_monitor :: :: method:
+            when Result.Ok(monitor) => return Option.Some :: monitor :: call
+            when Result.Err(_) => return Option.None
+
+    fn monitor_option(read self, id: MonitorId) -> Option[Monitor]:
+        select self.monitor :: id :: method:
+            when Result.Ok(monitor) => return Option.Some :: monitor :: call
+            when Result.Err(_) => return Option.None
+
+    fn monitor_snapshot_option(read self, id: MonitorId) -> Option[MonitorSnapshot]:
+        select self.monitor_snapshot :: id :: method:
+            when Result.Ok(snapshot) => return Option.Some :: snapshot :: call
+            when Result.Err(_) => return Option.None
+
+    fn joystick_option(read self, id: JoystickId) -> Option[Joystick]:
+        select self.has_joystick :: id :: method:
+            when true =>
+                let joystick = self.joystick :: id :: method
+                return Option.Some :: joystick :: call
+            when false => return Option.None
+
+    fn joystick_snapshot_option(read self, id: JoystickId) -> Option[JoystickSnapshot]:
+        select self.has_joystick :: id :: method:
+            when true =>
+                let snapshot = self.joystick_snapshot :: id :: method
+                return Option.Some :: snapshot :: call
+            when false => return Option.None
+
+    fn primary_monitor_id_option(read self) -> Option[MonitorId]:
+        select self.primary_monitor_id :: :: method:
+            when Result.Ok(id) => return Option.Some :: id :: call
+            when Result.Err(_) => return Option.None
+
+    fn primary_monitor_snapshot_option(read self) -> Option[MonitorSnapshot]:
+        select self.primary_monitor_snapshot :: :: method:
+            when Result.Ok(snapshot) => return Option.Some :: snapshot :: call
+            when Result.Err(_) => return Option.None

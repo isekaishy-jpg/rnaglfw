@@ -19,21 +19,27 @@ fn vulkan_image_shape(read image: VulkanImage) -> Result[VulkanImageShape, Vulka
         when Result.Err(err) => return Result.Err :: err :: call
     let width_raw = image.width :: :: method
     let height_raw = image.height :: :: method
-    let Result.Ok(width) = width_raw as Maybe[Index] else =>
-        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
-        return Result.Err :: error :: call
-    let Result.Ok(height) = height_raw as Maybe[Index] else =>
-        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
-        return Result.Err :: error :: call
-    let Result.Ok(width_wide) = width as Maybe[USize] else =>
-        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
-        return Result.Err :: error :: call
-    let tight_stride_wide: USize = width_wide * 4USize
-    let Result.Ok(tight_stride) = tight_stride_wide as Maybe[Index] else =>
-        let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
-        return Result.Err :: error :: call
-    let shape = VulkanImageShape :: width, height, tight_stride :: call
-    return Result.Ok :: shape :: call
+    select either:
+        when width: Result.Ok(width) <- width_raw as Maybe[Index]
+        when height: Result.Ok(height) <- height_raw as Maybe[Index]
+        when width_wide: Result.Ok(width_wide) <- width as Maybe[USize]
+        when tight_stride: Result.Ok(tight_stride) <- (width_wide * 4USize) as Maybe[Index] =>
+            let shape = VulkanImageShape :: width, height, tight_stride :: call
+            return Result.Ok :: shape :: call
+
+    with Result.Err(_):
+        width =>
+            let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+            return Result.Err :: error :: call
+        height =>
+            let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+            return Result.Err :: error :: call
+        width_wide =>
+            let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+            return Result.Err :: error :: call
+        tight_stride =>
+            let error = VulkanPresentError.VulkanImageByteCountOutOfRange :: width_raw, height_raw :: call
+            return Result.Err :: error :: call
 
 fn image_source_matches_shape(read frame: VulkanPixelFrame, read image: VulkanImage) -> Result[Unit, VulkanPresentError]:
     select vulkan_image_shape :: image :: call:
@@ -63,124 +69,136 @@ impl VulkanPresentContext:
             when Result.Err(err) => return Result.Err :: err :: call
 
     fn image_to_transfer_buffer(edit self, edit image: VulkanImage) -> Result[VulkanBuffer, VulkanPresentError]:
-        select self.image_transfer_buffer :: image :: method:
-            when Result.Ok(buffer) =>
-                select self.copy_image_to_buffer :: image, buffer :: method:
-                    when Result.Ok(_) => return Result.Ok :: buffer :: call
-                    when Result.Err(err) =>
-                        self.destroy_buffer_resource :: buffer :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when buffer: Result.Ok(buffer) <- self.image_transfer_buffer :: image :: method
+            when copied: Result.Ok(_) <- self.copy_image_to_buffer :: image, buffer :: method =>
+                return Result.Ok :: buffer :: call
+
+        with Result.Err(err):
+            buffer => return Result.Err :: err :: call
+            copied =>
+                self.destroy_buffer_resource :: buffer :: method
+                return Result.Err :: err :: call
 
     fn image_bytes(edit self, edit image: VulkanImage) -> Result[ByteBuffer, VulkanPresentError]:
-        select self.image_to_transfer_buffer :: image :: method:
-            when Result.Ok(buffer) =>
-                select self.buffer_bytes :: buffer :: method:
-                    when Result.Ok(bytes) =>
-                        self.destroy_buffer_resource :: buffer :: method
-                        return Result.Ok :: bytes :: call
-                    when Result.Err(err) =>
-                        self.destroy_buffer_resource :: buffer :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when buffer: Result.Ok(buffer) <- self.image_to_transfer_buffer :: image :: method
+            when bytes: Result.Ok(bytes) <- self.buffer_bytes :: buffer :: method =>
+                self.destroy_buffer_resource :: buffer :: method
+                return Result.Ok :: bytes :: call
+
+        with Result.Err(err):
+            buffer => return Result.Err :: err :: call
+            bytes =>
+                self.destroy_buffer_resource :: buffer :: method
+                return Result.Err :: err :: call
 
     fn image_pixel_frame(edit self, edit image: VulkanImage) -> Result[VulkanPixelFrame, VulkanPresentError]:
-        select image.pixel_format :: :: method:
-            when Result.Ok(pixel_format) =>
-                select self.image_bytes :: image :: method:
-                    when Result.Ok(pixels) =>
-                        select vulkan_image_shape :: image :: call:
-                            when Result.Ok(shape) => return vulkan_pixel_frame :: shape.width, shape.height, shape.tight_stride, pixel_format, pixels :: call
-                            when Result.Err(err) => return Result.Err :: err :: call
-                    when Result.Err(err) => return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when pixel_format: Result.Ok(pixel_format) <- image.pixel_format :: :: method
+            when pixels: Result.Ok(pixels) <- self.image_bytes :: image :: method
+            when shape: Result.Ok(shape) <- vulkan_image_shape :: image :: call =>
+                return vulkan_pixel_frame :: shape.width, shape.height, shape.tight_stride, pixel_format, pixels :: call
+
+        with Result.Err(err):
+            pixel_format => return Result.Err :: err :: call
+            pixels => return Result.Err :: err :: call
+            shape => return Result.Err :: err :: call
 
     fn image_image(edit self, edit image: VulkanImage) -> Result[RgbaImage, VulkanPresentError]:
-        select self.image_pixel_frame :: image :: method:
-            when Result.Ok(frame) =>
-                select frame.converted_frame :: VulkanPixelFormat.Rgba8 :: method:
-                    when Result.Ok(rgba_frame) =>
-                        let width = rgba_frame.width :: :: method
-                        let height = rgba_frame.height :: :: method
-                        select rgba_frame.copy_pixels :: :: method:
-                            when Result.Ok(rgba_pixels) =>
-                                select rgba_image :: width, height, rgba_pixels :: call:
-                                    when Result.Ok(result_image) => return Result.Ok :: result_image :: call
-                                    when Result.Err(err) =>
-                                        let error = VulkanPresentError.ImageCreate :: err :: call
-                                        return Result.Err :: error :: call
-                            when Result.Err(err) => return Result.Err :: err :: call
-                    when Result.Err(err) => return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when frame: Result.Ok(frame) <- self.image_pixel_frame :: image :: method
+            when rgba_frame: Result.Ok(rgba_frame) <- frame.converted_frame :: VulkanPixelFormat.Rgba8 :: method
+            when rgba_pixels: Result.Ok(rgba_pixels) <- rgba_frame.copy_pixels :: :: method
+            when result_image: Result.Ok(result_image) <- rgba_image :: rgba_frame.width :: :: method, rgba_frame.height :: :: method, rgba_pixels :: call =>
+                return Result.Ok :: result_image :: call
+
+        with Result.Err(err):
+            frame => return Result.Err :: err :: call
+            rgba_frame => return Result.Err :: err :: call
+            rgba_pixels => return Result.Err :: err :: call
+            result_image =>
+                let error = VulkanPresentError.ImageCreate :: err :: call
+                return Result.Err :: error :: call
 
     fn write_image(edit self, edit image: VulkanImage, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
-        select self.image_transfer_buffer :: image :: method:
-            when Result.Ok(buffer) =>
-                select self.write_buffer :: buffer, pixels :: method:
-                    when Result.Ok(_) =>
-                        select self.copy_buffer_to_image :: buffer, image :: method:
-                            when Result.Ok(_) =>
-                                self.destroy_buffer_resource :: buffer :: method
-                                return Result.Ok :: :: call
-                            when Result.Err(err) =>
-                                self.destroy_buffer_resource :: buffer :: method
-                                return Result.Err :: err :: call
-                    when Result.Err(err) =>
-                        self.destroy_buffer_resource :: buffer :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when buffer: Result.Ok(buffer) <- self.image_transfer_buffer :: image :: method
+            when written: Result.Ok(_) <- self.write_buffer :: buffer, pixels :: method
+            when copied: Result.Ok(_) <- self.copy_buffer_to_image :: buffer, image :: method =>
+                self.destroy_buffer_resource :: buffer :: method
+                return Result.Ok :: :: call
+
+        with Result.Err(err):
+            buffer => return Result.Err :: err :: call
+            written =>
+                self.destroy_buffer_resource :: buffer :: method
+                return Result.Err :: err :: call
+            copied =>
+                self.destroy_buffer_resource :: buffer :: method
+                return Result.Err :: err :: call
 
     fn write_image_from_pixel_frame(edit self, edit image: VulkanImage, read frame: VulkanPixelFrame) -> Result[Unit, VulkanPresentError]:
-        select image_source_matches_shape :: frame, image :: call:
-            when Result.Ok(_) =>
-                select image.pixel_format :: :: method:
-                    when Result.Ok(pixel_format) =>
-                        select frame.converted_frame :: pixel_format :: method:
-                            when Result.Ok(converted_frame) =>
-                                select converted_frame.copy_pixels :: :: method:
-                                    when Result.Ok(pixels) => return self.write_image :: image, pixels :: method
-                                    when Result.Err(err) => return Result.Err :: err :: call
-                            when Result.Err(err) => return Result.Err :: err :: call
-                    when Result.Err(err) => return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when shape_ok: Result.Ok(_) <- image_source_matches_shape :: frame, image :: call
+            when pixel_format: Result.Ok(pixel_format) <- image.pixel_format :: :: method
+            when converted_frame: Result.Ok(converted_frame) <- frame.converted_frame :: pixel_format :: method
+            when pixels: Result.Ok(pixels) <- converted_frame.copy_pixels :: :: method
+            when written: Result.Ok(_) <- self.write_image :: image, pixels :: method =>
+                return Result.Ok :: :: call
+
+        with Result.Err(err):
+            shape_ok => return Result.Err :: err :: call
+            pixel_format => return Result.Err :: err :: call
+            converted_frame => return Result.Err :: err :: call
+            pixels => return Result.Err :: err :: call
+            written => return Result.Err :: err :: call
 
     fn write_image_from_image(edit self, edit image: VulkanImage, read source: RgbaImage) -> Result[Unit, VulkanPresentError]:
-        select image.pixel_format :: :: method:
-            when Result.Ok(pixel_format) =>
-                select vulkan_pixel_frame_from_image :: source, pixel_format :: call:
-                    when Result.Ok(frame) => return self.write_image_from_pixel_frame :: image, frame :: method
-                    when Result.Err(err) => return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when pixel_format: Result.Ok(pixel_format) <- image.pixel_format :: :: method
+            when frame: Result.Ok(frame) <- vulkan_pixel_frame_from_image :: source, pixel_format :: call =>
+                return self.write_image_from_pixel_frame :: image, frame :: method
+
+        with Result.Err(err):
+            pixel_format => return Result.Err :: err :: call
+            frame => return Result.Err :: err :: call
 
     fn image_from_plan_with_pixels(edit self, read plan: VulkanImagePlan, take pixels: ByteBuffer) -> Result[VulkanImage, VulkanPresentError]:
-        select self.image_from_plan :: plan :: method:
-            when Result.Ok(image) =>
-                select self.write_image :: image, pixels :: method:
-                    when Result.Ok(_) => return Result.Ok :: image :: call
-                    when Result.Err(err) =>
-                        self.destroy_image_resource :: image :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when image: Result.Ok(image) <- self.image_from_plan :: plan :: method
+            when written: Result.Ok(_) <- self.write_image :: image, pixels :: method =>
+                return Result.Ok :: image :: call
+
+        with Result.Err(err):
+            image => return Result.Err :: err :: call
+            written =>
+                self.destroy_image_resource :: image :: method
+                return Result.Err :: err :: call
 
     fn image_from_plan_with_pixel_frame(edit self, read plan: VulkanImagePlan, read frame: VulkanPixelFrame) -> Result[VulkanImage, VulkanPresentError]:
-        select self.image_from_plan :: plan :: method:
-            when Result.Ok(image) =>
-                select self.write_image_from_pixel_frame :: image, frame :: method:
-                    when Result.Ok(_) => return Result.Ok :: image :: call
-                    when Result.Err(err) =>
-                        self.destroy_image_resource :: image :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when image: Result.Ok(image) <- self.image_from_plan :: plan :: method
+            when written: Result.Ok(_) <- self.write_image_from_pixel_frame :: image, frame :: method =>
+                return Result.Ok :: image :: call
+
+        with Result.Err(err):
+            image => return Result.Err :: err :: call
+            written =>
+                self.destroy_image_resource :: image :: method
+                return Result.Err :: err :: call
 
     fn image_from_plan_with_image(edit self, read plan: VulkanImagePlan, read source: RgbaImage) -> Result[VulkanImage, VulkanPresentError]:
-        select self.image_from_plan :: plan :: method:
-            when Result.Ok(image) =>
-                select self.write_image_from_image :: image, source :: method:
-                    when Result.Ok(_) => return Result.Ok :: image :: call
-                    when Result.Err(err) =>
-                        self.destroy_image_resource :: image :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when image: Result.Ok(image) <- self.image_from_plan :: plan :: method
+            when written: Result.Ok(_) <- self.write_image_from_image :: image, source :: method =>
+                return Result.Ok :: image :: call
+
+        with Result.Err(err):
+            image => return Result.Err :: err :: call
+            written =>
+                self.destroy_image_resource :: image :: method
+                return Result.Err :: err :: call
 
     fn host_visible_image_from_pixels(edit self, width: CUInt, height: CUInt, format: VkFormat, usage: CUInt, take pixels: ByteBuffer) -> Result[VulkanImage, VulkanPresentError]:
         select self.host_visible_image_plan :: width, height, format, usage :: method:

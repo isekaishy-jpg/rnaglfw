@@ -158,145 +158,146 @@ pub(package) fn present_surface_copy_image_raw(edit context: VulkanPresentContex
             let error = VulkanPresentError.VulkanImageExtentMismatch :: request.source_width, request.source_height, surface_width, surface_height :: call
             return Result.Err :: error :: call
         else => ()
-    select surface_present_transition :: request.source_layout :: call:
-        when Result.Ok(source_transition) =>
-            select context.prepare_present_resources :: :: method:
-                when Result.Ok(resources) =>
-                    let begin_info = VkCommandBufferBeginInfo :: :: call
-                        stype = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
-                        pnext = null
-                        flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-                        inheritance_info = null
-                    let begin_info_ptr: *read VkCommandBufferBeginInfo = #unsafe &raw read begin_info
-                    let begin_result = #unsafe context.begin_command_buffer :: resources.command_buffer, begin_info_ptr :: call
-                    select:
-                        when begin_result != VK_SUCCESS =>
-                            context.destroy_present_resources :: resources :: method
-                            let error = VulkanPresentError.CommandBufferBeginFailed :: begin_result :: call
-                            return Result.Err :: error :: call
-                        else => ()
-                    select:
-                        when source_transition.needs_barrier =>
-                            let source_barrier = VkImageMemoryBarrier :: :: call
-                                stype = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
-                                pnext = null
-                                src_access_mask = source_transition.src_access_mask
-                                dst_access_mask = VK_ACCESS_TRANSFER_READ_BIT
-                                old_layout = source_transition.old_layout
-                                new_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-                                src_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
-                                dst_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
-                                image = request.image
-                                subresource_range = CLEAR_RANGE
-                            let source_barrier_ptr: *read VkImageMemoryBarrier = #unsafe &raw read source_barrier
-                            #unsafe context.cmd_pipeline_barrier :: resources.command_buffer, source_transition.src_stage, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, null, 0, null, 1, source_barrier_ptr :: call
-                        else => ()
-                    let target_barrier = VkImageMemoryBarrier :: :: call
-                        stype = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
-                        pnext = null
-                        src_access_mask = 0
-                        dst_access_mask = VK_ACCESS_TRANSFER_WRITE_BIT
-                        old_layout = VK_IMAGE_LAYOUT_UNDEFINED
-                        new_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-                        src_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
-                        dst_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
-                        image = resources.target_image
-                        subresource_range = CLEAR_RANGE
-                    let target_before_stage: CUInt = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
-                    select:
-                        when context.presented_once =>
-                            target_barrier.src_access_mask = VK_ACCESS_MEMORY_READ_BIT
-                            target_barrier.old_layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-                            target_before_stage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
-                        else => ()
-                    let target_barrier_ptr: *read VkImageMemoryBarrier = #unsafe &raw read target_barrier
-                    #unsafe context.cmd_pipeline_barrier :: resources.command_buffer, target_before_stage, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, null, 0, null, 1, target_barrier_ptr :: call
-                    let copy_region_extent = VkExtent3D :: :: call
-                        width = context.extent.width
-                        height = context.extent.height
-                        depth = 1
-                    let copy_region = VkImageCopy :: :: call
-                        src_subresource = IMAGE_COPY_SUBRESOURCE
-                        src_offset = ZERO_OFFSET3D
-                        dst_subresource = IMAGE_COPY_SUBRESOURCE
-                        dst_offset = ZERO_OFFSET3D
-                        extent = copy_region_extent
-                    let copy_region_ptr: *read VkImageCopy = #unsafe &raw read copy_region
-                    #unsafe context.cmd_copy_image :: resources.command_buffer, request.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, resources.target_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, copy_region_ptr :: call
-                    let after_barrier = VkImageMemoryBarrier :: :: call
-                        stype = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
-                        pnext = null
-                        src_access_mask = VK_ACCESS_TRANSFER_WRITE_BIT
-                        dst_access_mask = VK_ACCESS_MEMORY_READ_BIT
-                        old_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-                        new_layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-                        src_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
-                        dst_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
-                        image = resources.target_image
-                        subresource_range = CLEAR_RANGE
-                    let after_barrier_ptr: *read VkImageMemoryBarrier = #unsafe &raw read after_barrier
-                    #unsafe context.cmd_pipeline_barrier :: resources.command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, null, 0, null, 1, after_barrier_ptr :: call
-                    let end_result = #unsafe context.end_command_buffer :: resources.command_buffer :: call
-                    select:
-                        when end_result != VK_SUCCESS =>
-                            context.destroy_present_resources :: resources :: method
-                            let error = VulkanPresentError.CommandBufferEndFailed :: end_result :: call
-                            return Result.Err :: error :: call
-                        else => ()
-                    let wait_stage_masks: [CUInt; 1] = [VK_PIPELINE_STAGE_TRANSFER_BIT]
-                    let wait_stage_ptr: *read CUInt = #unsafe &raw read wait_stage_masks[0]
-                    let wait_semaphores: [VkSemaphore; 1] = [resources.image_available]
-                    let signal_semaphores: [VkSemaphore; 1] = [resources.render_complete]
-                    let command_buffers: [VkCommandBuffer; 1] = [resources.command_buffer]
-                    let wait_semaphore_ptr: *read VkSemaphore = #unsafe &raw read wait_semaphores[0]
-                    let signal_semaphore_ptr: *read VkSemaphore = #unsafe &raw read signal_semaphores[0]
-                    let command_buffer_submit_ptr: *read VkCommandBuffer = #unsafe &raw read command_buffers[0]
-                    let submit_info = VkSubmitInfo :: :: call
-                        stype = VK_STRUCTURE_TYPE_SUBMIT_INFO
-                        pnext = null
-                        wait_semaphore_count = 1
-                        wait_semaphores = wait_semaphore_ptr
-                        wait_dst_stage_mask = wait_stage_ptr
-                        command_buffer_count = 1
-                        command_buffers = command_buffer_submit_ptr
-                        signal_semaphore_count = 1
-                        signal_semaphores = signal_semaphore_ptr
-                    let submit_info_ptr: *read VkSubmitInfo = #unsafe &raw read submit_info
-                    let submit_result = #unsafe context.queue_submit :: context.queue, 1, submit_info_ptr, 0U64 :: call
-                    select:
-                        when submit_result != VK_SUCCESS =>
-                            context.destroy_present_resources :: resources :: method
-                            let error = VulkanPresentError.SubmitFailed :: submit_result :: call
-                            return Result.Err :: error :: call
-                        else => ()
-                    let swapchains: [VkSwapchain; 1] = [context.swapchain]
-                    let swapchain_ptr: *read VkSwapchain = #unsafe &raw read swapchains[0]
-                    let image_index_ptr: *read CUInt = #unsafe &raw read resources.image_index
-                    let present_info = VkPresentInfoKHR :: :: call
-                        stype = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR
-                        pnext = null
-                        wait_semaphore_count = 1
-                        wait_semaphores = signal_semaphore_ptr
-                        swapchain_count = 1
-                        swapchains = swapchain_ptr
-                        image_indices = image_index_ptr
-                        results = null
-                    let present_info_ptr: *read VkPresentInfoKHR = #unsafe &raw read present_info
-                    let present_result = #unsafe context.queue_present :: context.queue, present_info_ptr :: call
-                    let idle_result = #unsafe context.queue_wait_idle :: context.queue :: call
+    select either:
+        when source_transition: Result.Ok(source_transition) <- surface_present_transition :: request.source_layout :: call
+        when resources: Result.Ok(resources) <- context.prepare_present_resources :: :: method =>
+            let begin_info = VkCommandBufferBeginInfo :: :: call
+                stype = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
+                pnext = null
+                flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+                inheritance_info = null
+            let begin_info_ptr: *read VkCommandBufferBeginInfo = #unsafe &raw read begin_info
+            let begin_result = #unsafe context.begin_command_buffer :: resources.command_buffer, begin_info_ptr :: call
+            select:
+                when begin_result != VK_SUCCESS =>
                     context.destroy_present_resources :: resources :: method
-                    select:
-                        when present_result != VK_SUCCESS && present_result != VK_SUBOPTIMAL_KHR =>
-                            let error = VulkanPresentError.PresentFailed :: present_result :: call
-                            return Result.Err :: error :: call
-                        when idle_result != VK_SUCCESS =>
-                            let error = VulkanPresentError.QueueWaitIdleFailed :: idle_result :: call
-                            return Result.Err :: error :: call
-                        else => ()
-                    context.presented_once = true
-                    return Result.Ok :: () :: call
-                when Result.Err(err) => return Result.Err :: err :: call
-        when Result.Err(err) => return Result.Err :: err :: call
+                    let error = VulkanPresentError.CommandBufferBeginFailed :: begin_result :: call
+                    return Result.Err :: error :: call
+                else => ()
+            select:
+                when source_transition.needs_barrier =>
+                    let source_barrier = VkImageMemoryBarrier :: :: call
+                        stype = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
+                        pnext = null
+                        src_access_mask = source_transition.src_access_mask
+                        dst_access_mask = VK_ACCESS_TRANSFER_READ_BIT
+                        old_layout = source_transition.old_layout
+                        new_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                        src_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
+                        dst_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
+                        image = request.image
+                        subresource_range = CLEAR_RANGE
+                    let source_barrier_ptr: *read VkImageMemoryBarrier = #unsafe &raw read source_barrier
+                    #unsafe context.cmd_pipeline_barrier :: resources.command_buffer, source_transition.src_stage, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, null, 0, null, 1, source_barrier_ptr :: call
+                else => ()
+            let target_barrier = VkImageMemoryBarrier :: :: call
+                stype = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
+                pnext = null
+                src_access_mask = 0
+                dst_access_mask = VK_ACCESS_TRANSFER_WRITE_BIT
+                old_layout = VK_IMAGE_LAYOUT_UNDEFINED
+                new_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+                src_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
+                dst_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
+                image = resources.target_image
+                subresource_range = CLEAR_RANGE
+            let target_before_stage: CUInt = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+            select:
+                when context.presented_once =>
+                    target_barrier.src_access_mask = VK_ACCESS_MEMORY_READ_BIT
+                    target_barrier.old_layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+                    target_before_stage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
+                else => ()
+            let target_barrier_ptr: *read VkImageMemoryBarrier = #unsafe &raw read target_barrier
+            #unsafe context.cmd_pipeline_barrier :: resources.command_buffer, target_before_stage, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, null, 0, null, 1, target_barrier_ptr :: call
+            let copy_region_extent = VkExtent3D :: :: call
+                width = context.extent.width
+                height = context.extent.height
+                depth = 1
+            let copy_region = VkImageCopy :: :: call
+                src_subresource = IMAGE_COPY_SUBRESOURCE
+                src_offset = ZERO_OFFSET3D
+                dst_subresource = IMAGE_COPY_SUBRESOURCE
+                dst_offset = ZERO_OFFSET3D
+                extent = copy_region_extent
+            let copy_region_ptr: *read VkImageCopy = #unsafe &raw read copy_region
+            #unsafe context.cmd_copy_image :: resources.command_buffer, request.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, resources.target_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, copy_region_ptr :: call
+            let after_barrier = VkImageMemoryBarrier :: :: call
+                stype = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
+                pnext = null
+                src_access_mask = VK_ACCESS_TRANSFER_WRITE_BIT
+                dst_access_mask = VK_ACCESS_MEMORY_READ_BIT
+                old_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+                new_layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+                src_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
+                dst_queuefamily_index = VK_QUEUE_FAMILY_IGNORED
+                image = resources.target_image
+                subresource_range = CLEAR_RANGE
+            let after_barrier_ptr: *read VkImageMemoryBarrier = #unsafe &raw read after_barrier
+            #unsafe context.cmd_pipeline_barrier :: resources.command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, null, 0, null, 1, after_barrier_ptr :: call
+            let end_result = #unsafe context.end_command_buffer :: resources.command_buffer :: call
+            select:
+                when end_result != VK_SUCCESS =>
+                    context.destroy_present_resources :: resources :: method
+                    let error = VulkanPresentError.CommandBufferEndFailed :: end_result :: call
+                    return Result.Err :: error :: call
+                else => ()
+            let wait_stage_masks: [CUInt; 1] = [VK_PIPELINE_STAGE_TRANSFER_BIT]
+            let wait_stage_ptr: *read CUInt = #unsafe &raw read wait_stage_masks[0]
+            let wait_semaphores: [VkSemaphore; 1] = [resources.image_available]
+            let signal_semaphores: [VkSemaphore; 1] = [resources.render_complete]
+            let command_buffers: [VkCommandBuffer; 1] = [resources.command_buffer]
+            let wait_semaphore_ptr: *read VkSemaphore = #unsafe &raw read wait_semaphores[0]
+            let signal_semaphore_ptr: *read VkSemaphore = #unsafe &raw read signal_semaphores[0]
+            let command_buffer_submit_ptr: *read VkCommandBuffer = #unsafe &raw read command_buffers[0]
+            let submit_info = VkSubmitInfo :: :: call
+                stype = VK_STRUCTURE_TYPE_SUBMIT_INFO
+                pnext = null
+                wait_semaphore_count = 1
+                wait_semaphores = wait_semaphore_ptr
+                wait_dst_stage_mask = wait_stage_ptr
+                command_buffer_count = 1
+                command_buffers = command_buffer_submit_ptr
+                signal_semaphore_count = 1
+                signal_semaphores = signal_semaphore_ptr
+            let submit_info_ptr: *read VkSubmitInfo = #unsafe &raw read submit_info
+            let submit_result = #unsafe context.queue_submit :: context.queue, 1, submit_info_ptr, 0U64 :: call
+            select:
+                when submit_result != VK_SUCCESS =>
+                    context.destroy_present_resources :: resources :: method
+                    let error = VulkanPresentError.SubmitFailed :: submit_result :: call
+                    return Result.Err :: error :: call
+                else => ()
+            let swapchains: [VkSwapchain; 1] = [context.swapchain]
+            let swapchain_ptr: *read VkSwapchain = #unsafe &raw read swapchains[0]
+            let image_index_ptr: *read CUInt = #unsafe &raw read resources.image_index
+            let present_info = VkPresentInfoKHR :: :: call
+                stype = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR
+                pnext = null
+                wait_semaphore_count = 1
+                wait_semaphores = signal_semaphore_ptr
+                swapchain_count = 1
+                swapchains = swapchain_ptr
+                image_indices = image_index_ptr
+                results = null
+            let present_info_ptr: *read VkPresentInfoKHR = #unsafe &raw read present_info
+            let present_result = #unsafe context.queue_present :: context.queue, present_info_ptr :: call
+            let idle_result = #unsafe context.queue_wait_idle :: context.queue :: call
+            context.destroy_present_resources :: resources :: method
+            select:
+                when present_result != VK_SUCCESS && present_result != VK_SUBOPTIMAL_KHR =>
+                    let error = VulkanPresentError.PresentFailed :: present_result :: call
+                    return Result.Err :: error :: call
+                when idle_result != VK_SUCCESS =>
+                    let error = VulkanPresentError.QueueWaitIdleFailed :: idle_result :: call
+                    return Result.Err :: error :: call
+                else => ()
+            context.presented_once = true
+            return Result.Ok :: () :: call
+
+    with Result.Err(err):
+        source_transition => return Result.Err :: err :: call
+        resources => return Result.Err :: err :: call
 
 impl VulkanPresentSnapshot:
     fn surface_vulkan_image_usage(read self) -> CUInt:
@@ -464,16 +465,17 @@ impl VulkanPresentContext:
             when Result.Err(err) => return Result.Err :: err :: call
 
     fn present_surface_bytes(edit self, take pixels: ByteBuffer) -> Result[Unit, VulkanPresentError]:
-        select self.surface_transfer_source_buffer :: pixels :: method:
-            when Result.Ok(upload) =>
-                select self.present_transfer_source_buffer :: upload :: method:
-                    when Result.Ok(_) =>
-                        self.destroy_transfer_source_buffer :: upload :: method
-                        return Result.Ok :: () :: call
-                    when Result.Err(err) =>
-                        self.destroy_transfer_source_buffer :: upload :: method
-                        return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when upload: Result.Ok(upload) <- self.surface_transfer_source_buffer :: pixels :: method
+            when presented: Result.Ok(_) <- self.present_transfer_source_buffer :: upload :: method =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Ok :: () :: call
+
+        with Result.Err(err):
+            upload => return Result.Err :: err :: call
+            presented =>
+                self.destroy_transfer_source_buffer :: upload :: method
+                return Result.Err :: err :: call
 
     fn present_pixel_frame(edit self, take frame: VulkanPixelFrame) -> Result[Unit, VulkanPresentError]:
         select surface_image_shape_from_extent :: self.extent :: call:
@@ -492,19 +494,23 @@ impl VulkanPresentContext:
     fn present_image(edit self, take image: RgbaImage) -> Result[Unit, VulkanPresentError]:
         let raw_width = image.width :: :: method
         let raw_height = image.height :: :: method
-        let Result.Ok(image_width) = raw_width as Maybe[Index] else =>
-            let error = VulkanPresentError.PixelExtentOutOfRange :: raw_width, raw_height :: call
-            return Result.Err :: error :: call
-        let Result.Ok(image_height) = raw_height as Maybe[Index] else =>
-            let error = VulkanPresentError.PixelExtentOutOfRange :: raw_width, raw_height :: call
-            return Result.Err :: error :: call
         let pixels = image.take_pixels :: :: method
-        select self.surface_tight_stride :: :: method:
-            when Result.Ok(tight_stride) =>
-                select self.surface_pixel_frame_from_pixels :: image_width, image_height, tight_stride, VulkanPixelFormat.Rgba8, pixels :: method:
-                    when Result.Ok(frame) => return self.present_pixel_frame :: frame :: method
-                    when Result.Err(err) => return Result.Err :: err :: call
-            when Result.Err(err) => return Result.Err :: err :: call
+        select either:
+            when image_width: Result.Ok(image_width) <- raw_width as Maybe[Index]
+            when image_height: Result.Ok(image_height) <- raw_height as Maybe[Index]
+            when tight_stride: Result.Ok(tight_stride) <- self.surface_tight_stride :: :: method
+            when frame: Result.Ok(frame) <- self.surface_pixel_frame_from_pixels :: image_width, image_height, tight_stride, VulkanPixelFormat.Rgba8, pixels :: method =>
+                return self.present_pixel_frame :: frame :: method
+
+        with Result.Err(err):
+            image_width =>
+                let error = VulkanPresentError.PixelExtentOutOfRange :: raw_width, raw_height :: call
+                return Result.Err :: error :: call
+            image_height =>
+                let error = VulkanPresentError.PixelExtentOutOfRange :: raw_width, raw_height :: call
+                return Result.Err :: error :: call
+            tight_stride => return Result.Err :: err :: call
+            frame => return Result.Err :: err :: call
 
     fn surface_vulkan_image_usage(read self) -> CUInt:
         return surface_vulkan_image_usage_bits :: :: call

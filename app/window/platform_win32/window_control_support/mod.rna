@@ -1,0 +1,825 @@
+use std.Result
+
+use std.Option
+
+use mailbox.WindowMailbox
+use window.{Point, Size, UserAttentionType, WindowButtons, WindowControlError}
+use window.{WindowLevel, WindowResizeDirection, Win32HMenu, Win32HWnd}
+use window.{window_level_from_raw, window_level_raw}
+use glfw.{GlfwPoint, GlfwWindow, GlfwWindowRaw, glfw_window_raw_handle}
+
+const GWL_STYLE: CInt = 0 - 16
+const GWL_EXSTYLE: CInt = 0 - 20
+const GWLP_HWNDPARENT: CInt = 0 - 8
+const GW_OWNER: CUInt = 4
+const WS_MAXIMIZEBOX: ISize = 0x00010000
+const WS_MINIMIZEBOX: ISize = 0x00020000
+const WS_CLIPCHILDREN: ISize = 0x02000000
+const WS_EX_TOOLWINDOW: ISize = 0x00000080
+const WS_EX_APPWINDOW: ISize = 0x00040000
+const WS_EX_NOREDIRECTIONBITMAP: ISize = 0x00200000
+const MF_BYCOMMAND: CUInt = 0x00000000
+const MF_ENABLED: CUInt = 0x00000000
+const MF_GRAYED: CUInt = 0x00000001
+const MF_DISABLED: CUInt = 0x00000002
+const MENU_ERROR: CUInt = 0xFFFFFFFF
+const SC_CLOSE: CUInt = 0xF060
+const SC_MINIMIZE: CUInt = 0xF020
+const SC_MAXIMIZE: CUInt = 0xF030
+const FLASHW_STOP: CUInt = 0x00000000
+const FLASHW_CAPTION: CUInt = 0x00000001
+const FLASHW_TRAY: CUInt = 0x00000002
+const FLASHW_ALL: CUInt = FLASHW_CAPTION | FLASHW_TRAY
+const FLASHW_TIMERNOFG: CUInt = 0x0000000C
+const WM_NULL: CUInt = 0x0000
+const WM_SYSCOMMAND: CUInt = 0x0112
+const TPM_RETURNCMD: CUInt = 0x0100
+const SC_MOVE_BITS: USize = 0xF010USize
+const SC_SIZE_BITS: USize = 0xF000USize
+const HTCAPTION_BITS: USize = 0x0002USize
+const HTLEFT_BITS: USize = 0x000AUSize
+const HTRIGHT_BITS: USize = 0x000BUSize
+const HTTOP_BITS: USize = 0x000CUSize
+const HTTOPLEFT_BITS: USize = 0x000DUSize
+const HTTOPRIGHT_BITS: USize = 0x000EUSize
+const HTBOTTOM_BITS: USize = 0x000FUSize
+const HTBOTTOMLEFT_BITS: USize = 0x0010USize
+const HTBOTTOMRIGHT_BITS: USize = 0x0011USize
+const SWP_NOSIZE: CUInt = 0x0001
+const SWP_NOMOVE: CUInt = 0x0002
+const SWP_NOZORDER: CUInt = 0x0004
+const SWP_NOACTIVATE: CUInt = 0x0010
+const SWP_FRAMECHANGED: CUInt = 0x0020
+const RDW_INVALIDATE: CUInt = 0x0001
+const RDW_ERASE: CUInt = 0x0004
+const RDW_ALLCHILDREN: CUInt = 0x0080
+const RDW_UPDATENOW: CUInt = 0x0100
+const RDW_FRAME: CUInt = 0x0400
+const DISABLED_MENU_MASK: CUInt = MF_GRAYED | MF_DISABLED
+const WDA_NONE: CUInt = 0x00000000
+const WDA_EXCLUDEFROMCAPTURE: CUInt = 0x00000011
+const HWND_BOTTOM_ADDRESS: USize = 1USize
+const WM_SIZING: CUInt = 0x0214
+const WINDOW_CONTROL_SUBCLASS_ID: USize = 0x57434E54USize
+const WMSZ_LEFT: USize = 1USize
+const WMSZ_RIGHT: USize = 2USize
+const WMSZ_TOP: USize = 3USize
+const WMSZ_TOPLEFT: USize = 4USize
+const WMSZ_TOPRIGHT: USize = 5USize
+const WMSZ_BOTTOM: USize = 6USize
+const WMSZ_BOTTOMLEFT: USize = 7USize
+const WMSZ_BOTTOMRIGHT: USize = 8USize
+
+type HMenu = *edit CVoid
+
+#repr[c]
+struct FlashWindowInfo:
+    cb_size: CUInt
+    hwnd: Win32HWnd
+    flags: CUInt
+    count: CUInt
+    timeout: CUInt
+
+#repr[c]
+struct Win32Rect:
+    left: CInt
+    top: CInt
+    right: CInt
+    bottom: CInt
+
+#link[name = "kernel32"]
+#unsafe
+extern["system"] fn GetLastError() -> CUInt
+
+#link[name = "kernel32"]
+#unsafe
+extern["system"] fn SetLastError(code: CUInt) -> CVoid
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn GetSystemMenu(window: Win32HWnd, revert: CInt) -> HMenu
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn GetMenu(window: Win32HWnd) -> HMenu
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn SetMenu(window: Win32HWnd, menu: HMenu) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn GetMenuState(menu: HMenu, item: CUInt, flags: CUInt) -> CUInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn FlashWindowEx(info: *read FlashWindowInfo) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn ReleaseCapture() -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn ClientToScreen(window: Win32HWnd, point: *edit GlfwPoint) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn TrackPopupMenu(menu: HMenu, flags: CUInt, x: CInt, y: CInt, reserved: CInt, window: Win32HWnd, rect: *read CVoid) -> CUInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn PostMessageW(window: Win32HWnd, message: CUInt, wparam: USize, lparam: ISize) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn SetForegroundWindow(window: Win32HWnd) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn IsWindowEnabled(window: Win32HWnd) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn EnableWindow(window: Win32HWnd, enabled: CInt) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn EnableMenuItem(menu: HMenu, item: CUInt, enable: CUInt) -> CUInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn DrawMenuBar(window: Win32HWnd) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn RedrawWindow(window: Win32HWnd, update_rect: *read CVoid, update_region: *read CVoid, flags: CUInt) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn GetWindowLongPtrW(window: Win32HWnd, index: CInt) -> ISize
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn SetWindowLongPtrW(window: Win32HWnd, index: CInt, value: ISize) -> ISize
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn GetWindow(window: Win32HWnd, command: CUInt) -> Win32HWnd
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn SetWindowPos(window: Win32HWnd, insert_after: Win32HWnd, x: CInt, y: CInt, width: CInt, height: CInt, flags: CUInt) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn GetWindowDisplayAffinity(window: Win32HWnd, affinity: *edit CUInt) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn SetWindowDisplayAffinity(window: Win32HWnd, affinity: CUInt) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn GetWindowRect(window: Win32HWnd, rect: *edit Win32Rect) -> CInt
+
+#link[name = "user32"]
+#unsafe
+extern["system"] fn GetClientRect(window: Win32HWnd, rect: *edit Win32Rect) -> CInt
+
+#link[name = "comctl32"]
+#unsafe
+extern["system"] fn SetWindowSubclass(window: Win32HWnd, procedure: extern["system"] fn(Win32HWnd, CUInt, USize, ISize, USize, USize) -> ISize, subclass_id: USize, ref_data: USize) -> CInt
+
+#link[name = "comctl32"]
+#unsafe
+extern["system"] fn RemoveWindowSubclass(window: Win32HWnd, procedure: extern["system"] fn(Win32HWnd, CUInt, USize, ISize, USize, USize) -> ISize, subclass_id: USize) -> CInt
+
+#link[name = "comctl32"]
+#unsafe
+extern["system"] fn DefSubclassProc(window: Win32HWnd, message: CUInt, wparam: USize, lparam: ISize) -> ISize
+
+#link[name = "glfw3"]
+#unsafe
+extern["c"] fn glfwGetWindowUserPointer(window: *edit GlfwWindowRaw) -> *edit CVoid
+
+fn void_as_mailbox(pointer: *edit CVoid) -> *edit WindowMailbox:
+    let address = #unsafe raw_pointer_address_edit :: pointer :: call
+    return #unsafe raw_pointer_from_address_edit[WindowMailbox] :: address :: call
+
+fn window_mailbox(read window: GlfwWindow) -> *edit WindowMailbox:
+    let raw = glfw_window_raw_handle :: window :: call
+    let user = #unsafe glfwGetWindowUserPointer :: raw :: call
+    select:
+        when user.is_null :: :: method =>
+            let none: *edit WindowMailbox = null
+            return none
+        else => return void_as_mailbox :: user :: call
+
+fn mailbox_window_level(mailbox: *edit WindowMailbox) -> WindowLevel:
+    select:
+        when mailbox.is_null :: :: method => return WindowLevel.Normal
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            return window_level_from_raw :: stored.window_level_preference :: call
+
+fn set_mailbox_window_level(mailbox: *edit WindowMailbox, read level: WindowLevel) -> Unit:
+    select:
+        when mailbox.is_null :: :: method => return
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            stored.window_level_preference = window_level_raw :: level :: call
+            #unsafe mailbox.store :: stored :: method
+            return
+
+fn mailbox_resize_increments(mailbox: *edit WindowMailbox) -> Option[Size]:
+    select:
+        when mailbox.is_null :: :: method => return Option.None
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            select:
+                when stored.resize_increment_width <= 0 => return Option.None
+                when stored.resize_increment_height <= 0 => return Option.None
+                else =>
+                    let size = Size :: stored.resize_increment_width, stored.resize_increment_height :: call
+                    return Option.Some :: size :: call
+
+fn set_mailbox_resize_increments(mailbox: *edit WindowMailbox, read increments: Option[Size]) -> Unit:
+    select:
+        when mailbox.is_null :: :: method => return
+        else =>
+            let stored: WindowMailbox = #unsafe mailbox.load :: :: method
+            select increments:
+                when Option.Some(size) =>
+                    stored.resize_increment_width = size.width
+                    stored.resize_increment_height = size.height
+                when Option.None =>
+                    stored.resize_increment_width = 0
+                    stored.resize_increment_height = 0
+            #unsafe mailbox.store :: stored :: method
+            return
+
+fn hwnd_bottom() -> Win32HWnd:
+    return #unsafe raw_pointer_from_address_edit[CVoid] :: HWND_BOTTOM_ADDRESS :: call
+
+fn owner_window_bits(owner: Win32HWnd) -> Result[ISize, WindowControlError]:
+    let address = #unsafe raw_pointer_address_edit :: owner :: call
+    let Result.Ok(bits) = address as Maybe[ISize] else => return Result.Err :: WindowControlError.OwnerWindowUpdateFailed :: call
+    return Result.Ok :: bits :: call
+
+fn update_window_z_order(hwnd: Win32HWnd, insert_after: Win32HWnd) -> Result[Unit, WindowControlError]:
+    let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+    let changed = #unsafe SetWindowPos :: hwnd, insert_after, 0, 0, 0, 0, flags :: call
+    select:
+        when changed == 0 => return Result.Err :: WindowControlError.WindowLevelUpdateFailed :: call
+        else => return Result.Ok :: () :: call
+
+fn ref_data_as_mailbox(ref_data: USize) -> *edit WindowMailbox:
+    return #unsafe raw_pointer_from_address_edit[WindowMailbox] :: ref_data :: call
+
+fn lparam_as_rect(lparam: ISize) -> Option[*edit Win32Rect]:
+    let Result.Ok(bits) = lparam as Maybe[USize] else => return Option.None
+    let rect = #unsafe raw_pointer_from_address_edit[Win32Rect] :: bits :: call
+    select:
+        when rect.is_null :: :: method => return Option.None
+        else => return Option.Some :: rect :: call
+
+fn rect_width(read rect: Win32Rect) -> CInt:
+    return rect.right - rect.left
+
+fn rect_height(read rect: Win32Rect) -> CInt:
+    return rect.bottom - rect.top
+
+fn nearest_increment(value: CInt, increment: CInt) -> CInt:
+    select:
+        when increment <= 0 => return value
+        when value <= increment => return increment
+        else => ()
+    let half = increment / 2
+    let rounded = ((value + half) / increment) * increment
+    select:
+        when rounded <= 0 => return increment
+        else => return rounded
+
+fn current_nonclient_size(hwnd: Win32HWnd) -> Option[Size]:
+    let window_rect = Win32Rect :: :: call
+        left = 0
+        top = 0
+        right = 0
+        bottom = 0
+    let client_rect = Win32Rect :: :: call
+        left = 0
+        top = 0
+        right = 0
+        bottom = 0
+    let window_rect_ptr: *edit Win32Rect = #unsafe &raw edit window_rect
+    let client_rect_ptr: *edit Win32Rect = #unsafe &raw edit client_rect
+    let got_window = #unsafe GetWindowRect :: hwnd, window_rect_ptr :: call
+    select:
+        when got_window == 0 => return Option.None
+        else => ()
+    let got_client = #unsafe GetClientRect :: hwnd, client_rect_ptr :: call
+    select:
+        when got_client == 0 => return Option.None
+        else => ()
+    let width = rect_width :: window_rect :: call - rect_width :: client_rect :: call
+    let height = rect_height :: window_rect :: call - rect_height :: client_rect :: call
+    let nonclient = Size :: width, height :: call
+    return Option.Some :: nonclient :: call
+
+fn edge_resizes_left(edge: USize) -> Bool:
+    select:
+        when edge == WMSZ_LEFT => return true
+        when edge == WMSZ_TOPLEFT => return true
+        when edge == WMSZ_BOTTOMLEFT => return true
+        else => return false
+
+fn edge_resizes_top(edge: USize) -> Bool:
+    select:
+        when edge == WMSZ_TOP => return true
+        when edge == WMSZ_TOPLEFT => return true
+        when edge == WMSZ_TOPRIGHT => return true
+        else => return false
+
+fn apply_rect_size(rect_ptr: *edit Win32Rect, edge: USize, width: CInt, height: CInt) -> Unit:
+    let rect: Win32Rect = #unsafe rect_ptr.load :: :: method
+    select:
+        when edge_resizes_left :: edge :: call => rect.left = rect.right - width
+        else => rect.right = rect.left + width
+    select:
+        when edge_resizes_top :: edge :: call => rect.top = rect.bottom - height
+        else => rect.bottom = rect.top + height
+    #unsafe rect_ptr.store :: rect :: method
+    return
+
+fn window_handle(read window: GlfwWindow) -> Result[Win32HWnd, WindowControlError]:
+    let hwnd = window.win32_window :: :: method
+    select:
+        when hwnd.is_null :: :: method => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+        else => return Result.Ok :: hwnd :: call
+
+fn system_menu(hwnd: Win32HWnd) -> Result[HMenu, WindowControlError]:
+    let menu = #unsafe GetSystemMenu :: hwnd, 0 :: call
+    select:
+        when menu.is_null :: :: method => return Result.Err :: WindowControlError.SystemMenuUnavailable :: call
+        else => return Result.Ok :: menu :: call
+
+fn window_style(hwnd: Win32HWnd) -> Result[ISize, WindowControlError]:
+    #unsafe SetLastError :: 0 :: call
+    let style = #unsafe GetWindowLongPtrW :: hwnd, GWL_STYLE :: call
+    let last_error = #unsafe GetLastError :: :: call
+    select:
+        when style == 0 && last_error != 0 => return Result.Err :: WindowControlError.StyleQueryFailed :: call
+        else => return Result.Ok :: style :: call
+
+fn window_exstyle(hwnd: Win32HWnd) -> Result[ISize, WindowControlError]:
+    #unsafe SetLastError :: 0 :: call
+    let style = #unsafe GetWindowLongPtrW :: hwnd, GWL_EXSTYLE :: call
+    let last_error = #unsafe GetLastError :: :: call
+    select:
+        when style == 0 && last_error != 0 => return Result.Err :: WindowControlError.ExStyleQueryFailed :: call
+        else => return Result.Ok :: style :: call
+
+fn style_has_bits(style: ISize, bits: ISize) -> Bool:
+    return (style & bits) == bits
+
+fn style_with_bits(style: ISize, bits: ISize, enabled: Bool) -> ISize:
+    select:
+        when enabled =>
+            select:
+                when style_has_bits :: style, bits :: call => return style
+                else => return style | bits
+        else =>
+            select:
+                when style_has_bits :: style, bits :: call => return style - bits
+                else => return style
+    return style
+
+fn update_window_exstyle(hwnd: Win32HWnd, style: ISize) -> Result[Unit, WindowControlError]:
+    #unsafe SetLastError :: 0 :: call
+    let previous = #unsafe SetWindowLongPtrW :: hwnd, GWL_EXSTYLE, style :: call
+    let last_error = #unsafe GetLastError :: :: call
+    select:
+        when previous == 0 && last_error != 0 => return Result.Err :: WindowControlError.ExStyleUpdateFailed :: call
+        else => return Result.Ok :: () :: call
+
+fn update_window_style(hwnd: Win32HWnd, style: ISize) -> Result[Unit, WindowControlError]:
+    #unsafe SetLastError :: 0 :: call
+    let previous = #unsafe SetWindowLongPtrW :: hwnd, GWL_STYLE, style :: call
+    let last_error = #unsafe GetLastError :: :: call
+    select:
+        when previous == 0 && last_error != 0 => return Result.Err :: WindowControlError.StyleUpdateFailed :: call
+        else => return Result.Ok :: () :: call
+
+fn menu_item_enabled(menu: HMenu, item: CUInt) -> Result[Bool, WindowControlError]:
+    let state = #unsafe GetMenuState :: menu, item, MF_BYCOMMAND :: call
+    select:
+        when state == MENU_ERROR => return Result.Err :: WindowControlError.SystemMenuUnavailable :: call
+        when (state & DISABLED_MENU_MASK) != 0 => return Result.Ok :: false :: call
+        else => return Result.Ok :: true :: call
+
+fn set_menu_item_enabled(menu: HMenu, item: CUInt, enabled: Bool) -> Result[Unit, WindowControlError]:
+    let command: CUInt = MF_BYCOMMAND
+    let flags: CUInt = command
+    select:
+        when enabled => flags = flags | MF_ENABLED
+        else => flags = flags | MF_GRAYED
+    let previous = #unsafe EnableMenuItem :: menu, item, flags :: call
+    select:
+        when previous == MENU_ERROR => return Result.Err :: WindowControlError.SystemMenuUnavailable :: call
+        else => return Result.Ok :: () :: call
+
+pub(package) fn refresh_window_frame(hwnd: Win32HWnd) -> Result[Unit, WindowControlError]:
+    #unsafe SetLastError :: 0 :: call
+    let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED
+    let changed = #unsafe SetWindowPos :: hwnd, null, 0, 0, 0, 0, flags :: call
+    select:
+        when changed == 0 => return Result.Err :: WindowControlError.StyleUpdateFailed :: call
+        else => ()
+    #unsafe SetLastError :: 0 :: call
+    let _ = #unsafe DrawMenuBar :: hwnd :: call
+    let redraw_flags = RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW | RDW_FRAME
+    let redrawn = #unsafe RedrawWindow :: hwnd, null, null, redraw_flags :: call
+    select:
+        when redrawn == 0 => return Result.Err :: WindowControlError.StyleUpdateFailed :: call
+        else => return Result.Ok :: () :: call
+
+fn resize_direction_hit_test(read direction: WindowResizeDirection) -> USize:
+    select direction:
+        when WindowResizeDirection.West => return HTLEFT_BITS
+        when WindowResizeDirection.East => return HTRIGHT_BITS
+        when WindowResizeDirection.North => return HTTOP_BITS
+        when WindowResizeDirection.South => return HTBOTTOM_BITS
+        when WindowResizeDirection.NorthWest => return HTTOPLEFT_BITS
+        when WindowResizeDirection.NorthEast => return HTTOPRIGHT_BITS
+        when WindowResizeDirection.SouthWest => return HTBOTTOMLEFT_BITS
+        when WindowResizeDirection.SouthEast => return HTBOTTOMRIGHT_BITS
+    return HTBOTTOMRIGHT_BITS
+
+fn screen_point(hwnd: Win32HWnd, read position: Point) -> Result[Point, WindowControlError]:
+    let screen = GlfwPoint :: position.x, position.y :: call
+    let screen_ptr: *edit GlfwPoint = #unsafe &raw edit screen
+    let converted = #unsafe ClientToScreen :: hwnd, screen_ptr :: call
+    select:
+        when converted == 0 => return Result.Err :: WindowControlError.ScreenPositionFailed :: call
+        else => return Result.Ok :: screen :: call
+
+fn post_system_command(hwnd: Win32HWnd, command: USize) -> Result[Unit, WindowControlError]:
+    let posted = #unsafe PostMessageW :: hwnd, WM_SYSCOMMAND, command, 0ISize :: call
+    select:
+        when posted == 0 => return Result.Err :: WindowControlError.SystemCommandDispatchFailed :: call
+        else => return Result.Ok :: () :: call
+
+fn attention_flags(read request: Option[UserAttentionType]) -> CUInt:
+    select request:
+        when Option.Some(UserAttentionType.Critical) => return FLASHW_ALL | FLASHW_TIMERNOFG
+        when Option.Some(UserAttentionType.Informational) => return FLASHW_TRAY | FLASHW_TIMERNOFG
+        when Option.None => return FLASHW_STOP
+    return FLASHW_STOP
+
+#export[name = "runa_app_window_control_subclass_proc"]
+extern["system"] fn window_control_subclass_proc(window: Win32HWnd, message: CUInt, wparam: USize, lparam: ISize, subclass_id: USize, ref_data: USize) -> ISize:
+    let _ = subclass_id
+    select:
+        when message == WM_SIZING =>
+            select:
+                when ref_data == 0USize => ()
+                else =>
+                    let mailbox = ref_data_as_mailbox :: ref_data :: call
+                    select mailbox_resize_increments :: mailbox :: call:
+                        when Option.Some(increments) =>
+                            select lparam_as_rect :: lparam :: call:
+                                when Option.Some(rect_ptr) =>
+                                    select current_nonclient_size :: window :: call:
+                                        when Option.Some(nonclient) =>
+                                            let candidate: Win32Rect = #unsafe rect_ptr.load :: :: method
+                                            let outer_width = rect_width :: candidate :: call
+                                            let outer_height = rect_height :: candidate :: call
+                                            let client_width = outer_width - nonclient.width
+                                            let client_height = outer_height - nonclient.height
+                                            let adjusted_client_width = nearest_increment :: client_width, increments.width :: call
+                                            let adjusted_client_height = nearest_increment :: client_height, increments.height :: call
+                                            let adjusted_outer_width = adjusted_client_width + nonclient.width
+                                            let adjusted_outer_height = adjusted_client_height + nonclient.height
+                                            apply_rect_size :: rect_ptr, wparam, adjusted_outer_width, adjusted_outer_height :: call
+                                            return 1ISize
+                                        when Option.None => ()
+                                when Option.None => ()
+                        when Option.None => ()
+        else => ()
+    return #unsafe DefSubclassProc :: window, message, wparam, lparam :: call
+
+pub(package) fn current_window_buttons(read window: GlfwWindow) -> Result[WindowButtons, WindowControlError]:
+    select either:
+        when hwnd: Result.Ok(hwnd) <- window_handle :: window :: call
+        when menu: Result.Ok(menu) <- system_menu :: hwnd :: call
+        when style: Result.Ok(style) <- window_style :: hwnd :: call
+        when close_enabled: Result.Ok(close_enabled) <- menu_item_enabled :: menu, SC_CLOSE :: call
+        when minimize_menu_enabled: Result.Ok(minimize_menu_enabled) <- menu_item_enabled :: menu, SC_MINIMIZE :: call
+        when maximize_menu_enabled: Result.Ok(maximize_menu_enabled) <- menu_item_enabled :: menu, SC_MAXIMIZE :: call =>
+            let minimize_enabled = style_has_bits :: style, WS_MINIMIZEBOX :: call && minimize_menu_enabled
+            let maximize_enabled = style_has_bits :: style, WS_MAXIMIZEBOX :: call && maximize_menu_enabled
+            let buttons = WindowButtons :: :: call
+                close = close_enabled
+                minimize = minimize_enabled
+                maximize = maximize_enabled
+            return Result.Ok :: buttons :: call
+
+    with Result.Err(_):
+        hwnd => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+        menu => return Result.Err :: WindowControlError.SystemMenuUnavailable :: call
+        style => return Result.Err :: WindowControlError.StyleQueryFailed :: call
+        close_enabled => return Result.Err :: WindowControlError.SystemMenuUnavailable :: call
+        minimize_menu_enabled => return Result.Err :: WindowControlError.SystemMenuUnavailable :: call
+        maximize_menu_enabled => return Result.Err :: WindowControlError.SystemMenuUnavailable :: call
+
+pub(package) fn current_window_enabled(read window: GlfwWindow) -> Result[Bool, WindowControlError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+    let enabled = #unsafe IsWindowEnabled :: hwnd :: call
+    return Result.Ok :: (enabled != 0) :: call
+
+pub(package) fn set_window_enabled(read window: GlfwWindow, enabled: Bool) -> Result[Unit, WindowControlError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+    let raw_enabled: CInt = 0
+    select:
+        when enabled => raw_enabled = 1
+        else => ()
+    let _ = #unsafe EnableWindow :: hwnd, raw_enabled :: call
+    return Result.Ok :: () :: call
+
+pub(package) fn current_window_skip_taskbar(read window: GlfwWindow) -> Result[Bool, WindowControlError]:
+    select either:
+        when hwnd: Result.Ok(hwnd) <- window_handle :: window :: call
+        when style: Result.Ok(style) <- window_exstyle :: hwnd :: call =>
+            let skip = style_has_bits :: style, WS_EX_TOOLWINDOW :: call
+            return Result.Ok :: skip :: call
+
+    with Result.Err(_):
+        hwnd => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+        style => return Result.Err :: WindowControlError.ExStyleQueryFailed :: call
+
+pub(package) fn current_window_owner_window(read window: GlfwWindow) -> Result[Option[Win32HWnd], WindowControlError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+    #unsafe SetLastError :: 0 :: call
+    let owner = #unsafe GetWindow :: hwnd, GW_OWNER :: call
+    let last_error = #unsafe GetLastError :: :: call
+    select:
+        when owner.is_null :: :: method =>
+            select:
+                when last_error != 0 => return Result.Err :: WindowControlError.OwnerWindowQueryFailed :: call
+                else => return Result.Ok :: Option.None :: call
+        else => return Result.Ok :: (Option.Some :: owner :: call) :: call
+
+pub(package) fn current_window_no_redirection_bitmap(read window: GlfwWindow) -> Result[Bool, WindowControlError]:
+    select either:
+        when hwnd: Result.Ok(hwnd) <- window_handle :: window :: call
+        when style: Result.Ok(style) <- window_exstyle :: hwnd :: call =>
+            let enabled = style_has_bits :: style, WS_EX_NOREDIRECTIONBITMAP :: call
+            return Result.Ok :: enabled :: call
+
+    with Result.Err(_):
+        hwnd => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+        style => return Result.Err :: WindowControlError.ExStyleQueryFailed :: call
+
+pub(package) fn set_window_skip_taskbar(read window: GlfwWindow, skip: Bool) -> Result[Unit, WindowControlError]:
+    select either:
+        when hwnd: Result.Ok(hwnd) <- window_handle :: window :: call
+        when style: Result.Ok(style) <- window_exstyle :: hwnd :: call
+        when exstyle_updated: Result.Ok(_) <- update_window_exstyle :: hwnd, (style_with_bits :: (style_with_bits :: style, WS_EX_TOOLWINDOW, skip :: call), WS_EX_APPWINDOW, !skip :: call) :: call
+        when frame_refreshed: Result.Ok(_) <- refresh_window_frame :: hwnd :: call =>
+            return Result.Ok :: () :: call
+
+    with Result.Err(_):
+        hwnd => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+        style => return Result.Err :: WindowControlError.ExStyleQueryFailed :: call
+        exstyle_updated => return Result.Err :: WindowControlError.ExStyleUpdateFailed :: call
+        frame_refreshed => return Result.Err :: WindowControlError.ExStyleUpdateFailed :: call
+
+pub(package) fn set_window_owner_window(read window: GlfwWindow, owner: Win32HWnd) -> Result[Unit, WindowControlError]:
+    select either:
+        when hwnd: Result.Ok(hwnd) <- window_handle :: window :: call
+        when bits: Result.Ok(bits) <- owner_window_bits :: owner :: call =>
+            #unsafe SetLastError :: 0 :: call
+            let previous = #unsafe SetWindowLongPtrW :: hwnd, GWLP_HWNDPARENT, bits :: call
+            let last_error = #unsafe GetLastError :: :: call
+            select:
+                when previous == 0 && last_error != 0 => return Result.Err :: WindowControlError.OwnerWindowUpdateFailed :: call
+                else => return Result.Ok :: () :: call
+
+    with Result.Err(_):
+        hwnd => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+        bits => return Result.Err :: WindowControlError.OwnerWindowUpdateFailed :: call
+
+pub(package) fn set_window_menu(read window: GlfwWindow, menu: Win32HMenu) -> Result[Unit, WindowControlError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+    let updated = #unsafe SetMenu :: hwnd, menu :: call
+    select:
+        when updated == 0 => return Result.Err :: WindowControlError.MenuUpdateFailed :: call
+        else => return Result.Ok :: () :: call
+
+pub(package) fn current_window_clip_children(read window: GlfwWindow) -> Result[Bool, WindowControlError]:
+    select either:
+        when hwnd: Result.Ok(hwnd) <- window_handle :: window :: call
+        when style: Result.Ok(style) <- window_style :: hwnd :: call =>
+            let enabled = style_has_bits :: style, WS_CLIPCHILDREN :: call
+            return Result.Ok :: enabled :: call
+
+    with Result.Err(_):
+        hwnd => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+        style => return Result.Err :: WindowControlError.StyleQueryFailed :: call
+
+pub(package) fn set_window_clip_children(read window: GlfwWindow, enabled: Bool) -> Result[Unit, WindowControlError]:
+    let applied = window.set_win32_clip_children :: enabled :: method
+    select:
+        when !applied => return Result.Err :: WindowControlError.StyleUpdateFailed :: call
+        else => ()
+    select current_window_clip_children :: window :: call:
+        when Result.Ok(value) =>
+            select:
+                when value != enabled => return Result.Err :: WindowControlError.StyleUpdateFailed :: call
+                else => return Result.Ok :: () :: call
+        when Result.Err(err) => return Result.Err :: err :: call
+
+pub(package) fn current_window_content_protected(read window: GlfwWindow) -> Result[Bool, WindowControlError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+    let affinity: CUInt = 0
+    let affinity_ptr: *edit CUInt = #unsafe &raw edit affinity
+    let queried = #unsafe GetWindowDisplayAffinity :: hwnd, affinity_ptr :: call
+    select:
+        when queried == 0 => return Result.Err :: WindowControlError.ContentProtectionQueryFailed :: call
+        when affinity == WDA_NONE => return Result.Ok :: false :: call
+        else => return Result.Ok :: true :: call
+
+pub(package) fn set_window_content_protected(read window: GlfwWindow, enabled: Bool) -> Result[Unit, WindowControlError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+    let affinity = WDA_NONE
+    select:
+        when enabled => affinity = WDA_EXCLUDEFROMCAPTURE
+        else => ()
+    let updated = #unsafe SetWindowDisplayAffinity :: hwnd, affinity :: call
+    select:
+        when updated == 0 => return Result.Err :: WindowControlError.ContentProtectionUpdateFailed :: call
+        else => return Result.Ok :: () :: call
+
+pub(package) fn current_window_resize_increments(read window: GlfwWindow) -> Option[Size]:
+    let mailbox = window_mailbox :: window :: call
+    return mailbox_resize_increments :: mailbox :: call
+
+pub(package) fn set_window_resize_increments(read window: GlfwWindow, read increments: Option[Size]) -> Unit:
+    let mailbox = window_mailbox :: window :: call
+    set_mailbox_resize_increments :: mailbox, increments :: call
+    return
+
+pub(package) fn current_window_level(read window: GlfwWindow) -> WindowLevel:
+    let mailbox = window_mailbox :: window :: call
+    let level = mailbox_window_level :: mailbox :: call
+    select level:
+        when WindowLevel.AlwaysOnBottom => return WindowLevel.AlwaysOnBottom
+        when WindowLevel.AlwaysOnTop => return WindowLevel.AlwaysOnTop
+        when WindowLevel.Normal =>
+            select:
+                when window.attrib_bool :: 0x00020007 :: method => return WindowLevel.AlwaysOnTop
+                else => return WindowLevel.Normal
+    return WindowLevel.Normal
+
+pub(package) fn sync_window_level_for_floating(read window: GlfwWindow, floating: Bool) -> Unit:
+    let mailbox = window_mailbox :: window :: call
+    select:
+        when floating => set_mailbox_window_level :: mailbox, WindowLevel.AlwaysOnTop :: call
+        else =>
+            select mailbox_window_level :: mailbox :: call:
+                when WindowLevel.AlwaysOnTop => set_mailbox_window_level :: mailbox, WindowLevel.Normal :: call
+                else => ()
+    return
+
+pub(package) fn set_window_level(read window: GlfwWindow, read level: WindowLevel) -> Result[Unit, WindowControlError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+    let mailbox = window_mailbox :: window :: call
+    select level:
+        when WindowLevel.Normal =>
+            window.set_attrib_bool :: 0x00020007, false :: method
+            select update_window_z_order :: hwnd, null :: call:
+                when Result.Ok(_) => ()
+                when Result.Err(error) => return Result.Err :: error :: call
+        when WindowLevel.AlwaysOnTop =>
+            window.set_attrib_bool :: 0x00020007, true :: method
+        when WindowLevel.AlwaysOnBottom =>
+            window.set_attrib_bool :: 0x00020007, false :: method
+            let bottom = hwnd_bottom :: :: call
+            select update_window_z_order :: hwnd, bottom :: call:
+                when Result.Ok(_) => ()
+                when Result.Err(error) => return Result.Err :: error :: call
+    set_mailbox_window_level :: mailbox, level :: call
+    return Result.Ok :: () :: call
+
+pub(package) fn set_window_buttons(read window: GlfwWindow, read buttons: WindowButtons) -> Result[Unit, WindowControlError]:
+    select either:
+        when hwnd: Result.Ok(hwnd) <- window_handle :: window :: call
+        when menu: Result.Ok(menu) <- system_menu :: hwnd :: call
+        when style: Result.Ok(style) <- window_style :: hwnd :: call =>
+            let with_minimize = style_with_bits :: style, WS_MINIMIZEBOX, buttons.minimize :: call
+            let next_style = style_with_bits :: with_minimize, WS_MAXIMIZEBOX, buttons.maximize :: call
+            #unsafe SetLastError :: 0 :: call
+            let previous_style = #unsafe SetWindowLongPtrW :: hwnd, GWL_STYLE, next_style :: call
+            let last_error = #unsafe GetLastError :: :: call
+            select:
+                when previous_style == 0 && last_error != 0 => return Result.Err :: WindowControlError.StyleUpdateFailed :: call
+                else => ()
+            select set_menu_item_enabled :: menu, SC_CLOSE, buttons.close :: call:
+                when Result.Ok(_) => ()
+                when Result.Err(error) => return Result.Err :: error :: call
+            select set_menu_item_enabled :: menu, SC_MINIMIZE, buttons.minimize :: call:
+                when Result.Ok(_) => ()
+                when Result.Err(error) => return Result.Err :: error :: call
+            select set_menu_item_enabled :: menu, SC_MAXIMIZE, buttons.maximize :: call:
+                when Result.Ok(_) => ()
+                when Result.Err(error) => return Result.Err :: error :: call
+            return refresh_window_frame :: hwnd :: call
+
+    with Result.Err(_):
+        hwnd => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+        menu => return Result.Err :: WindowControlError.SystemMenuUnavailable :: call
+        style => return Result.Err :: WindowControlError.StyleQueryFailed :: call
+
+pub(package) fn drag_window_interaction(read window: GlfwWindow) -> Result[Unit, WindowControlError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+    let _ = #unsafe ReleaseCapture :: :: call
+    let command = SC_MOVE_BITS | HTCAPTION_BITS
+    return post_system_command :: hwnd, command :: call
+
+pub(package) fn drag_resize_window_interaction(read window: GlfwWindow, read direction: WindowResizeDirection) -> Result[Unit, WindowControlError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+    let _ = #unsafe ReleaseCapture :: :: call
+    let hit_test = resize_direction_hit_test :: direction :: call
+    let command = SC_SIZE_BITS | hit_test
+    return post_system_command :: hwnd, command :: call
+
+pub(package) fn show_window_system_menu(read window: GlfwWindow, read position: Point) -> Result[Unit, WindowControlError]:
+    select either:
+        when hwnd: Result.Ok(hwnd) <- window_handle :: window :: call
+        when menu: Result.Ok(menu) <- system_menu :: hwnd :: call
+        when screen: Result.Ok(screen) <- screen_point :: hwnd, position :: call =>
+            let foregrounded = #unsafe SetForegroundWindow :: hwnd :: call
+            select:
+                when foregrounded == 0 => return Result.Err :: WindowControlError.MenuShowFailed :: call
+                else => ()
+            #unsafe SetLastError :: 0 :: call
+            let command = #unsafe TrackPopupMenu :: menu, TPM_RETURNCMD, screen.x, screen.y, 0, hwnd, null :: call
+            let last_error = #unsafe GetLastError :: :: call
+            select:
+                when command == 0 && last_error != 0 => return Result.Err :: WindowControlError.MenuShowFailed :: call
+                when command == 0 => return Result.Ok :: () :: call
+                else => ()
+            let _ = #unsafe PostMessageW :: hwnd, WM_NULL, 0USize, 0ISize :: call
+            let Result.Ok(command_bits) = command as Maybe[USize] else =>
+                return Result.Err :: WindowControlError.SystemCommandDispatchFailed :: call
+            return post_system_command :: hwnd, command_bits :: call
+
+    with Result.Err(_):
+        hwnd => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+        menu => return Result.Err :: WindowControlError.SystemMenuUnavailable :: call
+        screen => return Result.Err :: WindowControlError.ScreenPositionFailed :: call
+
+pub(package) fn request_window_attention(read window: GlfwWindow, read request: Option[UserAttentionType]) -> Result[Unit, WindowControlError]:
+    let Result.Ok(hwnd) = window_handle :: window :: call else => return Result.Err :: WindowControlError.NativeWindowUnavailable :: call
+    let flags = attention_flags :: request :: call
+    let Result.Ok(cb_size) = size_of[FlashWindowInfo] as Maybe[CUInt] else =>
+        return Result.Err :: WindowControlError.AttentionRequestFailed :: call
+    let flash = FlashWindowInfo :: :: call
+        cb_size = cb_size
+        hwnd = hwnd
+        flags = flags
+        count = 0
+        timeout = 0
+    let flash_ptr: *read FlashWindowInfo = #unsafe &raw read flash
+    let flashed = #unsafe FlashWindowEx :: flash_ptr :: call
+    select:
+        when flashed == 0 => return Result.Err :: WindowControlError.AttentionRequestFailed :: call
+        else => return Result.Ok :: () :: call
+
+pub(package) fn attach_window_control_subclass(read window: GlfwWindow, mailbox: *edit WindowMailbox) -> Bool:
+    let hwnd = window.win32_window :: :: method
+    select:
+        when hwnd.is_null :: :: method => return false
+        when mailbox.is_null :: :: method => return false
+        else => ()
+    let ref_data = #unsafe raw_pointer_address_edit :: mailbox :: call
+    let attached = #unsafe SetWindowSubclass :: hwnd, window_control_subclass_proc, WINDOW_CONTROL_SUBCLASS_ID, ref_data :: call
+    return attached != 0
+
+pub(package) fn detach_window_control_subclass(read window: GlfwWindow) -> Unit:
+    let hwnd = window.win32_window :: :: method
+    select:
+        when hwnd.is_null :: :: method => return
+        else => ()
+    let _ = #unsafe RemoveWindowSubclass :: hwnd, window_control_subclass_proc, WINDOW_CONTROL_SUBCLASS_ID :: call
+    return
+
+
+
+
+
+
+
+
+

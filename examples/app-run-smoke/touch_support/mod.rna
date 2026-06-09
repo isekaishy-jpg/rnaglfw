@@ -166,19 +166,20 @@ pub fn check_touch_batch_helpers() -> I32:
         y = 71.0
     pop_event_events.push :: (AppEvent.Window :: pop_event_touch_event :: call) :: method
     let pop_event_batch = app_event_batch_from_events :: pop_event_events :: call
-    select pop_event_batch.pop_touch_event_for :: 222 :: method:
-        when Option.Some(event) =>
-            select event.touch_data :: :: method:
-                when Option.Some(data) =>
-                    select data.phase:
-                        when TouchPhase.Ended =>
-                            select:
-                                when data.touch_id != 32 => return 3642
-                                when data.x != 70.0 => return 3643
-                                when data.y != 71.0 => return 3644
-                                else => ()
-                        when _ => return 3645
-                when Option.None => return 3646
-        when Option.None => return 3647
+    select either:
+        when event: Option.Some(event) <- pop_event_batch.pop_touch_event_for :: 222 :: method
+        when data: Option.Some(data) <- event.touch_data :: :: method =>
+            select data.phase:
+                when TouchPhase.Ended =>
+                    select:
+                        when data.touch_id != 32 => return 3642
+                        when data.x != 70.0 => return 3643
+                        when data.y != 71.0 => return 3644
+                        else => ()
+                when _ => return 3645
+
+    with Option.None:
+        event => return 3647
+        data => return 3646
 
     return 0

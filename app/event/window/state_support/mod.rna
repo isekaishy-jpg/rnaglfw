@@ -1,7 +1,8 @@
 use std.{List, Option}
-use event.{AppEvent, AppEventBatch, JoystickEvent, MonitorEvent, UserEvent, WindowEvent}
-use event.WindowEventKind
+
+use event.{AppEvent, AppEventBatch, WindowEvent, WindowEventKind}
 use event.{WindowMoveData, WindowScaleData, WindowSizeData}
+use event.batch_support
 use window.{Theme, WindowId, theme_from_raw, theme_raw}
 
 fn push_window(edit events: List[AppEvent], event: WindowEvent) -> Unit:
@@ -9,19 +10,8 @@ fn push_window(edit events: List[AppEvent], event: WindowEvent) -> Unit:
     events.push :: wrapped :: method
     return
 
-fn push_monitor(edit events: List[AppEvent], event: MonitorEvent) -> Unit:
-    let wrapped = AppEvent.Monitor :: event :: call
-    events.push :: wrapped :: method
-    return
-
-fn push_joystick(edit events: List[AppEvent], event: JoystickEvent) -> Unit:
-    let wrapped = AppEvent.Joystick :: event :: call
-    events.push :: wrapped :: method
-    return
-
-fn push_user(edit events: List[AppEvent], event: UserEvent) -> Unit:
-    let wrapped = AppEvent.User :: event :: call
-    events.push :: wrapped :: method
+fn push_passthrough(edit events: List[AppEvent], event: AppEvent) -> Unit:
+    events.push :: event :: method
     return
 
 fn build_redraw_requested_window_event(id: WindowId) -> WindowEvent:
@@ -79,2081 +69,756 @@ fn build_theme_changed_window_event(id: WindowId, read theme: Theme) -> WindowEv
         id = id
         theme = copied
 
+fn collect_state_events(edit batch: AppEventBatch, read kind: WindowEventKind, read id_filter: Option[WindowId]) -> List[WindowEvent]:
+    let staged = batch_support.take_batch_events_reversed :: batch :: call
+    let matched = List[WindowEvent] :: :: call
+    let remaining = List[AppEvent] :: :: call
+    repeat while !staged.is_empty :: :: method:
+        select staged.pop :: :: method:
+            when Option.Some(event) =>
+                select event:
+                    when AppEvent.Window(window_event) =>
+                        select kind:
+                            when WindowEventKind.RedrawRequested =>
+                                select window_event:
+                                    when WindowEvent.RedrawRequested(id = id) =>
+                                        select id_filter:
+                                            when Option.Some(expected) =>
+                                                select:
+                                                    when id == expected =>
+                                                        let copied = build_redraw_requested_window_event :: id :: call
+                                                        let restored = build_redraw_requested_window_event :: id :: call
+                                                        matched.push :: copied :: method
+                                                        push_window :: remaining, restored :: call
+                                                    else =>
+                                                        let restored = build_redraw_requested_window_event :: id :: call
+                                                        push_window :: remaining, restored :: call
+                                            when Option.None =>
+                                                let copied = build_redraw_requested_window_event :: id :: call
+                                                let restored = build_redraw_requested_window_event :: id :: call
+                                                matched.push :: copied :: method
+                                                push_window :: remaining, restored :: call
+                                    when _ => push_window :: remaining, window_event :: call
+                            when WindowEventKind.Moved =>
+                                select window_event:
+                                    when WindowEvent.Moved(id = id, x = x, y = y) =>
+                                        select id_filter:
+                                            when Option.Some(expected) =>
+                                                select:
+                                                    when id == expected =>
+                                                        let copied = build_moved_window_event :: id, x, y :: call
+                                                        let restored = build_moved_window_event :: id, x, y :: call
+                                                        matched.push :: copied :: method
+                                                        push_window :: remaining, restored :: call
+                                                    else =>
+                                                        let restored = build_moved_window_event :: id, x, y :: call
+                                                        push_window :: remaining, restored :: call
+                                            when Option.None =>
+                                                let copied = build_moved_window_event :: id, x, y :: call
+                                                let restored = build_moved_window_event :: id, x, y :: call
+                                                matched.push :: copied :: method
+                                                push_window :: remaining, restored :: call
+                                    when _ => push_window :: remaining, window_event :: call
+                            when WindowEventKind.Resized =>
+                                select window_event:
+                                    when WindowEvent.Resized(id = id, width = width, height = height) =>
+                                        select id_filter:
+                                            when Option.Some(expected) =>
+                                                select:
+                                                    when id == expected =>
+                                                        let copied = build_resized_window_event :: id, width, height :: call
+                                                        let restored = build_resized_window_event :: id, width, height :: call
+                                                        matched.push :: copied :: method
+                                                        push_window :: remaining, restored :: call
+                                                    else =>
+                                                        let restored = build_resized_window_event :: id, width, height :: call
+                                                        push_window :: remaining, restored :: call
+                                            when Option.None =>
+                                                let copied = build_resized_window_event :: id, width, height :: call
+                                                let restored = build_resized_window_event :: id, width, height :: call
+                                                matched.push :: copied :: method
+                                                push_window :: remaining, restored :: call
+                                    when _ => push_window :: remaining, window_event :: call
+                            when WindowEventKind.FramebufferResized =>
+                                select window_event:
+                                    when WindowEvent.FramebufferResized(id = id, width = width, height = height) =>
+                                        select id_filter:
+                                            when Option.Some(expected) =>
+                                                select:
+                                                    when id == expected =>
+                                                        let copied = build_framebuffer_resized_window_event :: id, width, height :: call
+                                                        let restored = build_framebuffer_resized_window_event :: id, width, height :: call
+                                                        matched.push :: copied :: method
+                                                        push_window :: remaining, restored :: call
+                                                    else =>
+                                                        let restored = build_framebuffer_resized_window_event :: id, width, height :: call
+                                                        push_window :: remaining, restored :: call
+                                            when Option.None =>
+                                                let copied = build_framebuffer_resized_window_event :: id, width, height :: call
+                                                let restored = build_framebuffer_resized_window_event :: id, width, height :: call
+                                                matched.push :: copied :: method
+                                                push_window :: remaining, restored :: call
+                                    when _ => push_window :: remaining, window_event :: call
+                            when WindowEventKind.ContentScaleChanged =>
+                                select window_event:
+                                    when WindowEvent.ContentScaleChanged(id = id, x = x, y = y) =>
+                                        select id_filter:
+                                            when Option.Some(expected) =>
+                                                select:
+                                                    when id == expected =>
+                                                        let copied = build_content_scale_changed_window_event :: id, x, y :: call
+                                                        let restored = build_content_scale_changed_window_event :: id, x, y :: call
+                                                        matched.push :: copied :: method
+                                                        push_window :: remaining, restored :: call
+                                                    else =>
+                                                        let restored = build_content_scale_changed_window_event :: id, x, y :: call
+                                                        push_window :: remaining, restored :: call
+                                            when Option.None =>
+                                                let copied = build_content_scale_changed_window_event :: id, x, y :: call
+                                                let restored = build_content_scale_changed_window_event :: id, x, y :: call
+                                                matched.push :: copied :: method
+                                                push_window :: remaining, restored :: call
+                                    when _ => push_window :: remaining, window_event :: call
+                            when WindowEventKind.FocusChanged =>
+                                select window_event:
+                                    when WindowEvent.FocusChanged(id = id, focused = focused) =>
+                                        select id_filter:
+                                            when Option.Some(expected) =>
+                                                select:
+                                                    when id == expected =>
+                                                        let copied = build_focus_changed_window_event :: id, focused :: call
+                                                        let restored = build_focus_changed_window_event :: id, focused :: call
+                                                        matched.push :: copied :: method
+                                                        push_window :: remaining, restored :: call
+                                                    else =>
+                                                        let restored = build_focus_changed_window_event :: id, focused :: call
+                                                        push_window :: remaining, restored :: call
+                                            when Option.None =>
+                                                let copied = build_focus_changed_window_event :: id, focused :: call
+                                                let restored = build_focus_changed_window_event :: id, focused :: call
+                                                matched.push :: copied :: method
+                                                push_window :: remaining, restored :: call
+                                    when _ => push_window :: remaining, window_event :: call
+                            when WindowEventKind.Iconified =>
+                                select window_event:
+                                    when WindowEvent.Iconified(id = id, iconified = iconified) =>
+                                        select id_filter:
+                                            when Option.Some(expected) =>
+                                                select:
+                                                    when id == expected =>
+                                                        let copied = build_iconified_window_event :: id, iconified :: call
+                                                        let restored = build_iconified_window_event :: id, iconified :: call
+                                                        matched.push :: copied :: method
+                                                        push_window :: remaining, restored :: call
+                                                    else =>
+                                                        let restored = build_iconified_window_event :: id, iconified :: call
+                                                        push_window :: remaining, restored :: call
+                                            when Option.None =>
+                                                let copied = build_iconified_window_event :: id, iconified :: call
+                                                let restored = build_iconified_window_event :: id, iconified :: call
+                                                matched.push :: copied :: method
+                                                push_window :: remaining, restored :: call
+                                    when _ => push_window :: remaining, window_event :: call
+                            when WindowEventKind.Maximized =>
+                                select window_event:
+                                    when WindowEvent.Maximized(id = id, maximized = maximized) =>
+                                        select id_filter:
+                                            when Option.Some(expected) =>
+                                                select:
+                                                    when id == expected =>
+                                                        let copied = build_maximized_window_event :: id, maximized :: call
+                                                        let restored = build_maximized_window_event :: id, maximized :: call
+                                                        matched.push :: copied :: method
+                                                        push_window :: remaining, restored :: call
+                                                    else =>
+                                                        let restored = build_maximized_window_event :: id, maximized :: call
+                                                        push_window :: remaining, restored :: call
+                                            when Option.None =>
+                                                let copied = build_maximized_window_event :: id, maximized :: call
+                                                let restored = build_maximized_window_event :: id, maximized :: call
+                                                matched.push :: copied :: method
+                                                push_window :: remaining, restored :: call
+                                    when _ => push_window :: remaining, window_event :: call
+                            when WindowEventKind.CursorEntered =>
+                                select window_event:
+                                    when WindowEvent.CursorEntered(id = id, entered = entered) =>
+                                        select id_filter:
+                                            when Option.Some(expected) =>
+                                                select:
+                                                    when id == expected =>
+                                                        let copied = build_cursor_entered_window_event :: id, entered :: call
+                                                        let restored = build_cursor_entered_window_event :: id, entered :: call
+                                                        matched.push :: copied :: method
+                                                        push_window :: remaining, restored :: call
+                                                    else =>
+                                                        let restored = build_cursor_entered_window_event :: id, entered :: call
+                                                        push_window :: remaining, restored :: call
+                                            when Option.None =>
+                                                let copied = build_cursor_entered_window_event :: id, entered :: call
+                                                let restored = build_cursor_entered_window_event :: id, entered :: call
+                                                matched.push :: copied :: method
+                                                push_window :: remaining, restored :: call
+                                    when _ => push_window :: remaining, window_event :: call
+                            when WindowEventKind.ThemeChanged =>
+                                select window_event:
+                                    when WindowEvent.ThemeChanged(id = id, theme = theme) =>
+                                        select id_filter:
+                                            when Option.Some(expected) =>
+                                                select:
+                                                    when id == expected =>
+                                                        let copied = build_theme_changed_window_event :: id, theme :: call
+                                                        let restored = build_theme_changed_window_event :: id, theme :: call
+                                                        matched.push :: copied :: method
+                                                        push_window :: remaining, restored :: call
+                                                    else =>
+                                                        let restored = build_theme_changed_window_event :: id, theme :: call
+                                                        push_window :: remaining, restored :: call
+                                            when Option.None =>
+                                                let copied = build_theme_changed_window_event :: id, theme :: call
+                                                let restored = build_theme_changed_window_event :: id, theme :: call
+                                                matched.push :: copied :: method
+                                                push_window :: remaining, restored :: call
+                                    when _ => push_window :: remaining, window_event :: call
+                            when _ => push_window :: remaining, window_event :: call
+                    when other => push_passthrough :: remaining, other :: call
+            when Option.None => break
+    batch.events = remaining
+    return matched
+
+fn take_moved_data_from_events(take events: List[WindowEvent]) -> List[WindowMoveData]:
+    let data = List[WindowMoveData] :: :: call
+    repeat while !events.is_empty :: :: method:
+        select events.pop :: :: method:
+            when Option.Some(event) =>
+                select event.moved_data :: :: method:
+                    when Option.Some(value) => data.push :: value :: method
+                    when Option.None => ()
+            when Option.None => break
+    return data
+
+fn take_resized_data_from_events(take events: List[WindowEvent]) -> List[WindowSizeData]:
+    let data = List[WindowSizeData] :: :: call
+    repeat while !events.is_empty :: :: method:
+        select events.pop :: :: method:
+            when Option.Some(event) =>
+                select event.resized_data :: :: method:
+                    when Option.Some(value) => data.push :: value :: method
+                    when Option.None => ()
+            when Option.None => break
+    return data
+
+fn take_framebuffer_resized_data_from_events(take events: List[WindowEvent]) -> List[WindowSizeData]:
+    let data = List[WindowSizeData] :: :: call
+    repeat while !events.is_empty :: :: method:
+        select events.pop :: :: method:
+            when Option.Some(event) =>
+                select event.framebuffer_resized_data :: :: method:
+                    when Option.Some(value) => data.push :: value :: method
+                    when Option.None => ()
+            when Option.None => break
+    return data
+
+fn take_content_scale_data_from_events(take events: List[WindowEvent]) -> List[WindowScaleData]:
+    let data = List[WindowScaleData] :: :: call
+    repeat while !events.is_empty :: :: method:
+        select events.pop :: :: method:
+            when Option.Some(event) =>
+                select event.content_scale_data :: :: method:
+                    when Option.Some(value) => data.push :: value :: method
+                    when Option.None => ()
+            when Option.None => break
+    return data
+
+fn take_focus_states_from_events(take events: List[WindowEvent]) -> List[Bool]:
+    let states = List[Bool] :: :: call
+    repeat while !events.is_empty :: :: method:
+        select events.pop :: :: method:
+            when Option.Some(event) =>
+                select event.focus_state :: :: method:
+                    when Option.Some(value) => states.push :: value :: method
+                    when Option.None => ()
+            when Option.None => break
+    return states
+
+fn take_iconified_states_from_events(take events: List[WindowEvent]) -> List[Bool]:
+    let states = List[Bool] :: :: call
+    repeat while !events.is_empty :: :: method:
+        select events.pop :: :: method:
+            when Option.Some(event) =>
+                select event.iconified_state :: :: method:
+                    when Option.Some(value) => states.push :: value :: method
+                    when Option.None => ()
+            when Option.None => break
+    return states
+
+fn take_maximized_states_from_events(take events: List[WindowEvent]) -> List[Bool]:
+    let states = List[Bool] :: :: call
+    repeat while !events.is_empty :: :: method:
+        select events.pop :: :: method:
+            when Option.Some(event) =>
+                select event.maximized_state :: :: method:
+                    when Option.Some(value) => states.push :: value :: method
+                    when Option.None => ()
+            when Option.None => break
+    return states
+
+fn take_cursor_entered_states_from_events(take events: List[WindowEvent]) -> List[Bool]:
+    let states = List[Bool] :: :: call
+    repeat while !events.is_empty :: :: method:
+        select events.pop :: :: method:
+            when Option.Some(event) =>
+                select event.cursor_enter_state :: :: method:
+                    when Option.Some(value) => states.push :: value :: method
+                    when Option.None => ()
+            when Option.None => break
+    return states
+
+fn take_themes_from_events(take events: List[WindowEvent]) -> List[Theme]:
+    let themes = List[Theme] :: :: call
+    repeat while !events.is_empty :: :: method:
+        select events.pop :: :: method:
+            when Option.Some(event) =>
+                select event.theme :: :: method:
+                    when Option.Some(value) => themes.push :: value :: method
+                    when Option.None => ()
+            when Option.None => break
+    return themes
+
 impl AppEventBatch:
     fn redraw_requested_events(edit self) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.RedrawRequested(id = id) =>
-                            let copied = build_redraw_requested_window_event :: id :: call
-                            matched.push :: copied :: method
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter: Option[WindowId] = Option.None
+        return collect_state_events :: self, WindowEventKind.RedrawRequested, id_filter :: call
 
     fn moved_events(edit self) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Moved(id = id, x = x, y = y) =>
-                            let copied = build_moved_window_event :: id, x, y :: call
-                            matched.push :: copied :: method
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter: Option[WindowId] = Option.None
+        return collect_state_events :: self, WindowEventKind.Moved, id_filter :: call
 
     fn resized_events(edit self) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Resized(id = id, width = width, height = height) =>
-                            let copied = build_resized_window_event :: id, width, height :: call
-                            matched.push :: copied :: method
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter: Option[WindowId] = Option.None
+        return collect_state_events :: self, WindowEventKind.Resized, id_filter :: call
 
     fn framebuffer_resized_events(edit self) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.FramebufferResized(id = id, width = width, height = height) =>
-                            let copied = build_framebuffer_resized_window_event :: id, width, height :: call
-                            matched.push :: copied :: method
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter: Option[WindowId] = Option.None
+        return collect_state_events :: self, WindowEventKind.FramebufferResized, id_filter :: call
 
     fn content_scale_changed_events(edit self) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.ContentScaleChanged(id = id, x = x, y = y) =>
-                            let copied = build_content_scale_changed_window_event :: id, x, y :: call
-                            matched.push :: copied :: method
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter: Option[WindowId] = Option.None
+        return collect_state_events :: self, WindowEventKind.ContentScaleChanged, id_filter :: call
 
     fn focus_changed_events(edit self) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.FocusChanged(id = id, focused = focused) =>
-                            let copied = build_focus_changed_window_event :: id, focused :: call
-                            matched.push :: copied :: method
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter: Option[WindowId] = Option.None
+        return collect_state_events :: self, WindowEventKind.FocusChanged, id_filter :: call
 
     fn iconified_events(edit self) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Iconified(id = id, iconified = iconified) =>
-                            let copied = build_iconified_window_event :: id, iconified :: call
-                            matched.push :: copied :: method
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter: Option[WindowId] = Option.None
+        return collect_state_events :: self, WindowEventKind.Iconified, id_filter :: call
 
     fn maximized_events(edit self) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Maximized(id = id, maximized = maximized) =>
-                            let copied = build_maximized_window_event :: id, maximized :: call
-                            matched.push :: copied :: method
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter: Option[WindowId] = Option.None
+        return collect_state_events :: self, WindowEventKind.Maximized, id_filter :: call
 
     fn cursor_entered_events(edit self) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.CursorEntered(id = id, entered = entered) =>
-                            let copied = build_cursor_entered_window_event :: id, entered :: call
-                            matched.push :: copied :: method
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter: Option[WindowId] = Option.None
+        return collect_state_events :: self, WindowEventKind.CursorEntered, id_filter :: call
 
     fn theme_changed_events(edit self) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.ThemeChanged(id = id, theme = theme) =>
-                            let copied = build_theme_changed_window_event :: id, theme :: call
-                            matched.push :: copied :: method
-                            let restored = build_theme_changed_window_event :: id, theme :: call
-                            push_window :: remaining, restored :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter: Option[WindowId] = Option.None
+        return collect_state_events :: self, WindowEventKind.ThemeChanged, id_filter :: call
 
     fn redraw_requested_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.RedrawRequested(id = event_id) =>
-                            select:
-                                when event_id == id =>
-                                    let copied = build_redraw_requested_window_event :: event_id :: call
-                                    matched.push :: copied :: method
-                                else => ()
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter = Option.Some :: id :: call
+        return collect_state_events :: self, WindowEventKind.RedrawRequested, id_filter :: call
 
     fn moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Moved(id = event_id, x = x, y = y) =>
-                            select:
-                                when event_id == id =>
-                                    let copied = build_moved_window_event :: event_id, x, y :: call
-                                    matched.push :: copied :: method
-                                else => ()
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter = Option.Some :: id :: call
+        return collect_state_events :: self, WindowEventKind.Moved, id_filter :: call
 
     fn resized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Resized(id = event_id, width = width, height = height) =>
-                            select:
-                                when event_id == id =>
-                                    let copied = build_resized_window_event :: event_id, width, height :: call
-                                    matched.push :: copied :: method
-                                else => ()
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter = Option.Some :: id :: call
+        return collect_state_events :: self, WindowEventKind.Resized, id_filter :: call
 
     fn framebuffer_resized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.FramebufferResized(id = event_id, width = width, height = height) =>
-                            select:
-                                when event_id == id =>
-                                    let copied = build_framebuffer_resized_window_event :: event_id, width, height :: call
-                                    matched.push :: copied :: method
-                                else => ()
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter = Option.Some :: id :: call
+        return collect_state_events :: self, WindowEventKind.FramebufferResized, id_filter :: call
 
     fn content_scale_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.ContentScaleChanged(id = event_id, x = x, y = y) =>
-                            select:
-                                when event_id == id =>
-                                    let copied = build_content_scale_changed_window_event :: event_id, x, y :: call
-                                    matched.push :: copied :: method
-                                else => ()
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter = Option.Some :: id :: call
+        return collect_state_events :: self, WindowEventKind.ContentScaleChanged, id_filter :: call
 
     fn focus_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.FocusChanged(id = event_id, focused = focused) =>
-                            select:
-                                when event_id == id =>
-                                    let copied = build_focus_changed_window_event :: event_id, focused :: call
-                                    matched.push :: copied :: method
-                                else => ()
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter = Option.Some :: id :: call
+        return collect_state_events :: self, WindowEventKind.FocusChanged, id_filter :: call
 
     fn iconified_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Iconified(id = event_id, iconified = iconified) =>
-                            select:
-                                when event_id == id =>
-                                    let copied = build_iconified_window_event :: event_id, iconified :: call
-                                    matched.push :: copied :: method
-                                else => ()
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter = Option.Some :: id :: call
+        return collect_state_events :: self, WindowEventKind.Iconified, id_filter :: call
 
     fn maximized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Maximized(id = event_id, maximized = maximized) =>
-                            select:
-                                when event_id == id =>
-                                    let copied = build_maximized_window_event :: event_id, maximized :: call
-                                    matched.push :: copied :: method
-                                else => ()
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter = Option.Some :: id :: call
+        return collect_state_events :: self, WindowEventKind.Maximized, id_filter :: call
 
     fn cursor_entered_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.CursorEntered(id = event_id, entered = entered) =>
-                            select:
-                                when event_id == id =>
-                                    let copied = build_cursor_entered_window_event :: event_id, entered :: call
-                                    matched.push :: copied :: method
-                                else => ()
-                            push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter = Option.Some :: id :: call
+        return collect_state_events :: self, WindowEventKind.CursorEntered, id_filter :: call
 
     fn theme_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let matched = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.ThemeChanged(id = event_id, theme = theme) =>
-                            select:
-                                when event_id == id =>
-                                    let copied = build_theme_changed_window_event :: event_id, theme :: call
-                                    matched.push :: copied :: method
-                                else => ()
-                            let restored = build_theme_changed_window_event :: event_id, theme :: call
-                            push_window :: remaining, restored :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        let id_filter = Option.Some :: id :: call
+        return collect_state_events :: self, WindowEventKind.ThemeChanged, id_filter :: call
 
     fn pop_redraw_requested_event(edit self) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.RedrawRequested => found = Option.Some :: window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.RedrawRequested, id_filter :: call
 
     fn pop_moved_event(edit self) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.Moved => found = Option.Some :: window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.Moved, id_filter :: call
 
     fn pop_resized_event(edit self) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.Resized => found = Option.Some :: window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.Resized, id_filter :: call
 
     fn pop_framebuffer_resized_event(edit self) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.FramebufferResized => found = Option.Some :: window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.FramebufferResized, id_filter :: call
 
     fn pop_content_scale_changed_event(edit self) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.ContentScaleChanged => found = Option.Some :: window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.ContentScaleChanged, id_filter :: call
 
     fn pop_focus_changed_event(edit self) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.FocusChanged => found = Option.Some :: window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.FocusChanged, id_filter :: call
 
     fn pop_iconified_event(edit self) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.Iconified => found = Option.Some :: window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.Iconified, id_filter :: call
 
     fn pop_maximized_event(edit self) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.Maximized => found = Option.Some :: window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.Maximized, id_filter :: call
 
     fn pop_cursor_entered_event(edit self) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.CursorEntered => found = Option.Some :: window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.CursorEntered, id_filter :: call
 
     fn pop_theme_changed_event(edit self) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event:
-                                when WindowEvent.ThemeChanged(id = id, theme = theme) =>
-                                    found = Option.Some :: build_theme_changed_window_event :: id, theme :: call :: call
-                                when _ => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.ThemeChanged, id_filter :: call
 
     fn pop_redraw_requested_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.RedrawRequested =>
-                                    select:
-                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
-                                        else => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter = Option.Some :: id :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.RedrawRequested, id_filter :: call
 
     fn pop_moved_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.Moved =>
-                                    select:
-                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
-                                        else => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter = Option.Some :: id :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.Moved, id_filter :: call
 
     fn pop_resized_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.Resized =>
-                                    select:
-                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
-                                        else => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter = Option.Some :: id :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.Resized, id_filter :: call
 
     fn pop_framebuffer_resized_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.FramebufferResized =>
-                                    select:
-                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
-                                        else => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter = Option.Some :: id :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.FramebufferResized, id_filter :: call
 
     fn pop_content_scale_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.ContentScaleChanged =>
-                                    select:
-                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
-                                        else => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter = Option.Some :: id :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.ContentScaleChanged, id_filter :: call
 
     fn pop_focus_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.FocusChanged =>
-                                    select:
-                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
-                                        else => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter = Option.Some :: id :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.FocusChanged, id_filter :: call
 
     fn pop_iconified_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.Iconified =>
-                                    select:
-                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
-                                        else => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter = Option.Some :: id :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.Iconified, id_filter :: call
 
     fn pop_maximized_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.Maximized =>
-                                    select:
-                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
-                                        else => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter = Option.Some :: id :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.Maximized, id_filter :: call
 
     fn pop_cursor_entered_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.CursorEntered =>
-                                    select:
-                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
-                                        else => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter = Option.Some :: id :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.CursorEntered, id_filter :: call
 
     fn pop_theme_changed_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event:
-                                when WindowEvent.ThemeChanged(id = event_id, theme = theme) =>
-                                    select:
-                                        when event_id == id =>
-                                            found = Option.Some :: build_theme_changed_window_event :: event_id, theme :: call :: call
-                                        else =>
-                                            let restored = build_theme_changed_window_event :: event_id, theme :: call
-                                            push_window :: remaining, restored :: call
-                                when _ => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        let id_filter = Option.Some :: id :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.ThemeChanged, id_filter :: call
 
     fn moved_data(edit self) -> List[WindowMoveData]:
-        let matched = List[WindowMoveData] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event.moved_data :: :: method:
-                        when Option.Some(data) => matched.push :: data :: method
-                        when Option.None => ()
-                    push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_moved_data_from_events :: (self.moved_events :: :: method) :: call
 
     fn resized_data(edit self) -> List[WindowSizeData]:
-        let matched = List[WindowSizeData] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event.resized_data :: :: method:
-                        when Option.Some(data) => matched.push :: data :: method
-                        when Option.None => ()
-                    push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_resized_data_from_events :: (self.resized_events :: :: method) :: call
 
     fn framebuffer_resized_data(edit self) -> List[WindowSizeData]:
-        let matched = List[WindowSizeData] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event.framebuffer_resized_data :: :: method:
-                        when Option.Some(data) => matched.push :: data :: method
-                        when Option.None => ()
-                    push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_framebuffer_resized_data_from_events :: (self.framebuffer_resized_events :: :: method) :: call
 
     fn content_scale_data(edit self) -> List[WindowScaleData]:
-        let matched = List[WindowScaleData] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event.content_scale_data :: :: method:
-                        when Option.Some(data) => matched.push :: data :: method
-                        when Option.None => ()
-                    push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_content_scale_data_from_events :: (self.content_scale_changed_events :: :: method) :: call
 
     fn focus_states(edit self) -> List[Bool]:
-        let matched = List[Bool] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event.focus_state :: :: method:
-                        when Option.Some(state) => matched.push :: state :: method
-                        when Option.None => ()
-                    push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_focus_states_from_events :: (self.focus_changed_events :: :: method) :: call
 
     fn iconified_states(edit self) -> List[Bool]:
-        let matched = List[Bool] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event.iconified_state :: :: method:
-                        when Option.Some(state) => matched.push :: state :: method
-                        when Option.None => ()
-                    push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_iconified_states_from_events :: (self.iconified_events :: :: method) :: call
 
     fn maximized_states(edit self) -> List[Bool]:
-        let matched = List[Bool] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event.maximized_state :: :: method:
-                        when Option.Some(state) => matched.push :: state :: method
-                        when Option.None => ()
-                    push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_maximized_states_from_events :: (self.maximized_events :: :: method) :: call
 
     fn cursor_entered_states(edit self) -> List[Bool]:
-        let matched = List[Bool] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event.cursor_enter_state :: :: method:
-                        when Option.Some(state) => matched.push :: state :: method
-                        when Option.None => ()
-                    push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_cursor_entered_states_from_events :: (self.cursor_entered_events :: :: method) :: call
 
     fn themes(edit self) -> List[Theme]:
-        let matched = List[Theme] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.ThemeChanged(id = id, theme = theme) =>
-                            let raw = theme_raw :: theme :: call
-                            let copied = theme_from_raw :: raw :: call
-                            matched.push :: copied :: method
-                            let restored = build_theme_changed_window_event :: id, theme :: call
-                            push_window :: remaining, restored :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_themes_from_events :: (self.theme_changed_events :: :: method) :: call
 
     fn moved_data_for(edit self, id: WindowId) -> List[WindowMoveData]:
-        let matched = List[WindowMoveData] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select:
-                        when window_event.window_id :: :: method == id =>
-                            select window_event.moved_data :: :: method:
-                                when Option.Some(data) => matched.push :: data :: method
-                                when Option.None => ()
-                        else => ()
-                    push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_moved_data_from_events :: (self.moved_events_for :: id :: method) :: call
 
     fn resized_data_for(edit self, id: WindowId) -> List[WindowSizeData]:
-        let matched = List[WindowSizeData] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select:
-                        when window_event.window_id :: :: method == id =>
-                            select window_event.resized_data :: :: method:
-                                when Option.Some(data) => matched.push :: data :: method
-                                when Option.None => ()
-                        else => ()
-                    push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_resized_data_from_events :: (self.resized_events_for :: id :: method) :: call
 
     fn framebuffer_resized_data_for(edit self, id: WindowId) -> List[WindowSizeData]:
-        let matched = List[WindowSizeData] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select:
-                        when window_event.window_id :: :: method == id =>
-                            select window_event.framebuffer_resized_data :: :: method:
-                                when Option.Some(data) => matched.push :: data :: method
-                                when Option.None => ()
-                        else => ()
-                    push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_framebuffer_resized_data_from_events :: (self.framebuffer_resized_events_for :: id :: method) :: call
 
     fn content_scale_data_for(edit self, id: WindowId) -> List[WindowScaleData]:
-        let matched = List[WindowScaleData] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select:
-                        when window_event.window_id :: :: method == id =>
-                            select window_event.content_scale_data :: :: method:
-                                when Option.Some(data) => matched.push :: data :: method
-                                when Option.None => ()
-                        else => ()
-                    push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_content_scale_data_from_events :: (self.content_scale_changed_events_for :: id :: method) :: call
 
     fn focus_states_for(edit self, id: WindowId) -> List[Bool]:
-        let matched = List[Bool] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select:
-                        when window_event.window_id :: :: method == id =>
-                            select window_event.focus_state :: :: method:
-                                when Option.Some(state) => matched.push :: state :: method
-                                when Option.None => ()
-                        else => ()
-                    push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_focus_states_from_events :: (self.focus_changed_events_for :: id :: method) :: call
 
     fn iconified_states_for(edit self, id: WindowId) -> List[Bool]:
-        let matched = List[Bool] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select:
-                        when window_event.window_id :: :: method == id =>
-                            select window_event.iconified_state :: :: method:
-                                when Option.Some(state) => matched.push :: state :: method
-                                when Option.None => ()
-                        else => ()
-                    push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_iconified_states_from_events :: (self.iconified_events_for :: id :: method) :: call
 
     fn maximized_states_for(edit self, id: WindowId) -> List[Bool]:
-        let matched = List[Bool] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select:
-                        when window_event.window_id :: :: method == id =>
-                            select window_event.maximized_state :: :: method:
-                                when Option.Some(state) => matched.push :: state :: method
-                                when Option.None => ()
-                        else => ()
-                    push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_maximized_states_from_events :: (self.maximized_events_for :: id :: method) :: call
 
     fn cursor_entered_states_for(edit self, id: WindowId) -> List[Bool]:
-        let matched = List[Bool] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select:
-                        when window_event.window_id :: :: method == id =>
-                            select window_event.cursor_enter_state :: :: method:
-                                when Option.Some(state) => matched.push :: state :: method
-                                when Option.None => ()
-                        else => ()
-                    push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_cursor_entered_states_from_events :: (self.cursor_entered_events_for :: id :: method) :: call
 
     fn themes_for(edit self, id: WindowId) -> List[Theme]:
-        let matched = List[Theme] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.ThemeChanged(id = event_id, theme = theme) =>
-                            select:
-                                when event_id == id =>
-                                    let raw = theme_raw :: theme :: call
-                                    let copied = theme_from_raw :: raw :: call
-                                    matched.push :: copied :: method
-                                else => ()
-                            let restored = build_theme_changed_window_event :: event_id, theme :: call
-                            push_window :: remaining, restored :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return matched
+        return take_themes_from_events :: (self.theme_changed_events_for :: id :: method) :: call
 
     fn pop_moved_data(edit self) -> Option[WindowMoveData]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowMoveData] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.moved_data :: :: method:
-                                when Option.Some(data) => found = Option.Some :: data :: call
-                                when Option.None => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_moved_event :: :: method:
+            when Option.Some(event) => return event.moved_data :: :: method
+            when Option.None => return Option.None
 
     fn pop_resized_data(edit self) -> Option[WindowSizeData]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowSizeData] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.resized_data :: :: method:
-                                when Option.Some(data) => found = Option.Some :: data :: call
-                                when Option.None => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_resized_event :: :: method:
+            when Option.Some(event) => return event.resized_data :: :: method
+            when Option.None => return Option.None
 
     fn pop_framebuffer_resized_data(edit self) -> Option[WindowSizeData]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowSizeData] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.framebuffer_resized_data :: :: method:
-                                when Option.Some(data) => found = Option.Some :: data :: call
-                                when Option.None => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_framebuffer_resized_event :: :: method:
+            when Option.Some(event) => return event.framebuffer_resized_data :: :: method
+            when Option.None => return Option.None
 
     fn pop_content_scale_data(edit self) -> Option[WindowScaleData]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowScaleData] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.content_scale_data :: :: method:
-                                when Option.Some(data) => found = Option.Some :: data :: call
-                                when Option.None => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_content_scale_changed_event :: :: method:
+            when Option.Some(event) => return event.content_scale_data :: :: method
+            when Option.None => return Option.None
 
     fn pop_focus_state(edit self) -> Option[Bool]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[Bool] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.focus_state :: :: method:
-                                when Option.Some(state) => found = Option.Some :: state :: call
-                                when Option.None => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_focus_changed_event :: :: method:
+            when Option.Some(event) => return event.focus_state :: :: method
+            when Option.None => return Option.None
 
     fn pop_iconified_state(edit self) -> Option[Bool]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[Bool] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.iconified_state :: :: method:
-                                when Option.Some(state) => found = Option.Some :: state :: call
-                                when Option.None => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_iconified_event :: :: method:
+            when Option.Some(event) => return event.iconified_state :: :: method
+            when Option.None => return Option.None
 
     fn pop_maximized_state(edit self) -> Option[Bool]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[Bool] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.maximized_state :: :: method:
-                                when Option.Some(state) => found = Option.Some :: state :: call
-                                when Option.None => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_maximized_event :: :: method:
+            when Option.Some(event) => return event.maximized_state :: :: method
+            when Option.None => return Option.None
 
     fn pop_cursor_entered_state(edit self) -> Option[Bool]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[Bool] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.cursor_enter_state :: :: method:
-                                when Option.Some(state) => found = Option.Some :: state :: call
-                                when Option.None => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_cursor_entered_event :: :: method:
+            when Option.Some(event) => return event.cursor_enter_state :: :: method
+            when Option.None => return Option.None
 
     fn pop_theme(edit self) -> Option[Theme]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[Theme] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event:
-                                when WindowEvent.ThemeChanged(id = _, theme = theme) =>
-                                    let raw = theme_raw :: theme :: call
-                                    found = Option.Some :: theme_from_raw :: raw :: call :: call
-                                when _ => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_theme_changed_event :: :: method:
+            when Option.Some(event) => return event.theme :: :: method
+            when Option.None => return Option.None
 
     fn pop_moved_data_for(edit self, id: WindowId) -> Option[WindowMoveData]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowMoveData] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select:
-                                when window_event.window_id :: :: method == id =>
-                                    select window_event.moved_data :: :: method:
-                                        when Option.Some(data) => found = Option.Some :: data :: call
-                                        when Option.None => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_moved_event_for :: id :: method:
+            when Option.Some(event) => return event.moved_data :: :: method
+            when Option.None => return Option.None
 
     fn pop_resized_data_for(edit self, id: WindowId) -> Option[WindowSizeData]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowSizeData] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select:
-                                when window_event.window_id :: :: method == id =>
-                                    select window_event.resized_data :: :: method:
-                                        when Option.Some(data) => found = Option.Some :: data :: call
-                                        when Option.None => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_resized_event_for :: id :: method:
+            when Option.Some(event) => return event.resized_data :: :: method
+            when Option.None => return Option.None
 
     fn pop_framebuffer_resized_data_for(edit self, id: WindowId) -> Option[WindowSizeData]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowSizeData] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select:
-                                when window_event.window_id :: :: method == id =>
-                                    select window_event.framebuffer_resized_data :: :: method:
-                                        when Option.Some(data) => found = Option.Some :: data :: call
-                                        when Option.None => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_framebuffer_resized_event_for :: id :: method:
+            when Option.Some(event) => return event.framebuffer_resized_data :: :: method
+            when Option.None => return Option.None
 
     fn pop_content_scale_data_for(edit self, id: WindowId) -> Option[WindowScaleData]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowScaleData] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select:
-                                when window_event.window_id :: :: method == id =>
-                                    select window_event.content_scale_data :: :: method:
-                                        when Option.Some(data) => found = Option.Some :: data :: call
-                                        when Option.None => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_content_scale_changed_event_for :: id :: method:
+            when Option.Some(event) => return event.content_scale_data :: :: method
+            when Option.None => return Option.None
 
     fn pop_focus_state_for(edit self, id: WindowId) -> Option[Bool]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[Bool] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select:
-                                when window_event.window_id :: :: method == id =>
-                                    select window_event.focus_state :: :: method:
-                                        when Option.Some(state) => found = Option.Some :: state :: call
-                                        when Option.None => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_focus_changed_event_for :: id :: method:
+            when Option.Some(event) => return event.focus_state :: :: method
+            when Option.None => return Option.None
 
     fn pop_iconified_state_for(edit self, id: WindowId) -> Option[Bool]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[Bool] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select:
-                                when window_event.window_id :: :: method == id =>
-                                    select window_event.iconified_state :: :: method:
-                                        when Option.Some(state) => found = Option.Some :: state :: call
-                                        when Option.None => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_iconified_event_for :: id :: method:
+            when Option.Some(event) => return event.iconified_state :: :: method
+            when Option.None => return Option.None
 
     fn pop_maximized_state_for(edit self, id: WindowId) -> Option[Bool]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[Bool] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select:
-                                when window_event.window_id :: :: method == id =>
-                                    select window_event.maximized_state :: :: method:
-                                        when Option.Some(state) => found = Option.Some :: state :: call
-                                        when Option.None => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_maximized_event_for :: id :: method:
+            when Option.Some(event) => return event.maximized_state :: :: method
+            when Option.None => return Option.None
 
     fn pop_cursor_entered_state_for(edit self, id: WindowId) -> Option[Bool]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[Bool] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select:
-                                when window_event.window_id :: :: method == id =>
-                                    select window_event.cursor_enter_state :: :: method:
-                                        when Option.Some(state) => found = Option.Some :: state :: call
-                                        when Option.None => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_cursor_entered_event_for :: id :: method:
+            when Option.Some(event) => return event.cursor_enter_state :: :: method
+            when Option.None => return Option.None
 
     fn pop_theme_for(edit self, id: WindowId) -> Option[Theme]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[Theme] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event:
-                                when WindowEvent.ThemeChanged(id = event_id, theme = theme) =>
-                                    select:
-                                        when event_id == id =>
-                                            let raw = theme_raw :: theme :: call
-                                            found = Option.Some :: theme_from_raw :: raw :: call :: call
-                                        else =>
-                                            let restored = build_theme_changed_window_event :: event_id, theme :: call
-                                            push_window :: remaining, restored :: call
-                                when _ => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return found
+        select self.pop_theme_changed_event_for :: id :: method:
+            when Option.Some(event) => return event.theme :: :: method
+            when Option.None => return Option.None
 
     fn take_moved_data(edit self) -> List[WindowMoveData]:
-        let events = self.take_moved_events :: :: method
-        let matched = List[WindowMoveData] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.moved_data :: :: method:
-                when Option.Some(data) => matched.push :: data :: method
-                when Option.None => ()
-        return matched
+        return take_moved_data_from_events :: (self.take_moved_events :: :: method) :: call
 
     fn take_resized_data(edit self) -> List[WindowSizeData]:
-        let events = self.take_resized_events :: :: method
-        let matched = List[WindowSizeData] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.resized_data :: :: method:
-                when Option.Some(data) => matched.push :: data :: method
-                when Option.None => ()
-        return matched
+        return take_resized_data_from_events :: (self.take_resized_events :: :: method) :: call
 
     fn take_framebuffer_resized_data(edit self) -> List[WindowSizeData]:
-        let events = self.take_framebuffer_resized_events :: :: method
-        let matched = List[WindowSizeData] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.framebuffer_resized_data :: :: method:
-                when Option.Some(data) => matched.push :: data :: method
-                when Option.None => ()
-        return matched
+        return take_framebuffer_resized_data_from_events :: (self.take_framebuffer_resized_events :: :: method) :: call
 
     fn take_content_scale_data(edit self) -> List[WindowScaleData]:
-        let events = self.take_content_scale_changed_events :: :: method
-        let matched = List[WindowScaleData] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.content_scale_data :: :: method:
-                when Option.Some(data) => matched.push :: data :: method
-                when Option.None => ()
-        return matched
+        return take_content_scale_data_from_events :: (self.take_content_scale_changed_events :: :: method) :: call
 
     fn take_focus_states(edit self) -> List[Bool]:
-        let events = self.take_focus_changed_events :: :: method
-        let matched = List[Bool] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.focus_state :: :: method:
-                when Option.Some(state) => matched.push :: state :: method
-                when Option.None => ()
-        return matched
+        return take_focus_states_from_events :: (self.take_focus_changed_events :: :: method) :: call
 
     fn take_iconified_states(edit self) -> List[Bool]:
-        let events = self.take_iconified_events :: :: method
-        let matched = List[Bool] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.iconified_state :: :: method:
-                when Option.Some(state) => matched.push :: state :: method
-                when Option.None => ()
-        return matched
+        return take_iconified_states_from_events :: (self.take_iconified_events :: :: method) :: call
 
     fn take_maximized_states(edit self) -> List[Bool]:
-        let events = self.take_maximized_events :: :: method
-        let matched = List[Bool] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.maximized_state :: :: method:
-                when Option.Some(state) => matched.push :: state :: method
-                when Option.None => ()
-        return matched
+        return take_maximized_states_from_events :: (self.take_maximized_events :: :: method) :: call
 
     fn take_cursor_entered_states(edit self) -> List[Bool]:
-        let events = self.take_cursor_entered_events :: :: method
-        let matched = List[Bool] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.cursor_enter_state :: :: method:
-                when Option.Some(state) => matched.push :: state :: method
-                when Option.None => ()
-        return matched
+        return take_cursor_entered_states_from_events :: (self.take_cursor_entered_events :: :: method) :: call
 
     fn take_themes(edit self) -> List[Theme]:
-        let events = self.take_theme_changed_events :: :: method
-        let matched = List[Theme] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.theme :: :: method:
-                when Option.Some(theme) => matched.push :: theme :: method
-                when Option.None => ()
-        return matched
+        return take_themes_from_events :: (self.take_theme_changed_events :: :: method) :: call
 
     fn take_moved_data_for(edit self, id: WindowId) -> List[WindowMoveData]:
-        let events = self.take_moved_events_for :: id :: method
-        let matched = List[WindowMoveData] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.moved_data :: :: method:
-                when Option.Some(data) => matched.push :: data :: method
-                when Option.None => ()
-        return matched
+        return take_moved_data_from_events :: (self.take_moved_events_for :: id :: method) :: call
 
     fn take_resized_data_for(edit self, id: WindowId) -> List[WindowSizeData]:
-        let events = self.take_resized_events_for :: id :: method
-        let matched = List[WindowSizeData] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.resized_data :: :: method:
-                when Option.Some(data) => matched.push :: data :: method
-                when Option.None => ()
-        return matched
+        return take_resized_data_from_events :: (self.take_resized_events_for :: id :: method) :: call
 
     fn take_framebuffer_resized_data_for(edit self, id: WindowId) -> List[WindowSizeData]:
-        let events = self.take_framebuffer_resized_events_for :: id :: method
-        let matched = List[WindowSizeData] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.framebuffer_resized_data :: :: method:
-                when Option.Some(data) => matched.push :: data :: method
-                when Option.None => ()
-        return matched
+        return take_framebuffer_resized_data_from_events :: (self.take_framebuffer_resized_events_for :: id :: method) :: call
 
     fn take_content_scale_data_for(edit self, id: WindowId) -> List[WindowScaleData]:
-        let events = self.take_content_scale_changed_events_for :: id :: method
-        let matched = List[WindowScaleData] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.content_scale_data :: :: method:
-                when Option.Some(data) => matched.push :: data :: method
-                when Option.None => ()
-        return matched
+        return take_content_scale_data_from_events :: (self.take_content_scale_changed_events_for :: id :: method) :: call
 
     fn take_focus_states_for(edit self, id: WindowId) -> List[Bool]:
-        let events = self.take_focus_changed_events_for :: id :: method
-        let matched = List[Bool] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.focus_state :: :: method:
-                when Option.Some(state) => matched.push :: state :: method
-                when Option.None => ()
-        return matched
+        return take_focus_states_from_events :: (self.take_focus_changed_events_for :: id :: method) :: call
 
     fn take_iconified_states_for(edit self, id: WindowId) -> List[Bool]:
-        let events = self.take_iconified_events_for :: id :: method
-        let matched = List[Bool] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.iconified_state :: :: method:
-                when Option.Some(state) => matched.push :: state :: method
-                when Option.None => ()
-        return matched
+        return take_iconified_states_from_events :: (self.take_iconified_events_for :: id :: method) :: call
 
     fn take_maximized_states_for(edit self, id: WindowId) -> List[Bool]:
-        let events = self.take_maximized_events_for :: id :: method
-        let matched = List[Bool] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.maximized_state :: :: method:
-                when Option.Some(state) => matched.push :: state :: method
-                when Option.None => ()
-        return matched
+        return take_maximized_states_from_events :: (self.take_maximized_events_for :: id :: method) :: call
 
     fn take_cursor_entered_states_for(edit self, id: WindowId) -> List[Bool]:
-        let events = self.take_cursor_entered_events_for :: id :: method
-        let matched = List[Bool] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.cursor_enter_state :: :: method:
-                when Option.Some(state) => matched.push :: state :: method
-                when Option.None => ()
-        return matched
+        return take_cursor_entered_states_from_events :: (self.take_cursor_entered_events_for :: id :: method) :: call
 
     fn take_themes_for(edit self, id: WindowId) -> List[Theme]:
-        let events = self.take_theme_changed_events_for :: id :: method
-        let matched = List[Theme] :: :: call
-        repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.theme :: :: method:
-                when Option.Some(theme) => matched.push :: theme :: method
-                when Option.None => ()
-        return matched
+        return take_themes_from_events :: (self.take_theme_changed_events_for :: id :: method) :: call
 
     fn take_redraw_requested_events(edit self) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.RedrawRequested(id = _) => events.push :: window_event :: method
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.take_window_events_matching :: self, WindowEventKind.RedrawRequested, id_filter :: call
 
     fn take_moved_events(edit self) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Moved(id = _, x = _, y = _) => events.push :: window_event :: method
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.take_window_events_matching :: self, WindowEventKind.Moved, id_filter :: call
 
     fn take_resized_events(edit self) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Resized(id = _, width = _, height = _) => events.push :: window_event :: method
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.take_window_events_matching :: self, WindowEventKind.Resized, id_filter :: call
 
     fn take_framebuffer_resized_events(edit self) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.FramebufferResized(id = _, width = _, height = _) => events.push :: window_event :: method
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.take_window_events_matching :: self, WindowEventKind.FramebufferResized, id_filter :: call
 
     fn take_content_scale_changed_events(edit self) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.ContentScaleChanged(id = _, x = _, y = _) => events.push :: window_event :: method
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.take_window_events_matching :: self, WindowEventKind.ContentScaleChanged, id_filter :: call
 
     fn take_focus_changed_events(edit self) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.FocusChanged(id = _, focused = _) => events.push :: window_event :: method
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.take_window_events_matching :: self, WindowEventKind.FocusChanged, id_filter :: call
 
     fn take_iconified_events(edit self) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Iconified(id = _, iconified = _) => events.push :: window_event :: method
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.take_window_events_matching :: self, WindowEventKind.Iconified, id_filter :: call
 
     fn take_maximized_events(edit self) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Maximized(id = _, maximized = _) => events.push :: window_event :: method
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.take_window_events_matching :: self, WindowEventKind.Maximized, id_filter :: call
 
     fn take_cursor_entered_events(edit self) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.CursorEntered(id = _, entered = _) => events.push :: window_event :: method
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.take_window_events_matching :: self, WindowEventKind.CursorEntered, id_filter :: call
 
     fn take_theme_changed_events(edit self) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.ThemeChanged(id = id, theme = theme) =>
-                            let copied = build_theme_changed_window_event :: id, theme :: call
-                            events.push :: copied :: method
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.take_window_events_matching :: self, WindowEventKind.ThemeChanged, id_filter :: call
 
     fn take_redraw_requested_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.RedrawRequested(id = event_id) =>
-                            select:
-                                when event_id == id => events.push :: window_event :: method
-                                else => push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter = Option.Some :: id :: call
+        return batch_support.take_window_events_matching :: self, WindowEventKind.RedrawRequested, id_filter :: call
 
     fn take_moved_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Moved(id = event_id, x = _, y = _) =>
-                            select:
-                                when event_id == id => events.push :: window_event :: method
-                                else => push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter = Option.Some :: id :: call
+        return batch_support.take_window_events_matching :: self, WindowEventKind.Moved, id_filter :: call
 
     fn take_resized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Resized(id = event_id, width = _, height = _) =>
-                            select:
-                                when event_id == id => events.push :: window_event :: method
-                                else => push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter = Option.Some :: id :: call
+        return batch_support.take_window_events_matching :: self, WindowEventKind.Resized, id_filter :: call
 
     fn take_framebuffer_resized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.FramebufferResized(id = event_id, width = _, height = _) =>
-                            select:
-                                when event_id == id => events.push :: window_event :: method
-                                else => push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter = Option.Some :: id :: call
+        return batch_support.take_window_events_matching :: self, WindowEventKind.FramebufferResized, id_filter :: call
 
     fn take_content_scale_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.ContentScaleChanged(id = event_id, x = _, y = _) =>
-                            select:
-                                when event_id == id => events.push :: window_event :: method
-                                else => push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter = Option.Some :: id :: call
+        return batch_support.take_window_events_matching :: self, WindowEventKind.ContentScaleChanged, id_filter :: call
 
     fn take_focus_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.FocusChanged(id = event_id, focused = _) =>
-                            select:
-                                when event_id == id => events.push :: window_event :: method
-                                else => push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter = Option.Some :: id :: call
+        return batch_support.take_window_events_matching :: self, WindowEventKind.FocusChanged, id_filter :: call
 
     fn take_iconified_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Iconified(id = event_id, iconified = _) =>
-                            select:
-                                when event_id == id => events.push :: window_event :: method
-                                else => push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter = Option.Some :: id :: call
+        return batch_support.take_window_events_matching :: self, WindowEventKind.Iconified, id_filter :: call
 
     fn take_maximized_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.Maximized(id = event_id, maximized = _) =>
-                            select:
-                                when event_id == id => events.push :: window_event :: method
-                                else => push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter = Option.Some :: id :: call
+        return batch_support.take_window_events_matching :: self, WindowEventKind.Maximized, id_filter :: call
 
     fn take_cursor_entered_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.CursorEntered(id = event_id, entered = _) =>
-                            select:
-                                when event_id == id => events.push :: window_event :: method
-                                else => push_window :: remaining, window_event :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter = Option.Some :: id :: call
+        return batch_support.take_window_events_matching :: self, WindowEventKind.CursorEntered, id_filter :: call
 
     fn take_theme_changed_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let events = List[WindowEvent] :: :: call
-        let remaining = List[AppEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.ThemeChanged(id = event_id, theme = theme) =>
-                            select:
-                                when event_id == id =>
-                                    let copied = build_theme_changed_window_event :: event_id, theme :: call
-                                    events.push :: copied :: method
-                                else =>
-                                    let restored = build_theme_changed_window_event :: event_id, theme :: call
-                                    push_window :: remaining, restored :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when AppEvent.Monitor(monitor_event) => push_monitor :: remaining, monitor_event :: call
-                when AppEvent.Joystick(joystick_event) => push_joystick :: remaining, joystick_event :: call
-                when AppEvent.User(user_event) => push_user :: remaining, user_event :: call
-        self.events = remaining
-        return events
+        let id_filter = Option.Some :: id :: call
+        return batch_support.take_window_events_matching :: self, WindowEventKind.ThemeChanged, id_filter :: call

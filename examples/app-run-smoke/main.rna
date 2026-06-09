@@ -613,16 +613,17 @@ fn main() -> I32:
                         else => ()
                 when Option.None => return 238
         when Option.None => return 239
-    select pop_event_batch.pop_character_event :: :: method:
-        when Option.Some(event) =>
-            select event.character_data :: :: method:
-                when Option.Some(value) =>
-                    select:
-                        when event.window_id :: :: method != 72 => return 240
-                        when value.codepoint != 101 => return 241
-                        else => ()
-                when Option.None => return 242
-        when Option.None => return 243
+    select either:
+        when event: Option.Some(event) <- pop_event_batch.pop_character_event :: :: method
+        when value: Option.Some(value) <- event.character_data :: :: method =>
+            select:
+                when event.window_id :: :: method != 72 => return 240
+                when value.codepoint != 101 => return 241
+                else => ()
+
+    with Option.None:
+        event => return 243
+        value => return 242
     select pop_event_batch.pop_character_mods_event :: :: method:
         when Option.Some(event) =>
             let event_id = event.window_id :: :: method
@@ -647,35 +648,38 @@ fn main() -> I32:
                         when _ => return 249
                 when Option.None => return 250
         when Option.None => return 251
-    select pop_event_batch.pop_cursor_moved_event :: :: method:
-        when Option.Some(event) =>
-            select event.cursor_data :: :: method:
-                when Option.Some(value) =>
-                    select:
-                        when event.window_id :: :: method != 71 => return 252
-                        when value.y != 32.0 => return 253
-                        else => ()
-                when Option.None => return 254
-        when Option.None => return 255
-    select pop_event_batch.pop_scrolled_event :: :: method:
-        when Option.Some(event) =>
-            select event.scroll_data :: :: method:
-                when Option.Some(value) =>
-                    select:
-                        when event.window_id :: :: method != 72 => return 256
-                        when value.x != 33.0 => return 257
-                        else => ()
-                when Option.None => return 258
-        when Option.None => return 259
-    select pop_event_batch.pop_dropped_path_event :: :: method:
-        when Option.Some(event) =>
-            select event.take_dropped_paths :: :: method:
-                when Option.Some(paths) =>
-                    select:
-                        when paths.count :: :: method != 1 => return 260
-                        else => ()
-                when Option.None => return 261
-        when Option.None => return 262
+    select either:
+        when event: Option.Some(event) <- pop_event_batch.pop_cursor_moved_event :: :: method
+        when value: Option.Some(value) <- event.cursor_data :: :: method =>
+            select:
+                when event.window_id :: :: method != 71 => return 252
+                when value.y != 32.0 => return 253
+                else => ()
+
+    with Option.None:
+        event => return 255
+        value => return 254
+    select either:
+        when event: Option.Some(event) <- pop_event_batch.pop_scrolled_event :: :: method
+        when value: Option.Some(value) <- event.scroll_data :: :: method =>
+            select:
+                when event.window_id :: :: method != 72 => return 256
+                when value.x != 33.0 => return 257
+                else => ()
+
+    with Option.None:
+        event => return 259
+        value => return 258
+    select either:
+        when event: Option.Some(event) <- pop_event_batch.pop_dropped_path_event :: :: method
+        when paths: Option.Some(paths) <- event.take_dropped_paths :: :: method =>
+            select:
+                when paths.count :: :: method != 1 => return 260
+                else => ()
+
+    with Option.None:
+        event => return 262
+        paths => return 261
     select:
         when !pop_event_batch.is_empty :: :: method => return 263
         else => ()
@@ -762,15 +766,16 @@ fn main() -> I32:
                 when event.window_id :: :: method != 82 => return 274
                 else => ()
         when Option.None => return 275
-    select pop_filtered_batch.pop_dropped_path_event_for :: 81 :: method:
-        when Option.Some(event) =>
-            select event.take_dropped_paths :: :: method:
-                when Option.Some(paths) =>
-                    select:
-                        when paths.count :: :: method != 1 => return 276
-                        else => ()
-                when Option.None => return 277
-        when Option.None => return 278
+    select either:
+        when event: Option.Some(event) <- pop_filtered_batch.pop_dropped_path_event_for :: 81 :: method
+        when paths: Option.Some(paths) <- event.take_dropped_paths :: :: method =>
+            select:
+                when paths.count :: :: method != 1 => return 276
+                else => ()
+
+    with Option.None:
+        event => return 278
+        paths => return 277
     select:
         when !pop_filtered_batch.is_empty :: :: method => return 279
         else => ()

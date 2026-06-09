@@ -1,5 +1,6 @@
 use std.{Clone, List, Option, Str}
 use event.{AppEvent, AppEventBatch, WindowEvent, WindowEventKind}
+use event.batch_support
 use window.WindowId
 
 fn push_window(edit events: List[AppEvent], event: WindowEvent) -> Unit:
@@ -23,230 +24,165 @@ fn build_hovered_file_cancelled_window_event(id: WindowId) -> WindowEvent:
 
 impl AppEventBatch:
     fn pop_hovered_file_path(edit self) -> Option[Str]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[Str] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event:
-                                when WindowEvent.HoveredFile(id = _, path = path) => found = Option.Some :: path :: call
-                                when _ => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when _ => push_passthrough :: remaining, event :: call
-        self.events = remaining
-        return found
+        let id_filter: Option[WindowId] = Option.None
+        select batch_support.pop_window_event_matching :: self, WindowEventKind.HoveredFile, id_filter :: call:
+            when Option.Some(event) => return event.take_hovered_file_path :: :: method
+            when Option.None => return Option.None
 
     fn pop_hovered_file_path_for(edit self, id: WindowId) -> Option[Str]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[Str] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event:
-                                when WindowEvent.HoveredFile(id = event_id, path = path) =>
-                                    select:
-                                        when event_id == id => found = Option.Some :: path :: call
-                                        else => push_window :: remaining, (build_hovered_file_window_event :: event_id, path :: call) :: call
-                                when _ => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when _ => push_passthrough :: remaining, event :: call
-        self.events = remaining
-        return found
+        let id_filter = Option.Some :: id :: call
+        select batch_support.pop_window_event_matching :: self, WindowEventKind.HoveredFile, id_filter :: call:
+            when Option.Some(event) => return event.take_hovered_file_path :: :: method
+            when Option.None => return Option.None
 
     fn pop_hovered_file_event(edit self) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.HoveredFile => found = Option.Some :: window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when _ => push_passthrough :: remaining, event :: call
-        self.events = remaining
-        return found
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.HoveredFile, id_filter :: call
 
     fn pop_hovered_file_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.HoveredFile =>
-                                    select:
-                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
-                                        else => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when _ => push_passthrough :: remaining, event :: call
-        self.events = remaining
-        return found
+        let id_filter = Option.Some :: id :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.HoveredFile, id_filter :: call
 
     fn pop_hovered_file_cancelled_event(edit self) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.HoveredFileCancelled => found = Option.Some :: window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when _ => push_passthrough :: remaining, event :: call
-        self.events = remaining
-        return found
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.HoveredFileCancelled, id_filter :: call
 
     fn pop_hovered_file_cancelled_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let found: Option[WindowEvent] = Option.None
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select found:
-                        when Option.None =>
-                            select window_event.kind :: :: method:
-                                when WindowEventKind.HoveredFileCancelled =>
-                                    select:
-                                        when window_event.window_id :: :: method == id => found = Option.Some :: window_event :: call
-                                        else => push_window :: remaining, window_event :: call
-                                else => push_window :: remaining, window_event :: call
-                        when Option.Some(_) => push_window :: remaining, window_event :: call
-                when _ => push_passthrough :: remaining, event :: call
-        self.events = remaining
-        return found
+        let id_filter = Option.Some :: id :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.HoveredFileCancelled, id_filter :: call
 
     fn hovered_file_paths(edit self) -> List[Str]:
+        let staged = batch_support.take_batch_events_reversed :: self :: call
         let remaining = List[AppEvent] :: :: call
         let matched = List[Str] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.HoveredFile(id = event_id, path = path) =>
-                            let copied = path.clone :: :: method
-                            matched.push :: copied :: method
-                            let restored = build_hovered_file_window_event :: event_id, path :: call
-                            push_window :: remaining, restored :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when _ => push_passthrough :: remaining, event :: call
+        repeat while !staged.is_empty :: :: method:
+            select staged.pop :: :: method:
+                when Option.Some(event) =>
+                    select event:
+                        when AppEvent.Window(window_event) =>
+                            select window_event:
+                                when WindowEvent.HoveredFile(id = event_id, path = path) =>
+                                    let copied = path.clone :: :: method
+                                    matched.push :: copied :: method
+                                    let restored = build_hovered_file_window_event :: event_id, path :: call
+                                    push_window :: remaining, restored :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when _ => push_passthrough :: remaining, event :: call
+                when Option.None => break
         self.events = remaining
         return matched
 
     fn hovered_file_paths_for(edit self, id: WindowId) -> List[Str]:
+        let staged = batch_support.take_batch_events_reversed :: self :: call
         let remaining = List[AppEvent] :: :: call
         let matched = List[Str] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.HoveredFile(id = event_id, path = path) =>
-                            select:
-                                when event_id == id =>
-                                    let copied = path.clone :: :: method
-                                    matched.push :: copied :: method
-                                else => ()
-                            let restored = build_hovered_file_window_event :: event_id, path :: call
-                            push_window :: remaining, restored :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when _ => push_passthrough :: remaining, event :: call
+        repeat while !staged.is_empty :: :: method:
+            select staged.pop :: :: method:
+                when Option.Some(event) =>
+                    select event:
+                        when AppEvent.Window(window_event) =>
+                            select window_event:
+                                when WindowEvent.HoveredFile(id = event_id, path = path) =>
+                                    select:
+                                        when event_id == id =>
+                                            let copied = path.clone :: :: method
+                                            matched.push :: copied :: method
+                                        else => ()
+                                    let restored = build_hovered_file_window_event :: event_id, path :: call
+                                    push_window :: remaining, restored :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when _ => push_passthrough :: remaining, event :: call
+                when Option.None => break
         self.events = remaining
         return matched
 
     fn hovered_file_events(edit self) -> List[WindowEvent]:
+        let staged = batch_support.take_batch_events_reversed :: self :: call
         let remaining = List[AppEvent] :: :: call
         let events = List[WindowEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.HoveredFile(id = event_id, path = path) =>
-                            let copied = build_hovered_file_window_event :: event_id, path :: call
-                            events.push :: copied :: method
-                            let restored = build_hovered_file_window_event :: event_id, path :: call
-                            push_window :: remaining, restored :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when _ => push_passthrough :: remaining, event :: call
+        repeat while !staged.is_empty :: :: method:
+            select staged.pop :: :: method:
+                when Option.Some(event) =>
+                    select event:
+                        when AppEvent.Window(window_event) =>
+                            select window_event:
+                                when WindowEvent.HoveredFile(id = event_id, path = path) =>
+                                    let copied = build_hovered_file_window_event :: event_id, path :: call
+                                    events.push :: copied :: method
+                                    let restored = build_hovered_file_window_event :: event_id, path :: call
+                                    push_window :: remaining, restored :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when _ => push_passthrough :: remaining, event :: call
+                when Option.None => break
         self.events = remaining
         return events
 
     fn hovered_file_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let staged = batch_support.take_batch_events_reversed :: self :: call
         let remaining = List[AppEvent] :: :: call
         let events = List[WindowEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.HoveredFile(id = event_id, path = path) =>
-                            select:
-                                when event_id == id =>
-                                    let copied = build_hovered_file_window_event :: event_id, path :: call
-                                    events.push :: copied :: method
-                                else => ()
-                            let restored = build_hovered_file_window_event :: event_id, path :: call
-                            push_window :: remaining, restored :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when _ => push_passthrough :: remaining, event :: call
+        repeat while !staged.is_empty :: :: method:
+            select staged.pop :: :: method:
+                when Option.Some(event) =>
+                    select event:
+                        when AppEvent.Window(window_event) =>
+                            select window_event:
+                                when WindowEvent.HoveredFile(id = event_id, path = path) =>
+                                    select:
+                                        when event_id == id =>
+                                            let copied = build_hovered_file_window_event :: event_id, path :: call
+                                            events.push :: copied :: method
+                                        else => ()
+                                    let restored = build_hovered_file_window_event :: event_id, path :: call
+                                    push_window :: remaining, restored :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when _ => push_passthrough :: remaining, event :: call
+                when Option.None => break
         self.events = remaining
         return events
 
     fn hovered_file_cancelled_events(edit self) -> List[WindowEvent]:
+        let staged = batch_support.take_batch_events_reversed :: self :: call
         let remaining = List[AppEvent] :: :: call
         let events = List[WindowEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.HoveredFileCancelled(id = event_id) =>
-                            let copied = build_hovered_file_cancelled_window_event :: event_id :: call
-                            events.push :: copied :: method
-                            let restored = build_hovered_file_cancelled_window_event :: event_id :: call
-                            push_window :: remaining, restored :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when _ => push_passthrough :: remaining, event :: call
+        repeat while !staged.is_empty :: :: method:
+            select staged.pop :: :: method:
+                when Option.Some(event) =>
+                    select event:
+                        when AppEvent.Window(window_event) =>
+                            select window_event:
+                                when WindowEvent.HoveredFileCancelled(id = event_id) =>
+                                    let copied = build_hovered_file_cancelled_window_event :: event_id :: call
+                                    events.push :: copied :: method
+                                    let restored = build_hovered_file_cancelled_window_event :: event_id :: call
+                                    push_window :: remaining, restored :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when _ => push_passthrough :: remaining, event :: call
+                when Option.None => break
         self.events = remaining
         return events
 
     fn hovered_file_cancelled_events_for(edit self, id: WindowId) -> List[WindowEvent]:
+        let staged = batch_support.take_batch_events_reversed :: self :: call
         let remaining = List[AppEvent] :: :: call
         let events = List[WindowEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event:
-                        when WindowEvent.HoveredFileCancelled(id = event_id) =>
-                            select:
-                                when event_id == id =>
-                                    let copied = build_hovered_file_cancelled_window_event :: event_id :: call
-                                    events.push :: copied :: method
-                                else => ()
-                            let restored = build_hovered_file_cancelled_window_event :: event_id :: call
-                            push_window :: remaining, restored :: call
-                        when _ => push_window :: remaining, window_event :: call
-                when _ => push_passthrough :: remaining, event :: call
+        repeat while !staged.is_empty :: :: method:
+            select staged.pop :: :: method:
+                when Option.Some(event) =>
+                    select event:
+                        when AppEvent.Window(window_event) =>
+                            select window_event:
+                                when WindowEvent.HoveredFileCancelled(id = event_id) =>
+                                    select:
+                                        when event_id == id =>
+                                            let copied = build_hovered_file_cancelled_window_event :: event_id :: call
+                                            events.push :: copied :: method
+                                        else => ()
+                                    let restored = build_hovered_file_cancelled_window_event :: event_id :: call
+                                    push_window :: remaining, restored :: call
+                                when _ => push_window :: remaining, window_event :: call
+                        when _ => push_passthrough :: remaining, event :: call
+                when Option.None => break
         self.events = remaining
         return events
 
@@ -254,80 +190,38 @@ impl AppEventBatch:
         let paths = List[Str] :: :: call
         let events = self.take_hovered_file_events :: :: method
         repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.take_hovered_file_path :: :: method:
-                when Option.Some(path) => paths.push :: path :: method
-                when Option.None => ()
+            select events.pop :: :: method:
+                when Option.Some(event) =>
+                    select event.take_hovered_file_path :: :: method:
+                        when Option.Some(path) => paths.push :: path :: method
+                        when Option.None => ()
+                when Option.None => break
         return paths
 
     fn take_hovered_file_paths_for(edit self, id: WindowId) -> List[Str]:
         let paths = List[Str] :: :: call
         let events = self.take_hovered_file_events_for :: id :: method
         repeat while !events.is_empty :: :: method:
-            let event = events.remove :: 0 :: method
-            select event.take_hovered_file_path :: :: method:
-                when Option.Some(path) => paths.push :: path :: method
-                when Option.None => ()
+            select events.pop :: :: method:
+                when Option.Some(event) =>
+                    select event.take_hovered_file_path :: :: method:
+                        when Option.Some(path) => paths.push :: path :: method
+                        when Option.None => ()
+                when Option.None => break
         return paths
 
     fn take_hovered_file_events(edit self) -> List[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let events = List[WindowEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event.kind :: :: method:
-                        when WindowEventKind.HoveredFile => events.push :: window_event :: method
-                        else => push_window :: remaining, window_event :: call
-                when _ => push_passthrough :: remaining, event :: call
-        self.events = remaining
-        return events
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.take_window_events_matching :: self, WindowEventKind.HoveredFile, id_filter :: call
 
     fn take_hovered_file_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let events = List[WindowEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event.kind :: :: method:
-                        when WindowEventKind.HoveredFile =>
-                            select:
-                                when window_event.window_id :: :: method == id => events.push :: window_event :: method
-                                else => push_window :: remaining, window_event :: call
-                        else => push_window :: remaining, window_event :: call
-                when _ => push_passthrough :: remaining, event :: call
-        self.events = remaining
-        return events
+        let id_filter = Option.Some :: id :: call
+        return batch_support.take_window_events_matching :: self, WindowEventKind.HoveredFile, id_filter :: call
 
     fn take_hovered_file_cancelled_events(edit self) -> List[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let events = List[WindowEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event.kind :: :: method:
-                        when WindowEventKind.HoveredFileCancelled => events.push :: window_event :: method
-                        else => push_window :: remaining, window_event :: call
-                when _ => push_passthrough :: remaining, event :: call
-        self.events = remaining
-        return events
+        let id_filter: Option[WindowId] = Option.None
+        return batch_support.take_window_events_matching :: self, WindowEventKind.HoveredFileCancelled, id_filter :: call
 
     fn take_hovered_file_cancelled_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        let remaining = List[AppEvent] :: :: call
-        let events = List[WindowEvent] :: :: call
-        repeat while !self.events.is_empty :: :: method:
-            let event = self.events.remove :: 0 :: method
-            select event:
-                when AppEvent.Window(window_event) =>
-                    select window_event.kind :: :: method:
-                        when WindowEventKind.HoveredFileCancelled =>
-                            select:
-                                when window_event.window_id :: :: method == id => events.push :: window_event :: method
-                                else => push_window :: remaining, window_event :: call
-                        else => push_window :: remaining, window_event :: call
-                when _ => push_passthrough :: remaining, event :: call
-        self.events = remaining
-        return events
+        let id_filter = Option.Some :: id :: call
+        return batch_support.take_window_events_matching :: self, WindowEventKind.HoveredFileCancelled, id_filter :: call

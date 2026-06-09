@@ -29,21 +29,22 @@ pub fn check_vulkan_submission_helpers(edit present_app: VulkanPresentApp) -> I3
                     present_app.destroy_command_resources :: resources :: method
                     return 6
                 else => ()
-            select present_app.begin_command_resources :: resources :: method:
-                when Result.Ok(_) =>
-                    select present_app.end_command_resources :: resources :: method:
-                        when Result.Ok(_) =>
-                            select present_app.submit_command_resources :: resources :: method:
-                                when Result.Ok(_) => ()
-                                when Result.Err(_) =>
-                                    present_app.destroy_command_resources :: resources :: method
-                                    return 7
-                        when Result.Err(_) =>
-                            present_app.destroy_command_resources :: resources :: method
-                            return 8
-                when Result.Err(_) =>
+            select either:
+                when began: Result.Ok(_) <- present_app.begin_command_resources :: resources :: method
+                when ended: Result.Ok(_) <- present_app.end_command_resources :: resources :: method
+                when submitted: Result.Ok(_) <- present_app.submit_command_resources :: resources :: method =>
+                    ()
+
+            with Result.Err(_):
+                began =>
                     present_app.destroy_command_resources :: resources :: method
                     return 9
+                ended =>
+                    present_app.destroy_command_resources :: resources :: method
+                    return 8
+                submitted =>
+                    present_app.destroy_command_resources :: resources :: method
+                    return 7
             present_app.destroy_command_resources :: resources :: method
         when Result.Err(_) => return 10
 
@@ -57,47 +58,48 @@ pub fn check_vulkan_submission_helpers(edit present_app: VulkanPresentApp) -> I3
                     present_app.destroy_semaphore_resource :: signal_semaphore :: method
                     return 12
                 else => ()
-            select present_app.recording_command_resources :: :: method:
-                when Result.Ok(async_recording_resources) =>
-                    select present_app.finish_recording_command_resources_async :: async_recording_resources, Option.None, 0, Option.Some :: signal_semaphore :: call :: method:
-                        when Result.Ok(_) =>
-                            select present_app.wait_queue_idle :: :: method:
-                                when Result.Ok(_) => ()
-                                when Result.Err(_) =>
-                                    present_app.destroy_semaphore_resource :: signal_semaphore :: method
-                                    return 13
-                        when Result.Err(_) =>
-                            present_app.destroy_semaphore_resource :: signal_semaphore :: method
-                            return 14
-                when Result.Err(_) =>
+            select either:
+                when async_recording_resources: Result.Ok(async_recording_resources) <- present_app.recording_command_resources :: :: method
+                when finished: Result.Ok(_) <- present_app.finish_recording_command_resources_async :: async_recording_resources, Option.None, 0, Option.Some :: signal_semaphore :: call :: method
+                when queue_idle: Result.Ok(_) <- present_app.wait_queue_idle :: :: method =>
+                    ()
+
+            with Result.Err(_):
+                async_recording_resources =>
                     present_app.destroy_semaphore_resource :: signal_semaphore :: method
                     return 15
+                finished =>
+                    present_app.destroy_semaphore_resource :: signal_semaphore :: method
+                    return 14
+                queue_idle =>
+                    present_app.destroy_semaphore_resource :: signal_semaphore :: method
+                    return 13
             select present_app.command_resources :: :: method:
                 when Result.Ok(resources) =>
-                    select present_app.begin_command_resources :: resources :: method:
-                        when Result.Ok(_) =>
-                            select present_app.end_command_resources :: resources :: method:
-                                when Result.Ok(_) =>
-                                    select present_app.submit_command_resources_async :: resources, Option.None, 0, Option.Some :: signal_semaphore :: call :: method:
-                                        when Result.Ok(_) =>
-                                            select present_app.wait_queue_idle :: :: method:
-                                                when Result.Ok(_) => ()
-                                                when Result.Err(_) =>
-                                                    present_app.destroy_command_resources :: resources :: method
-                                                    present_app.destroy_semaphore_resource :: signal_semaphore :: method
-                                                    return 16
-                                        when Result.Err(_) =>
-                                            present_app.destroy_command_resources :: resources :: method
-                                            present_app.destroy_semaphore_resource :: signal_semaphore :: method
-                                            return 17
-                                when Result.Err(_) =>
-                                    present_app.destroy_command_resources :: resources :: method
-                                    present_app.destroy_semaphore_resource :: signal_semaphore :: method
-                                    return 18
-                        when Result.Err(_) =>
+                    select either:
+                        when began: Result.Ok(_) <- present_app.begin_command_resources :: resources :: method
+                        when ended: Result.Ok(_) <- present_app.end_command_resources :: resources :: method
+                        when submitted: Result.Ok(_) <- present_app.submit_command_resources_async :: resources, Option.None, 0, Option.Some :: signal_semaphore :: call :: method
+                        when queue_idle: Result.Ok(_) <- present_app.wait_queue_idle :: :: method =>
+                            ()
+
+                    with Result.Err(_):
+                        began =>
                             present_app.destroy_command_resources :: resources :: method
                             present_app.destroy_semaphore_resource :: signal_semaphore :: method
                             return 19
+                        ended =>
+                            present_app.destroy_command_resources :: resources :: method
+                            present_app.destroy_semaphore_resource :: signal_semaphore :: method
+                            return 18
+                        submitted =>
+                            present_app.destroy_command_resources :: resources :: method
+                            present_app.destroy_semaphore_resource :: signal_semaphore :: method
+                            return 17
+                        queue_idle =>
+                            present_app.destroy_command_resources :: resources :: method
+                            present_app.destroy_semaphore_resource :: signal_semaphore :: method
+                            return 16
                     present_app.destroy_command_resources :: resources :: method
                 when Result.Err(_) =>
                     present_app.destroy_semaphore_resource :: signal_semaphore :: method
@@ -173,47 +175,48 @@ pub fn check_vulkan_submission_helpers(edit present_app: VulkanPresentApp) -> I3
                 when Result.Err(_) =>
                     present_app.destroy_fence_resource :: fence :: method
                     return 35
-            select present_app.recording_command_resources :: :: method:
-                when Result.Ok(fence_recording_resources) =>
-                    select present_app.finish_recording_command_resources_with_fence :: fence_recording_resources, fence :: method:
-                        when Result.Ok(_) =>
-                            select present_app.wait_fence_forever :: fence :: method:
-                                when Result.Ok(_) => ()
-                                when Result.Err(_) =>
-                                    present_app.destroy_fence_resource :: fence :: method
-                                    return 36
-                        when Result.Err(_) =>
-                            present_app.destroy_fence_resource :: fence :: method
-                            return 37
-                when Result.Err(_) =>
+            select either:
+                when fence_recording_resources: Result.Ok(fence_recording_resources) <- present_app.recording_command_resources :: :: method
+                when finished: Result.Ok(_) <- present_app.finish_recording_command_resources_with_fence :: fence_recording_resources, fence :: method
+                when fence_waited: Result.Ok(_) <- present_app.wait_fence_forever :: fence :: method =>
+                    ()
+
+            with Result.Err(_):
+                fence_recording_resources =>
                     present_app.destroy_fence_resource :: fence :: method
                     return 38
+                finished =>
+                    present_app.destroy_fence_resource :: fence :: method
+                    return 37
+                fence_waited =>
+                    present_app.destroy_fence_resource :: fence :: method
+                    return 36
             select present_app.command_resources :: :: method:
                 when Result.Ok(resources) =>
-                    select present_app.begin_command_resources :: resources :: method:
-                        when Result.Ok(_) =>
-                            select present_app.end_command_resources :: resources :: method:
-                                when Result.Ok(_) =>
-                                    select present_app.submit_command_resources_with_fence :: resources, fence :: method:
-                                        when Result.Ok(_) =>
-                                            select present_app.wait_fence_forever :: fence :: method:
-                                                when Result.Ok(_) => ()
-                                                when Result.Err(_) =>
-                                                    present_app.destroy_command_resources :: resources :: method
-                                                    present_app.destroy_fence_resource :: fence :: method
-                                                    return 39
-                                        when Result.Err(_) =>
-                                            present_app.destroy_command_resources :: resources :: method
-                                            present_app.destroy_fence_resource :: fence :: method
-                                            return 40
-                                when Result.Err(_) =>
-                                    present_app.destroy_command_resources :: resources :: method
-                                    present_app.destroy_fence_resource :: fence :: method
-                                    return 41
-                        when Result.Err(_) =>
+                    select either:
+                        when began: Result.Ok(_) <- present_app.begin_command_resources :: resources :: method
+                        when ended: Result.Ok(_) <- present_app.end_command_resources :: resources :: method
+                        when submitted: Result.Ok(_) <- present_app.submit_command_resources_with_fence :: resources, fence :: method
+                        when fence_waited: Result.Ok(_) <- present_app.wait_fence_forever :: fence :: method =>
+                            ()
+
+                    with Result.Err(_):
+                        began =>
                             present_app.destroy_command_resources :: resources :: method
                             present_app.destroy_fence_resource :: fence :: method
                             return 42
+                        ended =>
+                            present_app.destroy_command_resources :: resources :: method
+                            present_app.destroy_fence_resource :: fence :: method
+                            return 41
+                        submitted =>
+                            present_app.destroy_command_resources :: resources :: method
+                            present_app.destroy_fence_resource :: fence :: method
+                            return 40
+                        fence_waited =>
+                            present_app.destroy_command_resources :: resources :: method
+                            present_app.destroy_fence_resource :: fence :: method
+                            return 39
                     present_app.destroy_command_resources :: resources :: method
                 when Result.Err(_) =>
                     present_app.destroy_fence_resource :: fence :: method
@@ -230,67 +233,66 @@ pub fn check_vulkan_submission_helpers(edit present_app: VulkanPresentApp) -> I3
                     return 45
             select present_app.semaphore_resource :: :: method:
                 when Result.Ok(signal_semaphore) =>
-                    select present_app.recording_command_resources :: :: method:
-                        when Result.Ok(async_fence_recording_resources) =>
-                            select present_app.finish_recording_command_resources_async_with_fence :: async_fence_recording_resources, Option.None, 0, Option.Some :: signal_semaphore :: call, fence :: method:
-                                when Result.Ok(_) =>
-                                    select present_app.wait_fence_forever :: fence :: method:
-                                        when Result.Ok(_) =>
-                                            select present_app.wait_queue_idle :: :: method:
-                                                when Result.Ok(_) => ()
-                                                when Result.Err(_) =>
-                                                    present_app.destroy_semaphore_resource :: signal_semaphore :: method
-                                                    present_app.destroy_fence_resource :: fence :: method
-                                                    return 46
-                                        when Result.Err(_) =>
-                                            present_app.destroy_semaphore_resource :: signal_semaphore :: method
-                                            present_app.destroy_fence_resource :: fence :: method
-                                            return 47
-                                when Result.Err(_) =>
-                                    present_app.destroy_semaphore_resource :: signal_semaphore :: method
-                                    present_app.destroy_fence_resource :: fence :: method
-                                    return 48
-                        when Result.Err(_) =>
+                    select either:
+                        when async_fence_recording_resources: Result.Ok(async_fence_recording_resources) <- present_app.recording_command_resources :: :: method
+                        when finished: Result.Ok(_) <- present_app.finish_recording_command_resources_async_with_fence :: async_fence_recording_resources, Option.None, 0, Option.Some :: signal_semaphore :: call, fence :: method
+                        when fence_waited: Result.Ok(_) <- present_app.wait_fence_forever :: fence :: method
+                        when queue_idle: Result.Ok(_) <- present_app.wait_queue_idle :: :: method =>
+                            ()
+
+                    with Result.Err(_):
+                        async_fence_recording_resources =>
                             present_app.destroy_semaphore_resource :: signal_semaphore :: method
                             present_app.destroy_fence_resource :: fence :: method
                             return 49
+                        finished =>
+                            present_app.destroy_semaphore_resource :: signal_semaphore :: method
+                            present_app.destroy_fence_resource :: fence :: method
+                            return 48
+                        fence_waited =>
+                            present_app.destroy_semaphore_resource :: signal_semaphore :: method
+                            present_app.destroy_fence_resource :: fence :: method
+                            return 47
+                        queue_idle =>
+                            present_app.destroy_semaphore_resource :: signal_semaphore :: method
+                            present_app.destroy_fence_resource :: fence :: method
+                            return 46
                     select present_app.command_resources :: :: method:
                         when Result.Ok(async_resources) =>
-                            select present_app.begin_command_resources :: async_resources :: method:
-                                when Result.Ok(_) =>
-                                    select present_app.end_command_resources :: async_resources :: method:
-                                        when Result.Ok(_) =>
-                                            select present_app.submit_command_resources_async_with_fence :: async_resources, Option.None, 0, Option.Some :: signal_semaphore :: call, fence :: method:
-                                                when Result.Ok(_) =>
-                                                    select present_app.wait_fence_forever :: fence :: method:
-                                                        when Result.Ok(_) =>
-                                                            select present_app.wait_queue_idle :: :: method:
-                                                                when Result.Ok(_) => ()
-                                                                when Result.Err(_) =>
-                                                                    present_app.destroy_command_resources :: async_resources :: method
-                                                                    present_app.destroy_semaphore_resource :: signal_semaphore :: method
-                                                                    present_app.destroy_fence_resource :: fence :: method
-                                                                    return 50
-                                                        when Result.Err(_) =>
-                                                            present_app.destroy_command_resources :: async_resources :: method
-                                                            present_app.destroy_semaphore_resource :: signal_semaphore :: method
-                                                            present_app.destroy_fence_resource :: fence :: method
-                                                            return 51
-                                                when Result.Err(_) =>
-                                                    present_app.destroy_command_resources :: async_resources :: method
-                                                    present_app.destroy_semaphore_resource :: signal_semaphore :: method
-                                                    present_app.destroy_fence_resource :: fence :: method
-                                                    return 52
-                                        when Result.Err(_) =>
-                                            present_app.destroy_command_resources :: async_resources :: method
-                                            present_app.destroy_semaphore_resource :: signal_semaphore :: method
-                                            present_app.destroy_fence_resource :: fence :: method
-                                            return 53
-                                when Result.Err(_) =>
+                            select either:
+                                when began: Result.Ok(_) <- present_app.begin_command_resources :: async_resources :: method
+                                when ended: Result.Ok(_) <- present_app.end_command_resources :: async_resources :: method
+                                when submitted: Result.Ok(_) <- present_app.submit_command_resources_async_with_fence :: async_resources, Option.None, 0, Option.Some :: signal_semaphore :: call, fence :: method
+                                when fence_waited: Result.Ok(_) <- present_app.wait_fence_forever :: fence :: method
+                                when queue_idle: Result.Ok(_) <- present_app.wait_queue_idle :: :: method =>
+                                    ()
+
+                            with Result.Err(_):
+                                began =>
                                     present_app.destroy_command_resources :: async_resources :: method
                                     present_app.destroy_semaphore_resource :: signal_semaphore :: method
                                     present_app.destroy_fence_resource :: fence :: method
                                     return 54
+                                ended =>
+                                    present_app.destroy_command_resources :: async_resources :: method
+                                    present_app.destroy_semaphore_resource :: signal_semaphore :: method
+                                    present_app.destroy_fence_resource :: fence :: method
+                                    return 53
+                                submitted =>
+                                    present_app.destroy_command_resources :: async_resources :: method
+                                    present_app.destroy_semaphore_resource :: signal_semaphore :: method
+                                    present_app.destroy_fence_resource :: fence :: method
+                                    return 52
+                                fence_waited =>
+                                    present_app.destroy_command_resources :: async_resources :: method
+                                    present_app.destroy_semaphore_resource :: signal_semaphore :: method
+                                    present_app.destroy_fence_resource :: fence :: method
+                                    return 51
+                                queue_idle =>
+                                    present_app.destroy_command_resources :: async_resources :: method
+                                    present_app.destroy_semaphore_resource :: signal_semaphore :: method
+                                    present_app.destroy_fence_resource :: fence :: method
+                                    return 50
                             present_app.destroy_command_resources :: async_resources :: method
                         when Result.Err(_) =>
                             present_app.destroy_semaphore_resource :: signal_semaphore :: method

@@ -1,0 +1,320 @@
+use std.{List, Option}
+use event.{AppEvent, AppEventBatch, JoystickEvent, JoystickEventKind, JoystickId}
+use event.{MonitorEvent, MonitorEventKind, MonitorId, WindowEvent, WindowEventKind}
+use window.WindowId
+
+fn push_window(edit events: List[AppEvent], event: WindowEvent) -> Unit:
+    let wrapped = AppEvent.Window :: event :: call
+    events.push :: wrapped :: method
+    return
+
+fn push_monitor(edit events: List[AppEvent], event: MonitorEvent) -> Unit:
+    let wrapped = AppEvent.Monitor :: event :: call
+    events.push :: wrapped :: method
+    return
+
+fn push_joystick(edit events: List[AppEvent], event: JoystickEvent) -> Unit:
+    let wrapped = AppEvent.Joystick :: event :: call
+    events.push :: wrapped :: method
+    return
+
+fn push_app_event(edit events: List[AppEvent], event: AppEvent) -> Unit:
+    select event:
+        when AppEvent.Window(window_event) => push_window :: events, window_event :: call
+        when AppEvent.Monitor(monitor_event) => push_monitor :: events, monitor_event :: call
+        when AppEvent.Joystick(joystick_event) => push_joystick :: events, joystick_event :: call
+        when AppEvent.User(user_event) => events.push :: AppEvent.User :: user_event :: call :: method
+    return
+
+fn window_id_matches_filter(id: WindowId, read id_filter: Option[WindowId]) -> Bool:
+    select id_filter:
+        when Option.Some(expected) => return id == expected
+        when Option.None => return true
+    return true
+
+fn monitor_id_matches_filter(id: MonitorId, read id_filter: Option[MonitorId]) -> Bool:
+    select id_filter:
+        when Option.Some(expected) => return id == expected
+        when Option.None => return true
+    return true
+
+fn joystick_id_matches_filter(id: JoystickId, read id_filter: Option[JoystickId]) -> Bool:
+    select id_filter:
+        when Option.Some(expected) => return id == expected
+        when Option.None => return true
+    return true
+
+pub(package) fn take_batch_events_reversed(edit batch: AppEventBatch) -> List[AppEvent]:
+    let reversed = List[AppEvent] :: :: call
+    repeat while !batch.events.is_empty :: :: method:
+        select batch.events.pop :: :: method:
+            when Option.Some(event) => reversed.push :: event :: method
+            when Option.None => break
+    return reversed
+
+pub(package) fn window_event_matches_filter(read event: WindowEvent, read kind: WindowEventKind, read id_filter: Option[WindowId]) -> Bool:
+    select kind:
+        when WindowEventKind.Created =>
+            select event:
+                when WindowEvent.Created(id = id) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.Destroyed =>
+            select event:
+                when WindowEvent.Destroyed(id = id) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.CloseRequested =>
+            select event:
+                when WindowEvent.CloseRequested(id = id) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.RedrawRequested =>
+            select event:
+                when WindowEvent.RedrawRequested(id = id) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.Moved =>
+            select event:
+                when WindowEvent.Moved(id = id, x = _, y = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.Resized =>
+            select event:
+                when WindowEvent.Resized(id = id, width = _, height = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.FramebufferResized =>
+            select event:
+                when WindowEvent.FramebufferResized(id = id, width = _, height = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.ContentScaleChanged =>
+            select event:
+                when WindowEvent.ContentScaleChanged(id = id, x = _, y = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.FocusChanged =>
+            select event:
+                when WindowEvent.FocusChanged(id = id, focused = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.Iconified =>
+            select event:
+                when WindowEvent.Iconified(id = id, iconified = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.Maximized =>
+            select event:
+                when WindowEvent.Maximized(id = id, maximized = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.CursorEntered =>
+            select event:
+                when WindowEvent.CursorEntered(id = id, entered = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.ThemeChanged =>
+            select event:
+                when WindowEvent.ThemeChanged(id = id, theme = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.CursorMoved =>
+            select event:
+                when WindowEvent.CursorMoved(id = id, x = _, y = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.RawMouseMotion =>
+            select event:
+                when WindowEvent.RawMouseMotion(id = id, delta_x = _, delta_y = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.RawMouseButtonChanged =>
+            select event:
+                when WindowEvent.RawMouseButtonChanged(id = id, button = _, action = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.RawMouseWheel =>
+            select event:
+                when WindowEvent.RawMouseWheel(id = id, delta_x = _, delta_y = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.RawKeyChanged =>
+            select event:
+                when WindowEvent.RawKeyChanged(id = id, raw_key = _, scancode = _, action = _, extended = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.Touch =>
+            select event:
+                when WindowEvent.Touch(id = id, touch_id = _, phase = _, x = _, y = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.ModifiersChanged =>
+            select event:
+                when WindowEvent.ModifiersChanged(id = id, mods = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.Scrolled =>
+            select event:
+                when WindowEvent.Scrolled(id = id, x = _, y = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.KeyChanged =>
+            select event:
+                when WindowEvent.KeyChanged(id = id, key = _, scancode = _, action = _, mods = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.Character =>
+            select event:
+                when WindowEvent.Character(id = id, codepoint = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.CharacterMods =>
+            select event:
+                when WindowEvent.CharacterMods(id = id, codepoint = _, mods = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.CompositionStarted =>
+            select event:
+                when WindowEvent.CompositionStarted(id = id) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.CompositionUpdated =>
+            select event:
+                when WindowEvent.CompositionUpdated(id = id, text = _, cursor = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.CompositionCommitted =>
+            select event:
+                when WindowEvent.CompositionCommitted(id = id, text = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.CompositionEnded =>
+            select event:
+                when WindowEvent.CompositionEnded(id = id) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.MouseButtonChanged =>
+            select event:
+                when WindowEvent.MouseButtonChanged(id = id, button = _, action = _, mods = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.HoveredFile =>
+            select event:
+                when WindowEvent.HoveredFile(id = id, path = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.HoveredFileCancelled =>
+            select event:
+                when WindowEvent.HoveredFileCancelled(id = id) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when WindowEventKind.DroppedPaths =>
+            select event:
+                when WindowEvent.DroppedPaths(id = id, paths = _) => return window_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+    return true
+
+fn monitor_event_matches_filter(read event: MonitorEvent, read kind: MonitorEventKind, read id_filter: Option[MonitorId]) -> Bool:
+    select kind:
+        when MonitorEventKind.Connected =>
+            select event:
+                when MonitorEvent.Connected(id = id) => return monitor_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when MonitorEventKind.Disconnected =>
+            select event:
+                when MonitorEvent.Disconnected(id = id) => return monitor_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+    return true
+
+fn joystick_event_matches_filter(read event: JoystickEvent, read kind: JoystickEventKind, read id_filter: Option[JoystickId]) -> Bool:
+    select kind:
+        when JoystickEventKind.Connected =>
+            select event:
+                when JoystickEvent.Connected(id = id, gamepad = _) => return joystick_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+        when JoystickEventKind.Disconnected =>
+            select event:
+                when JoystickEvent.Disconnected(id = id) => return joystick_id_matches_filter :: id, id_filter :: call
+                when _ => return false
+    return true
+
+pub(package) fn pop_window_event_matching(edit batch: AppEventBatch, read kind: WindowEventKind, read id_filter: Option[WindowId]) -> Option[WindowEvent]:
+    let staged = take_batch_events_reversed :: batch :: call
+    let remaining = List[AppEvent] :: :: call
+    let found: Option[WindowEvent] = Option.None
+    repeat while !staged.is_empty :: :: method:
+        select staged.pop :: :: method:
+            when Option.Some(event) =>
+                select event:
+                    when AppEvent.Window(window_event) =>
+                        select found:
+                            when Option.None =>
+                                select:
+                                    when window_event_matches_filter :: window_event, kind, id_filter :: call => found = Option.Some :: window_event :: call
+                                    else => push_window :: remaining, window_event :: call
+                            when Option.Some(_) => push_window :: remaining, window_event :: call
+                    when other => push_app_event :: remaining, other :: call
+            when Option.None => break
+    batch.events = remaining
+    return found
+
+pub(package) fn take_window_events_matching(edit batch: AppEventBatch, read kind: WindowEventKind, read id_filter: Option[WindowId]) -> List[WindowEvent]:
+    let staged = take_batch_events_reversed :: batch :: call
+    let matched = List[WindowEvent] :: :: call
+    let remaining = List[AppEvent] :: :: call
+    repeat while !staged.is_empty :: :: method:
+        select staged.pop :: :: method:
+            when Option.Some(event) =>
+                select event:
+                    when AppEvent.Window(window_event) =>
+                        select:
+                            when window_event_matches_filter :: window_event, kind, id_filter :: call => matched.push :: window_event :: method
+                            else => push_window :: remaining, window_event :: call
+                    when other => push_app_event :: remaining, other :: call
+            when Option.None => break
+    batch.events = remaining
+    return matched
+
+pub(package) fn pop_monitor_event_matching(edit batch: AppEventBatch, read kind: MonitorEventKind, read id_filter: Option[MonitorId]) -> Option[MonitorEvent]:
+    let staged = take_batch_events_reversed :: batch :: call
+    let remaining = List[AppEvent] :: :: call
+    let found: Option[MonitorEvent] = Option.None
+    repeat while !staged.is_empty :: :: method:
+        select staged.pop :: :: method:
+            when Option.Some(event) =>
+                select event:
+                    when AppEvent.Monitor(monitor_event) =>
+                        select found:
+                            when Option.None =>
+                                select:
+                                    when monitor_event_matches_filter :: monitor_event, kind, id_filter :: call => found = Option.Some :: monitor_event :: call
+                                    else => push_monitor :: remaining, monitor_event :: call
+                            when Option.Some(_) => push_monitor :: remaining, monitor_event :: call
+                    when other => push_app_event :: remaining, other :: call
+            when Option.None => break
+    batch.events = remaining
+    return found
+
+pub(package) fn take_monitor_events_matching(edit batch: AppEventBatch, read kind: MonitorEventKind, read id_filter: Option[MonitorId]) -> List[MonitorEvent]:
+    let staged = take_batch_events_reversed :: batch :: call
+    let matched = List[MonitorEvent] :: :: call
+    let remaining = List[AppEvent] :: :: call
+    repeat while !staged.is_empty :: :: method:
+        select staged.pop :: :: method:
+            when Option.Some(event) =>
+                select event:
+                    when AppEvent.Monitor(monitor_event) =>
+                        select:
+                            when monitor_event_matches_filter :: monitor_event, kind, id_filter :: call => matched.push :: monitor_event :: method
+                            else => push_monitor :: remaining, monitor_event :: call
+                    when other => push_app_event :: remaining, other :: call
+            when Option.None => break
+    batch.events = remaining
+    return matched
+
+pub(package) fn pop_joystick_event_matching(edit batch: AppEventBatch, read kind: JoystickEventKind, read id_filter: Option[JoystickId]) -> Option[JoystickEvent]:
+    let staged = take_batch_events_reversed :: batch :: call
+    let remaining = List[AppEvent] :: :: call
+    let found: Option[JoystickEvent] = Option.None
+    repeat while !staged.is_empty :: :: method:
+        select staged.pop :: :: method:
+            when Option.Some(event) =>
+                select event:
+                    when AppEvent.Joystick(joystick_event) =>
+                        select found:
+                            when Option.None =>
+                                select:
+                                    when joystick_event_matches_filter :: joystick_event, kind, id_filter :: call => found = Option.Some :: joystick_event :: call
+                                    else => push_joystick :: remaining, joystick_event :: call
+                            when Option.Some(_) => push_joystick :: remaining, joystick_event :: call
+                    when other => push_app_event :: remaining, other :: call
+            when Option.None => break
+    batch.events = remaining
+    return found
+
+pub(package) fn take_joystick_events_matching(edit batch: AppEventBatch, read kind: JoystickEventKind, read id_filter: Option[JoystickId]) -> List[JoystickEvent]:
+    let staged = take_batch_events_reversed :: batch :: call
+    let matched = List[JoystickEvent] :: :: call
+    let remaining = List[AppEvent] :: :: call
+    repeat while !staged.is_empty :: :: method:
+        select staged.pop :: :: method:
+            when Option.Some(event) =>
+                select event:
+                    when AppEvent.Joystick(joystick_event) =>
+                        select:
+                            when joystick_event_matches_filter :: joystick_event, kind, id_filter :: call => matched.push :: joystick_event :: method
+                            else => push_joystick :: remaining, joystick_event :: call
+                    when other => push_app_event :: remaining, other :: call
+            when Option.None => break
+    batch.events = remaining
+    return matched

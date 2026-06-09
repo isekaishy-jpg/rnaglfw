@@ -81,42 +81,47 @@ pub fn check_vulkan_image_present_helpers(edit present_app: VulkanPresentApp, re
         when Result.Err(_) => return 27
     let fill = rgba_color :: 41, 120, 222, 255 :: call
     let fill_b = rgba_color :: 219, 91, 41, 255 :: call
-    let Result.Ok(surface_frame) = present_app.surface_pixel_frame :: fill :: method else => return 29
-    let Result.Ok(surface_pixels) = surface_frame.copy_pixels :: :: method else => return 30
-    select present_app.device_local_surface_vulkan_image_from_pixels :: surface_pixels :: method:
-        when Result.Ok(image) =>
-            select:
-                when !present_app.surface_vulkan_image_present_compatible :: image :: method =>
-                    present_app.destroy_image :: image :: method
-                    return 31
-                when !present_snapshot.surface_vulkan_image_present_compatible :: image :: method =>
-                    present_app.destroy_image :: image :: method
-                    return 32
-                when !present_app.surface_vulkan_image_present_ready :: image :: method =>
-                    present_app.destroy_image :: image :: method
-                    return 33
-                when !present_snapshot.surface_vulkan_image_present_ready :: image :: method =>
-                    present_app.destroy_image :: image :: method
-                    return 34
-                else => ()
-            select present_app.present_vulkan_image :: image :: method:
-                when Result.Ok(_) =>
+    select either:
+        when surface_frame: Result.Ok(surface_frame) <- present_app.surface_pixel_frame :: fill :: method
+        when surface_pixels: Result.Ok(surface_pixels) <- surface_frame.copy_pixels :: :: method =>
+            select present_app.device_local_surface_vulkan_image_from_pixels :: surface_pixels :: method:
+                when Result.Ok(image) =>
                     select:
-                        when !image.transfer_source_ready :: :: method =>
+                        when !present_app.surface_vulkan_image_present_compatible :: image :: method =>
                             present_app.destroy_image :: image :: method
-                            return 35
+                            return 31
+                        when !present_snapshot.surface_vulkan_image_present_compatible :: image :: method =>
+                            present_app.destroy_image :: image :: method
+                            return 32
                         when !present_app.surface_vulkan_image_present_ready :: image :: method =>
                             present_app.destroy_image :: image :: method
-                            return 36
+                            return 33
                         when !present_snapshot.surface_vulkan_image_present_ready :: image :: method =>
                             present_app.destroy_image :: image :: method
-                            return 37
+                            return 34
                         else => ()
-                    present_app.destroy_image :: image :: method
-                when Result.Err(_) =>
-                    present_app.destroy_image :: image :: method
-                    return 38
-        when Result.Err(_) => return 39
+                    select present_app.present_vulkan_image :: image :: method:
+                        when Result.Ok(_) =>
+                            select:
+                                when !image.transfer_source_ready :: :: method =>
+                                    present_app.destroy_image :: image :: method
+                                    return 35
+                                when !present_app.surface_vulkan_image_present_ready :: image :: method =>
+                                    present_app.destroy_image :: image :: method
+                                    return 36
+                                when !present_snapshot.surface_vulkan_image_present_ready :: image :: method =>
+                                    present_app.destroy_image :: image :: method
+                                    return 37
+                                else => ()
+                            present_app.destroy_image :: image :: method
+                        when Result.Err(_) =>
+                            present_app.destroy_image :: image :: method
+                            return 38
+                when Result.Err(_) => return 39
+
+    with Result.Err(_):
+        surface_frame => return 29
+        surface_pixels => return 30
     let Result.Ok(surface_frame_b) = present_app.surface_pixel_frame :: fill_b :: method else => return 40
     select present_app.device_local_surface_vulkan_image_from_pixel_frame :: surface_frame_b :: method:
         when Result.Ok(image) =>
@@ -134,30 +139,31 @@ pub fn check_vulkan_image_present_helpers(edit present_app: VulkanPresentApp, re
                     present_app.destroy_image :: image :: method
                     return 44
                 else => ()
-            select present_app.image_image :: image :: method:
-                when Result.Ok(roundtrip_image) =>
-                    select roundtrip_image.pixel :: 0, 0 :: method:
-                        when Result.Ok(roundtrip_color) =>
-                            select:
-                                when roundtrip_color.red != fill_b.red =>
-                                    present_app.destroy_image :: image :: method
-                                    return 45
-                                when roundtrip_color.green != fill_b.green =>
-                                    present_app.destroy_image :: image :: method
-                                    return 46
-                                when roundtrip_color.blue != fill_b.blue =>
-                                    present_app.destroy_image :: image :: method
-                                    return 47
-                                when roundtrip_color.alpha != fill_b.alpha =>
-                                    present_app.destroy_image :: image :: method
-                                    return 48
-                                else => ()
-                        when Result.Err(_) =>
+            select either:
+                when roundtrip_image: Result.Ok(roundtrip_image) <- present_app.image_image :: image :: method
+                when roundtrip_color: Result.Ok(roundtrip_color) <- roundtrip_image.pixel :: 0, 0 :: method =>
+                    select:
+                        when roundtrip_color.red != fill_b.red =>
                             present_app.destroy_image :: image :: method
-                            return 49
-                when Result.Err(_) =>
+                            return 45
+                        when roundtrip_color.green != fill_b.green =>
+                            present_app.destroy_image :: image :: method
+                            return 46
+                        when roundtrip_color.blue != fill_b.blue =>
+                            present_app.destroy_image :: image :: method
+                            return 47
+                        when roundtrip_color.alpha != fill_b.alpha =>
+                            present_app.destroy_image :: image :: method
+                            return 48
+                        else => ()
+
+            with Result.Err(_):
+                roundtrip_image =>
                     present_app.destroy_image :: image :: method
                     return 50
+                roundtrip_color =>
+                    present_app.destroy_image :: image :: method
+                    return 49
             present_app.destroy_image :: image :: method
         when Result.Err(_) => return 51
     let Result.Ok(source_image) = present_app.surface_image :: fill :: method else => return 52

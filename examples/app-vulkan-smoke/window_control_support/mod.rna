@@ -102,11 +102,29 @@ pub fn prove_window_control_runtime(edit present_app: VulkanPresentApp, window_i
     let initial_maximized = present_app.maximized :: :: method
     let initial_hittest = present_app.cursor_hittest :: :: method
     let initial_window_level = present_app.window_level :: :: method
-    let Result.Ok(initial_enabled) = present_app.enabled :: :: method else => return 3368
-    let Result.Ok(initial_skip_taskbar) = present_app.skip_taskbar :: :: method else => return 3369
-    let Result.Ok(initial_clip_children) = present_app.clip_children :: :: method else => return 3494
-    let Result.Ok(initial_buttons) = present_app.enabled_buttons :: :: method else => return 3264
-    let Result.Ok(initial_content_protected) = present_app.content_protected :: :: method else => return 3331
+    let initial_enabled = false
+    let initial_skip_taskbar = false
+    let initial_clip_children = false
+    let initial_buttons = no_window_buttons :: :: call
+    let initial_content_protected = false
+    select either:
+        when next_enabled: Result.Ok(next_enabled) <- present_app.enabled :: :: method
+        when next_skip_taskbar: Result.Ok(next_skip_taskbar) <- present_app.skip_taskbar :: :: method
+        when next_clip_children: Result.Ok(next_clip_children) <- present_app.clip_children :: :: method
+        when next_buttons: Result.Ok(next_buttons) <- present_app.enabled_buttons :: :: method
+        when next_content_protected: Result.Ok(next_content_protected) <- present_app.content_protected :: :: method =>
+            initial_enabled = next_enabled
+            initial_skip_taskbar = next_skip_taskbar
+            initial_clip_children = next_clip_children
+            initial_buttons = next_buttons
+            initial_content_protected = next_content_protected
+
+    with Result.Err(_):
+        next_enabled => return 3368
+        next_skip_taskbar => return 3369
+        next_clip_children => return 3494
+        next_buttons => return 3264
+        next_content_protected => return 3331
     select present_app.owner_window :: :: method:
         when Result.Ok(Option.None) => ()
         when Result.Ok(Option.Some(_)) => return 3495

@@ -109,39 +109,41 @@ pub fn check_vulkan_memory_helpers(read present_app: VulkanPresentApp, read pres
     select:
         when app_memory_heap_count == 0 => return 35
         else => ()
-    select present_app.memory_heap :: 0 :: method:
-        when Option.Some(memory_heap) =>
-            select present_snapshot.memory_heap :: 0 :: method:
-                when Option.Some(snapshot_memory_heap) =>
-                    select:
-                        when snapshot_memory_heap.size != memory_heap.size => return 36
-                        when snapshot_memory_heap.flags != memory_heap.flags => return 37
-                        else => ()
-                when Option.None => return 38
-        when Option.None => return 39
+    select either:
+        when memory_heap: Option.Some(memory_heap) <- present_app.memory_heap :: 0 :: method
+        when snapshot_memory_heap: Option.Some(snapshot_memory_heap) <- present_snapshot.memory_heap :: 0 :: method =>
+            select:
+                when snapshot_memory_heap.size != memory_heap.size => return 36
+                when snapshot_memory_heap.flags != memory_heap.flags => return 37
+                else => ()
+
+    with Option.None:
+        memory_heap => return 39
+        snapshot_memory_heap => return 38
     select:
         when present_app.device_local_memory_type_count :: :: method == 0 => ()
         else =>
-            select first_device_local_memory_type_index :: present_app :: call:
-                when Option.Some(device_local_index) =>
-                    select single_memory_type_bits :: device_local_index :: call:
-                        when Option.Some(device_local_bits) =>
+            select either:
+                when device_local_index: Option.Some(device_local_index) <- first_device_local_memory_type_index :: present_app :: call
+                when device_local_bits: Option.Some(device_local_bits) <- single_memory_type_bits :: device_local_index :: call =>
+                    select:
+                        when !present_app.memory_type_supported :: device_local_index, device_local_bits :: method => return 40
+                        when !present_snapshot.memory_type_supported :: device_local_index, device_local_bits :: method => return 41
+                        else => ()
+                    select present_app.device_local_memory_type_index :: device_local_bits :: method:
+                        when Option.Some(selected_index) =>
                             select:
-                                when !present_app.memory_type_supported :: device_local_index, device_local_bits :: method => return 40
-                                when !present_snapshot.memory_type_supported :: device_local_index, device_local_bits :: method => return 41
+                                when selected_index != device_local_index => return 42
                                 else => ()
-                            select present_app.device_local_memory_type_index :: device_local_bits :: method:
-                                when Option.Some(selected_index) =>
-                                    select:
-                                        when selected_index != device_local_index => return 42
-                                        else => ()
-                                when Option.None => return 43
-                            select present_snapshot.device_local_memory_type_index :: device_local_bits :: method:
-                                when Option.Some(selected_index) =>
-                                    select:
-                                        when selected_index != device_local_index => return 44
-                                        else => ()
-                                when Option.None => return 45
-                        when Option.None => return 46
-                when Option.None => return 47
+                        when Option.None => return 43
+                    select present_snapshot.device_local_memory_type_index :: device_local_bits :: method:
+                        when Option.Some(selected_index) =>
+                            select:
+                                when selected_index != device_local_index => return 44
+                                else => ()
+                        when Option.None => return 45
+
+            with Option.None:
+                device_local_index => return 47
+                device_local_bits => return 46
     return 0

@@ -21,25 +21,28 @@ pub fn check_vulkan_allocation_helpers(read present_app: VulkanPresentApp, read 
                 when snapshot_compatible_memory_type_count != app_compatible_memory_type_count => return 30
                 when app_compatible_memory_type_index_count != app_compatible_memory_type_count => return 31
                 else => ()
-            select present_app.surface_staging_allocation_plan :: :: method:
-                when Result.Ok(app_plan) =>
-                    select present_snapshot.staging_allocation_plan :: requirements :: method:
-                        when Option.Some(snapshot_plan) =>
-                            select:
-                                when app_plan.size :: :: method != requirements.size => return 5
-                                when app_plan.alignment :: :: method != requirements.alignment => return 6
-                                when app_plan.memory_type_bits :: :: method != requirements.memory_type_bits => return 7
-                                when !app_plan.host_visible :: :: method => return 8
-                                when !app_plan.host_coherent :: :: method => return 9
-                                when !app_plan.staging_compatible :: :: method => return 10
-                                when snapshot_plan.memory_type_index != app_plan.memory_type_index => return 11
-                                when snapshot_plan.memory_type.property_flags != app_plan.memory_type.property_flags => return 12
-                                when snapshot_plan.memory_heap.flags != app_plan.memory_heap.flags => return 13
-                                when snapshot_plan.memory_heap.size != app_plan.memory_heap.size => return 14
-                                when !present_snapshot.memory_type_supported :: app_plan.memory_type_index, requirements.memory_type_bits :: method => return 15
-                                else => ()
-                        when Option.None => return 16
-                when Result.Err(_) => return 17
+            select either:
+                when app_plan: Result.Ok(app_plan) <- present_app.surface_staging_allocation_plan :: :: method
+                when snapshot_plan: Option.Some(snapshot_plan) <- present_snapshot.staging_allocation_plan :: requirements :: method =>
+                    select:
+                        when app_plan.size :: :: method != requirements.size => return 5
+                        when app_plan.alignment :: :: method != requirements.alignment => return 6
+                        when app_plan.memory_type_bits :: :: method != requirements.memory_type_bits => return 7
+                        when !app_plan.host_visible :: :: method => return 8
+                        when !app_plan.host_coherent :: :: method => return 9
+                        when !app_plan.staging_compatible :: :: method => return 10
+                        when snapshot_plan.memory_type_index != app_plan.memory_type_index => return 11
+                        when snapshot_plan.memory_type.property_flags != app_plan.memory_type.property_flags => return 12
+                        when snapshot_plan.memory_heap.flags != app_plan.memory_heap.flags => return 13
+                        when snapshot_plan.memory_heap.size != app_plan.memory_heap.size => return 14
+                        when !present_snapshot.memory_type_supported :: app_plan.memory_type_index, requirements.memory_type_bits :: method => return 15
+                        else => ()
+
+            with Result.Err(_):
+                app_plan => return 17
+
+            with Option.None:
+                snapshot_plan => return 16
             select present_app.staging_allocation_plan :: requirements :: method:
                 when Option.Some(staging_plan) =>
                     select:

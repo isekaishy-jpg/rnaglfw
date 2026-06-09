@@ -261,12 +261,14 @@ pub fn check_rgba_image_helpers() -> I32:
                         else => ()
                 when Result.Err(_) => return 72
             let blit_fill = rgba_color :: 40U8, 50U8, 60U8, 70U8 :: call
-            select solid_rgba_image :: 2, 1, blit_fill :: call:
-                when Result.Ok(source_image) =>
-                    select image.blit_image :: 1, 1, source_image :: method:
-                        when Result.Ok(_) => ()
-                        when Result.Err(_) => return 73
-                when Result.Err(_) => return 74
+            select either:
+                when source_image: Result.Ok(source_image) <- solid_rgba_image :: 2, 1, blit_fill :: call
+                when blitted: Result.Ok(_) <- image.blit_image :: 1, 1, source_image :: method =>
+                    ()
+
+            with Result.Err(_):
+                source_image => return 74
+                blitted => return 73
             select image.pixel :: 2, 1 :: method:
                 when Result.Ok(color) =>
                     select:
@@ -390,53 +392,56 @@ pub fn check_vulkan_pixel_frame_helpers() -> I32:
     rgbx_pixels.push :: 6U8 :: method
     rgbx_pixels.push :: 7U8 :: method
     rgbx_pixels.push :: 0U8 :: method
-    select vulkan_pixel_frame :: 1, 1, 4, VulkanPixelFormat.Rgbx8, rgbx_pixels :: call:
-        when Result.Ok(frame) =>
-            select frame.to_rgba_image :: :: method:
-                when Result.Ok(image) =>
-                    let image_pixels = image.take_pixels :: :: method
-                    select:
-                        when image_pixels[0] != 5U8 => return 620
-                        when image_pixels[1] != 6U8 => return 621
-                        when image_pixels[2] != 7U8 => return 622
-                        when image_pixels[3] != 255U8 => return 623
-                        else => ()
-                when Result.Err(_) => return 624
-        when Result.Err(_) => return 625
+    select either:
+        when frame: Result.Ok(frame) <- vulkan_pixel_frame :: 1, 1, 4, VulkanPixelFormat.Rgbx8, rgbx_pixels :: call
+        when image: Result.Ok(image) <- frame.to_rgba_image :: :: method =>
+            let image_pixels = image.take_pixels :: :: method
+            select:
+                when image_pixels[0] != 5U8 => return 620
+                when image_pixels[1] != 6U8 => return 621
+                when image_pixels[2] != 7U8 => return 622
+                when image_pixels[3] != 255U8 => return 623
+                else => ()
+
+    with Result.Err(_):
+        frame => return 625
+        image => return 624
     let bgrx_pixels = ByteBuffer :: :: call
     bgrx_pixels.push :: 40U8 :: method
     bgrx_pixels.push :: 30U8 :: method
     bgrx_pixels.push :: 20U8 :: method
     bgrx_pixels.push :: 0U8 :: method
-    select vulkan_pixel_frame :: 1, 1, 4, VulkanPixelFormat.Bgrx8, bgrx_pixels :: call:
-        when Result.Ok(frame) =>
-            select frame.to_surface_bytes :: rgba_surface_format :: method:
-                when Result.Ok(surface_pixels) =>
-                    select:
-                        when surface_pixels[0] != 20U8 => return 626
-                        when surface_pixels[1] != 30U8 => return 627
-                        when surface_pixels[2] != 40U8 => return 628
-                        when surface_pixels[3] != 255U8 => return 629
-                        else => ()
-                when Result.Err(_) => return 630
-        when Result.Err(_) => return 631
+    select either:
+        when frame: Result.Ok(frame) <- vulkan_pixel_frame :: 1, 1, 4, VulkanPixelFormat.Bgrx8, bgrx_pixels :: call
+        when surface_pixels: Result.Ok(surface_pixels) <- frame.to_surface_bytes :: rgba_surface_format :: method =>
+            select:
+                when surface_pixels[0] != 20U8 => return 626
+                when surface_pixels[1] != 30U8 => return 627
+                when surface_pixels[2] != 40U8 => return 628
+                when surface_pixels[3] != 255U8 => return 629
+                else => ()
+
+    with Result.Err(_):
+        frame => return 631
+        surface_pixels => return 630
     let rgba_pixels = ByteBuffer :: :: call
     rgba_pixels.push :: 8U8 :: method
     rgba_pixels.push :: 16U8 :: method
     rgba_pixels.push :: 24U8 :: method
     rgba_pixels.push :: 32U8 :: method
-    select vulkan_pixel_frame :: 1, 1, 4, VulkanPixelFormat.Rgba8, rgba_pixels :: call:
-        when Result.Ok(frame) =>
-            select frame.to_surface_bytes :: bgra_surface_format :: method:
-                when Result.Ok(surface_pixels) =>
-                    select:
-                        when surface_pixels[0] != 24U8 => return 632
-                        when surface_pixels[1] != 16U8 => return 633
-                        when surface_pixels[2] != 8U8 => return 634
-                        when surface_pixels[3] != 32U8 => return 635
-                        else => ()
-                when Result.Err(_) => return 636
-        when Result.Err(_) => return 637
+    select either:
+        when frame: Result.Ok(frame) <- vulkan_pixel_frame :: 1, 1, 4, VulkanPixelFormat.Rgba8, rgba_pixels :: call
+        when surface_pixels: Result.Ok(surface_pixels) <- frame.to_surface_bytes :: bgra_surface_format :: method =>
+            select:
+                when surface_pixels[0] != 24U8 => return 632
+                when surface_pixels[1] != 16U8 => return 633
+                when surface_pixels[2] != 8U8 => return 634
+                when surface_pixels[3] != 32U8 => return 635
+                else => ()
+
+    with Result.Err(_):
+        frame => return 637
+        surface_pixels => return 636
     let fill = RgbaColor :: 10U8, 20U8, 30U8, 40U8 :: call
     select vulkan_pixel_frame_with_color :: 2, 2, VulkanPixelFormat.Rgba8, fill :: call:
         when Result.Ok(frame) =>
@@ -558,12 +563,14 @@ pub fn check_vulkan_pixel_frame_helpers() -> I32:
                         when Result.Err(_) => return 796
                 when Result.Err(_) => return 797
             let blit_fill = RgbaColor :: 21U8, 31U8, 41U8, 51U8 :: call
-            select vulkan_pixel_frame_with_color :: 1, 1, VulkanPixelFormat.Bgra8, blit_fill :: call:
-                when Result.Ok(source_frame) =>
-                    select frame.blit_frame :: 1, 1, source_frame :: method:
-                        when Result.Ok(_) => ()
-                        when Result.Err(_) => return 717
-                when Result.Err(_) => return 718
+            select either:
+                when source_frame: Result.Ok(source_frame) <- vulkan_pixel_frame_with_color :: 1, 1, VulkanPixelFormat.Bgra8, blit_fill :: call
+                when blitted: Result.Ok(_) <- frame.blit_frame :: 1, 1, source_frame :: method =>
+                    ()
+
+            with Result.Err(_):
+                source_frame => return 718
+                blitted => return 717
             select frame.pixel :: 1, 1 :: method:
                 when Result.Ok(color) =>
                     select:
@@ -621,12 +628,14 @@ pub fn check_vulkan_pixel_frame_helpers() -> I32:
                                 else => ()
                         when Result.Err(_) => return 757
                 when Result.Err(_) => return 758
-            select solid_rgba_image :: 1, 1, blit_fill :: call:
-                when Result.Ok(source_image) =>
-                    select frame.blit_image :: 0, 0, source_image :: method:
-                        when Result.Ok(_) => ()
-                        when Result.Err(_) => return 759
-                when Result.Err(_) => return 760
+            select either:
+                when source_image: Result.Ok(source_image) <- solid_rgba_image :: 1, 1, blit_fill :: call
+                when blitted: Result.Ok(_) <- frame.blit_image :: 0, 0, source_image :: method =>
+                    ()
+
+            with Result.Err(_):
+                source_image => return 760
+                blitted => return 759
             select frame.pixel :: 0, 0 :: method:
                 when Result.Ok(color) =>
                     select:
@@ -636,24 +645,25 @@ pub fn check_vulkan_pixel_frame_helpers() -> I32:
                         when color.alpha != blit_fill.alpha => return 764
                         else => ()
                 when Result.Err(_) => return 765
-            select solid_rgba_image :: 2, 2, rect_fill :: call:
-                when Result.Ok(source_image) =>
-                    select vulkan_pixel_frame_from_image :: source_image, VulkanPixelFormat.Bgra8 :: call:
-                        when Result.Ok(image_frame) =>
+            select either:
+                when source_image: Result.Ok(source_image) <- solid_rgba_image :: 2, 2, rect_fill :: call
+                when image_frame: Result.Ok(image_frame) <- vulkan_pixel_frame_from_image :: source_image, VulkanPixelFormat.Bgra8 :: call =>
+                    select:
+                        when image_frame.format_code :: :: method != 1 => return 766
+                        else => ()
+                    select image_frame.pixel :: 1, 1 :: method:
+                        when Result.Ok(color) =>
                             select:
-                                when image_frame.format_code :: :: method != 1 => return 766
+                                when color.red != rect_fill.red => return 767
+                                when color.green != rect_fill.green => return 768
+                                when color.blue != rect_fill.blue => return 769
+                                when color.alpha != rect_fill.alpha => return 770
                                 else => ()
-                            select image_frame.pixel :: 1, 1 :: method:
-                                when Result.Ok(color) =>
-                                    select:
-                                        when color.red != rect_fill.red => return 767
-                                        when color.green != rect_fill.green => return 768
-                                        when color.blue != rect_fill.blue => return 769
-                                        when color.alpha != rect_fill.alpha => return 770
-                                        else => ()
-                                when Result.Err(_) => return 771
-                        when Result.Err(_) => return 772
-                when Result.Err(_) => return 773
+                        when Result.Err(_) => return 771
+
+            with Result.Err(_):
+                source_image => return 773
+                image_frame => return 772
             select frame.sub_frame :: 1, 1, 1, 1 :: method:
                 when Result.Ok(sub_frame) =>
                     select:
@@ -1978,266 +1988,6 @@ pub fn prove_window_state_event_single_runtime(edit present_app: VulkanPresentAp
 pub fn prove_lifecycle_event_single_runtime(edit present_app: VulkanPresentApp, window_id: WindowId) -> I32:
     let _ = present_app
     let _ = window_id
-    return 0
-
-    present_app.poll_created_window_events :: :: method
-    present_app.poll_destroyed_window_events :: :: method
-    present_app.poll_close_requested_window_events :: :: method
-    present_app.poll_connected_monitor_events :: :: method
-    present_app.poll_disconnected_monitor_events :: :: method
-    present_app.poll_connected_joystick_events :: :: method
-    present_app.poll_disconnected_joystick_events :: :: method
-
-    present_app.post_user_event :: 221 :: method
-    select present_app.next_created_window_event :: :: method:
-        when Option.Some(_) => return 1550
-        when Option.None => ()
-    select present_app.next_destroyed_window_event :: :: method:
-        when Option.Some(_) => return 1551
-        when Option.None => ()
-    select present_app.next_close_requested_window_event :: :: method:
-        when Option.Some(_) => return 1552
-        when Option.None => ()
-    select present_app.next_created_window_event_for :: window_id :: method:
-        when Option.Some(_) => return 1553
-        when Option.None => ()
-    select present_app.next_destroyed_window_event_for :: window_id :: method:
-        when Option.Some(_) => return 1554
-        when Option.None => ()
-    select present_app.next_close_requested_window_event_for :: window_id :: method:
-        when Option.Some(_) => return 1555
-        when Option.None => ()
-    select present_app.next_connected_monitor_event :: :: method:
-        when Option.Some(_) => return 1556
-        when Option.None => ()
-    select present_app.next_disconnected_monitor_event :: :: method:
-        when Option.Some(_) => return 1557
-        when Option.None => ()
-    select present_app.next_connected_monitor_event_for :: 301 :: method:
-        when Option.Some(_) => return 1558
-        when Option.None => ()
-    select present_app.next_disconnected_monitor_event_for :: 302 :: method:
-        when Option.Some(_) => return 1559
-        when Option.None => ()
-    select present_app.next_connected_joystick_event :: :: method:
-        when Option.Some(_) => return 1560
-        when Option.None => ()
-    select present_app.next_disconnected_joystick_event :: :: method:
-        when Option.Some(_) => return 1561
-        when Option.None => ()
-    select present_app.next_connected_joystick_event_for :: 401 :: method:
-        when Option.Some(_) => return 1562
-        when Option.None => ()
-    select present_app.next_disconnected_joystick_event_for :: 402 :: method:
-        when Option.Some(_) => return 1563
-        when Option.None => ()
-    select present_app.next_user_event_for :: 221 :: method:
-        when Option.Some(user_event) =>
-            select:
-                when user_event.user_id :: :: method != 221 => return 1564
-                else => ()
-        when Option.None => return 1565
-
-    present_app.post_user_event :: 222 :: method
-    select present_app.poll_next_created_window_event :: :: method:
-        when Result.Ok(Option.Some(_)) => return 1568
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1569
-    select present_app.poll_next_destroyed_window_event :: :: method:
-        when Result.Ok(Option.Some(_)) => return 1570
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1571
-    select present_app.poll_next_close_requested_window_event :: :: method:
-        when Result.Ok(Option.Some(_)) => return 1572
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1573
-    select present_app.poll_next_created_window_event_for :: window_id :: method:
-        when Result.Ok(Option.Some(_)) => return 1574
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1575
-    select present_app.poll_next_destroyed_window_event_for :: window_id :: method:
-        when Result.Ok(Option.Some(_)) => return 1576
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1577
-    select present_app.poll_next_close_requested_window_event_for :: window_id :: method:
-        when Result.Ok(Option.Some(_)) => return 1578
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1579
-    select present_app.poll_next_connected_monitor_event :: :: method:
-        when Result.Ok(Option.Some(_)) => return 1580
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1581
-    select present_app.poll_next_disconnected_monitor_event :: :: method:
-        when Result.Ok(Option.Some(_)) => return 1582
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1583
-    select present_app.poll_next_connected_monitor_event_for :: 301 :: method:
-        when Result.Ok(Option.Some(_)) => return 1584
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1585
-    select present_app.poll_next_disconnected_monitor_event_for :: 302 :: method:
-        when Result.Ok(Option.Some(_)) => return 1586
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1587
-    select present_app.poll_next_connected_joystick_event :: :: method:
-        when Result.Ok(Option.Some(_)) => return 1588
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1589
-    select present_app.poll_next_disconnected_joystick_event :: :: method:
-        when Result.Ok(Option.Some(_)) => return 1590
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1591
-    select present_app.poll_next_connected_joystick_event_for :: 401 :: method:
-        when Result.Ok(Option.Some(_)) => return 1592
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1593
-    select present_app.poll_next_disconnected_joystick_event_for :: 402 :: method:
-        when Result.Ok(Option.Some(_)) => return 1594
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1595
-    select:
-        when !present_app.has_pending_events :: :: method => return 1596
-        else => ()
-    select present_app.next_user_event_for :: 222 :: method:
-        when Option.Some(user_event) =>
-            select:
-                when user_event.user_id :: :: method != 222 => return 1598
-                else => ()
-        when Option.None => return 1599
-
-    present_app.post_user_event :: 223 :: method
-    select present_app.wait_next_created_window_event :: :: method:
-        when Result.Ok(Option.Some(_)) => return 1600
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1601
-    select present_app.wait_next_destroyed_window_event :: :: method:
-        when Result.Ok(Option.Some(_)) => return 1602
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1603
-    select present_app.wait_next_close_requested_window_event :: :: method:
-        when Result.Ok(Option.Some(_)) => return 1604
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1605
-    select present_app.wait_next_created_window_event_for :: window_id :: method:
-        when Result.Ok(Option.Some(_)) => return 1606
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1607
-    select present_app.wait_next_destroyed_window_event_for :: window_id :: method:
-        when Result.Ok(Option.Some(_)) => return 1608
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1609
-    select present_app.wait_next_close_requested_window_event_for :: window_id :: method:
-        when Result.Ok(Option.Some(_)) => return 1610
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1611
-    select present_app.wait_next_connected_monitor_event :: :: method:
-        when Result.Ok(Option.Some(_)) => return 1612
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1613
-    select present_app.wait_next_disconnected_monitor_event :: :: method:
-        when Result.Ok(Option.Some(_)) => return 1614
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1615
-    select present_app.wait_next_connected_monitor_event_for :: 301 :: method:
-        when Result.Ok(Option.Some(_)) => return 1616
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1617
-    select present_app.wait_next_disconnected_monitor_event_for :: 302 :: method:
-        when Result.Ok(Option.Some(_)) => return 1618
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1619
-    select present_app.wait_next_connected_joystick_event :: :: method:
-        when Result.Ok(Option.Some(_)) => return 1620
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1621
-    select present_app.wait_next_disconnected_joystick_event :: :: method:
-        when Result.Ok(Option.Some(_)) => return 1622
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1623
-    select present_app.wait_next_connected_joystick_event_for :: 401 :: method:
-        when Result.Ok(Option.Some(_)) => return 1624
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1625
-    select present_app.wait_next_disconnected_joystick_event_for :: 402 :: method:
-        when Result.Ok(Option.Some(_)) => return 1626
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1627
-    select:
-        when !present_app.has_pending_events :: :: method => return 1628
-        else => ()
-    select present_app.next_user_event_for :: 223 :: method:
-        when Option.Some(user_event) =>
-            select:
-                when user_event.user_id :: :: method != 223 => return 1630
-                else => ()
-        when Option.None => return 1631
-
-    present_app.post_user_event :: 224 :: method
-    select present_app.wait_timeout_next_created_window_event :: 0.0 :: method:
-        when Result.Ok(Option.Some(_)) => return 1632
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1633
-    select present_app.wait_timeout_next_destroyed_window_event :: 0.0 :: method:
-        when Result.Ok(Option.Some(_)) => return 1634
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1635
-    select present_app.wait_timeout_next_close_requested_window_event :: 0.0 :: method:
-        when Result.Ok(Option.Some(_)) => return 1636
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1637
-    select present_app.wait_timeout_next_created_window_event_for :: window_id, 0.0 :: method:
-        when Result.Ok(Option.Some(_)) => return 1638
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1639
-    select present_app.wait_timeout_next_destroyed_window_event_for :: window_id, 0.0 :: method:
-        when Result.Ok(Option.Some(_)) => return 1640
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1641
-    select present_app.wait_timeout_next_close_requested_window_event_for :: window_id, 0.0 :: method:
-        when Result.Ok(Option.Some(_)) => return 1642
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1643
-    select present_app.wait_timeout_next_connected_monitor_event :: 0.0 :: method:
-        when Result.Ok(Option.Some(_)) => return 1644
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1645
-    select present_app.wait_timeout_next_disconnected_monitor_event :: 0.0 :: method:
-        when Result.Ok(Option.Some(_)) => return 1646
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1647
-    select present_app.wait_timeout_next_connected_monitor_event_for :: 301, 0.0 :: method:
-        when Result.Ok(Option.Some(_)) => return 1648
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1649
-    select present_app.wait_timeout_next_disconnected_monitor_event_for :: 302, 0.0 :: method:
-        when Result.Ok(Option.Some(_)) => return 1650
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1651
-    select present_app.wait_timeout_next_connected_joystick_event :: 0.0 :: method:
-        when Result.Ok(Option.Some(_)) => return 1652
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1653
-    select present_app.wait_timeout_next_disconnected_joystick_event :: 0.0 :: method:
-        when Result.Ok(Option.Some(_)) => return 1654
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1655
-    select present_app.wait_timeout_next_connected_joystick_event_for :: 401, 0.0 :: method:
-        when Result.Ok(Option.Some(_)) => return 1656
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1657
-    select present_app.wait_timeout_next_disconnected_joystick_event_for :: 402, 0.0 :: method:
-        when Result.Ok(Option.Some(_)) => return 1658
-        when Result.Ok(Option.None) => ()
-        when Result.Err(_) => return 1659
-    select:
-        when !present_app.has_pending_events :: :: method => return 1660
-        else => ()
-    select present_app.next_user_event_for :: 224 :: method:
-        when Option.Some(user_event) =>
-            select:
-                when user_event.user_id :: :: method != 224 => return 1662
-                else => ()
-        when Option.None => return 1663
     return 0
 
 pub fn prove_lifecycle_event_lists_runtime(edit present_app: VulkanPresentApp, window_id: WindowId) -> I32:

@@ -1,3 +1,5 @@
+mod support
+
 use std.{List, Option, Result, Str}
 use runa_app.{AnglePlatformType, AnglePlatformTypeOverride, AppEvent}
 use runa_app.{AppClipboardError, AppEventKind, BoolOverride, ClientApi}
@@ -65,6 +67,8 @@ use runa_app.{window_spec_without_wayland_app_id, window_spec_without_x11_class_
 use runa_app.window_spec_without_x11_instance_name
 use runa_app.{window_spec_with_x11_class_name, window_spec_with_x11_instance_name}
 use runa_app.{wayland_libdecor_mode_from_raw, wayland_libdecor_mode_raw}
+use support.{expect_active_title_result, expect_active_window_title}
+use support.{prove_clipboard_smoke, prove_cursor_image_smoke}
 
 fn main() -> I32:
     let helper_config = win32_app_init_config :: :: call
@@ -1374,21 +1378,22 @@ fn main() -> I32:
                 id = 4
                 gamepad = false
             let wrapped_joystick_event = AppEvent.Joystick :: connected_joystick_event :: call
-            select wrapped_joystick_event.take_joystick_event :: :: method:
-                when Option.Some(payload) =>
-                    select payload.gamepad :: :: method:
-                        when Option.Some(gamepad) =>
-                            select:
-                                when gamepad =>
-                                    app.terminate :: :: method
-                                    return 163
-                                else => ()
-                        when Option.None =>
+            select either:
+                when payload: Option.Some(payload) <- wrapped_joystick_event.take_joystick_event :: :: method
+                when gamepad: Option.Some(gamepad) <- payload.gamepad :: :: method =>
+                    select:
+                        when gamepad =>
                             app.terminate :: :: method
-                            return 164
-                when Option.None =>
+                            return 163
+                        else => ()
+
+            with Option.None:
+                payload =>
                     app.terminate :: :: method
                     return 165
+                gamepad =>
+                    app.terminate :: :: method
+                    return 164
             let signaled_event = UserEvent.Signaled :: :: call
                 id = 6
             let wrapped_user_event = AppEvent.User :: signaled_event :: call
@@ -1604,16 +1609,12 @@ fn main() -> I32:
                         when Result.Err(_) =>
                             app.terminate :: :: method
                             return 203
-                    select window.title :: :: method:
-                        when Result.Ok(title) =>
-                            select title.find :: "runa_app smoke active" :: method:
-                                when Option.Some(0) => ()
-                                when _ =>
-                                    app.terminate :: :: method
-                                    return 204
-                        when Result.Err(_) =>
+                    let active_title_status = expect_active_window_title :: window, 204, 205 :: call
+                    select:
+                        when active_title_status != 0 =>
                             app.terminate :: :: method
-                            return 205
+                            return active_title_status
+                        else => ()
                     let hwnd = window.hwnd :: :: method
                     select:
                         when hwnd.is_null :: :: method =>
@@ -1625,41 +1626,12 @@ fn main() -> I32:
                         when Result.Err(_) =>
                             app.terminate :: :: method
                             return 1151
-                    select window.clipboard_string :: :: method:
-                        when Result.Ok(text) =>
-                            select text.find :: "rnaglfw clipboard smoke" :: method:
-                                when Option.Some(0) => ()
-                                when _ =>
-                                    app.terminate :: :: method
-                                    return 1152
-                        when Result.Err(_) =>
+                    let clipboard_status = prove_clipboard_smoke :: app, window :: call
+                    select:
+                        when clipboard_status != 0 =>
                             app.terminate :: :: method
-                            return 1153
-                    select app.clipboard_string :: :: method:
-                        when Result.Ok(text) =>
-                            select text.find :: "rnaglfw clipboard smoke" :: method:
-                                when Option.Some(0) => ()
-                                when _ =>
-                                    app.terminate :: :: method
-                                    return 1253
-                        when Result.Err(_) =>
-                            app.terminate :: :: method
-                            return 1254
-                    select app.set_clipboard_string :: "rnaglfw app clipboard smoke" :: method:
-                        when Result.Ok(_) => ()
-                        when Result.Err(_) =>
-                            app.terminate :: :: method
-                            return 1255
-                    select window.clipboard_string :: :: method:
-                        when Result.Ok(text) =>
-                            select text.find :: "rnaglfw app clipboard smoke" :: method:
-                                when Option.Some(0) => ()
-                                when _ =>
-                                    app.terminate :: :: method
-                                    return 1256
-                        when Result.Err(_) =>
-                            app.terminate :: :: method
-                            return 1257
+                            return clipboard_status
+                        else => ()
                     let placement = window.windowed_placement :: :: method
                     window.restore_windowed_placement :: placement :: method
                     let _ = window.key_state :: KeyCode.A :: method
@@ -1815,19 +1787,12 @@ fn main() -> I32:
                         when Result.Err(_) =>
                             app.terminate :: :: method
                             return 206
-                    let green_cursor = rgba_color :: 0U8, 255U8, 0U8, 255U8 :: call
-                    select solid_rgba_image :: 1, 1, green_cursor :: call:
-                        when Result.Ok(cursor_image) =>
-                            select window.set_cursor_image :: cursor_image, 0, 0 :: method:
-                                when Option.Some(cursor) =>
-                                    window.use_default_cursor :: :: method
-                                    cursor.destroy :: :: method
-                                when Option.None =>
-                                    app.terminate :: :: method
-                                    return 207
-                        when Result.Err(_) =>
+                    let cursor_status = prove_cursor_image_smoke :: window :: call
+                    select:
+                        when cursor_status != 0 =>
                             app.terminate :: :: method
-                            return 208
+                            return cursor_status
+                        else => ()
                     select window.gl_proc_address :: "glGetString" :: method:
                         when Result.Ok(_) => ()
                         when Result.Err(_) =>
@@ -2016,16 +1981,12 @@ fn main() -> I32:
                     let _ = only_window_snapshot.opengl_debug_context
                     let _ = only_window_snapshot.context_no_error
                     let _ = only_window_snapshot.srgb_capable
-                    select only_window_snapshot.title:
-                        when Result.Ok(text) =>
-                            select text.find :: "runa_app smoke active" :: method:
-                                when Option.Some(0) => ()
-                                when _ =>
-                                    app.terminate :: :: method
-                                    return 1166
-                        when Result.Err(_) =>
+                    let only_window_title_status = expect_active_title_result :: only_window_snapshot.title, 1166, 1167 :: call
+                    select:
+                        when only_window_title_status != 0 =>
                             app.terminate :: :: method
-                            return 1167
+                            return only_window_title_status
+                        else => ()
                     select app.window_snapshot :: window_id :: method:
                         when Result.Ok(snapshot) =>
                             select:
@@ -2078,16 +2039,12 @@ fn main() -> I32:
                                     app.terminate :: :: method
                                     return 2230
                                 else => ()
-                            select snapshot.title:
-                                when Result.Ok(text) =>
-                                    select text.find :: "runa_app smoke active" :: method:
-                                        when Option.Some(0) => ()
-                                        when _ =>
-                                            app.terminate :: :: method
-                                            return 1169
-                                when Result.Err(_) =>
+                            let snapshot_title_status = expect_active_title_result :: snapshot.title, 1169, 1170 :: call
+                            select:
+                                when snapshot_title_status != 0 =>
                                     app.terminate :: :: method
-                                    return 1170
+                                    return snapshot_title_status
+                                else => ()
                         when Result.Err(_) =>
                             app.terminate :: :: method
                             return 220
@@ -2183,23 +2140,28 @@ fn main() -> I32:
                                     let fullscreen_mode = modes.remove :: 0 :: method
                                     select fullscreen_window_spec_with_video_mode :: "mode spec", primary_monitor, fullscreen_mode :: call:
                                         when Result.Ok(mode_spec) =>
-                                            let Result.Ok(mode_width) = fullscreen_mode.width as Maybe[Index] else =>
-                                                app.terminate :: :: method
-                                                return 243
-                                            let Result.Ok(mode_height) = fullscreen_mode.height as Maybe[Index] else =>
-                                                app.terminate :: :: method
-                                                return 244
-                                            select:
-                                                when mode_spec.width != mode_width =>
+                                            select either:
+                                                when mode_width: Result.Ok(mode_width) <- fullscreen_mode.width as Maybe[Index]
+                                                when mode_height: Result.Ok(mode_height) <- fullscreen_mode.height as Maybe[Index] =>
+                                                    select:
+                                                        when mode_spec.width != mode_width =>
+                                                            app.terminate :: :: method
+                                                            return 245
+                                                        when mode_spec.height != mode_height =>
+                                                            app.terminate :: :: method
+                                                            return 246
+                                                        when mode_spec.refresh_rate != fullscreen_mode.refresh_rate =>
+                                                            app.terminate :: :: method
+                                                            return 247
+                                                        else => ()
+
+                                            with Result.Err(_):
+                                                mode_width =>
                                                     app.terminate :: :: method
-                                                    return 245
-                                                when mode_spec.height != mode_height =>
+                                                    return 243
+                                                mode_height =>
                                                     app.terminate :: :: method
-                                                    return 246
-                                                when mode_spec.refresh_rate != fullscreen_mode.refresh_rate =>
-                                                    app.terminate :: :: method
-                                                    return 247
-                                                else => ()
+                                                    return 244
                                             let windowed_mode_spec = window_spec_windowed :: mode_spec :: call
                                             select:
                                                 when !windowed_mode_spec.monitor.is_null :: :: method =>
@@ -2212,26 +2174,31 @@ fn main() -> I32:
                                     let fluent_fullscreen_base = window_spec :: "fluent fullscreen", 1, 1 :: call
                                     select fluent_fullscreen_base.with_fullscreen_video_mode :: primary_monitor, fullscreen_mode :: method:
                                         when Result.Ok(fluent_mode_spec) =>
-                                            let Result.Ok(mode_width) = fullscreen_mode.width as Maybe[Index] else =>
-                                                app.terminate :: :: method
-                                                return 258
-                                            let Result.Ok(mode_height) = fullscreen_mode.height as Maybe[Index] else =>
-                                                app.terminate :: :: method
-                                                return 259
-                                            select:
-                                                when fluent_mode_spec.width != mode_width =>
+                                            select either:
+                                                when mode_width: Result.Ok(mode_width) <- fullscreen_mode.width as Maybe[Index]
+                                                when mode_height: Result.Ok(mode_height) <- fullscreen_mode.height as Maybe[Index] =>
+                                                    select:
+                                                        when fluent_mode_spec.width != mode_width =>
+                                                            app.terminate :: :: method
+                                                            return 260
+                                                        when fluent_mode_spec.height != mode_height =>
+                                                            app.terminate :: :: method
+                                                            return 261
+                                                        when fluent_mode_spec.refresh_rate != fullscreen_mode.refresh_rate =>
+                                                            app.terminate :: :: method
+                                                            return 262
+                                                        when fluent_mode_spec.monitor.is_null :: :: method =>
+                                                            app.terminate :: :: method
+                                                            return 263
+                                                        else => ()
+
+                                            with Result.Err(_):
+                                                mode_width =>
                                                     app.terminate :: :: method
-                                                    return 260
-                                                when fluent_mode_spec.height != mode_height =>
+                                                    return 258
+                                                mode_height =>
                                                     app.terminate :: :: method
-                                                    return 261
-                                                when fluent_mode_spec.refresh_rate != fullscreen_mode.refresh_rate =>
-                                                    app.terminate :: :: method
-                                                    return 262
-                                                when fluent_mode_spec.monitor.is_null :: :: method =>
-                                                    app.terminate :: :: method
-                                                    return 263
-                                                else => ()
+                                                    return 259
                                             let windowed_fluent_mode_spec = fluent_mode_spec.with_windowed :: :: method
                                             select:
                                                 when !windowed_fluent_mode_spec.monitor.is_null :: :: method =>
@@ -2547,24 +2514,25 @@ fn main() -> I32:
                                             app.terminate :: :: method
                                             return 1293
                                         else => ()
-                            select app_snapshot.version_string:
-                                when Result.Ok(snapshot_text) =>
-                                    select live_version_string:
-                                        when Result.Ok(live_text) =>
-                                            select:
-                                                when snapshot_text.byte_count :: :: method != live_text.byte_count :: :: method =>
-                                                    app.terminate :: :: method
-                                                    return 1273
-                                                when !snapshot_text.starts_with :: live_text :: method =>
-                                                    app.terminate :: :: method
-                                                    return 1274
-                                                else => ()
-                                        when Result.Err(_) =>
+                            select either:
+                                when snapshot_text: Result.Ok(snapshot_text) <- app_snapshot.version_string
+                                when live_text: Result.Ok(live_text) <- live_version_string =>
+                                    select:
+                                        when snapshot_text.byte_count :: :: method != live_text.byte_count :: :: method =>
                                             app.terminate :: :: method
-                                            return 1275
-                                when Result.Err(_) =>
+                                            return 1273
+                                        when !snapshot_text.starts_with :: live_text :: method =>
+                                            app.terminate :: :: method
+                                            return 1274
+                                        else => ()
+
+                            with Result.Err(_):
+                                snapshot_text =>
                                     app.terminate :: :: method
                                     return 1276
+                                live_text =>
+                                    app.terminate :: :: method
+                                    return 1275
                             let saw_primary = false
                             repeat while !monitor_ids.is_empty :: :: method:
                                 let id = monitor_ids.remove :: 0 :: method
@@ -2604,26 +2572,32 @@ fn main() -> I32:
                                 when _ =>
                                     app.terminate :: :: method
                                     return 1198
-                            let Result.Ok(first_axis_len) = first_joystick_snapshot.axes.count :: :: method as Maybe[CInt] else =>
-                                app.terminate :: :: method
-                                return 1199
-                            let Result.Ok(first_button_len) = first_joystick_snapshot.buttons.count :: :: method as Maybe[CInt] else =>
-                                app.terminate :: :: method
-                                return 1200
-                            let Result.Ok(first_hat_len) = first_joystick_snapshot.hats.count :: :: method as Maybe[CInt] else =>
-                                app.terminate :: :: method
-                                return 1201
-                            select:
-                                when first_axis_len != first_joystick_snapshot.axis_count =>
+                            select either:
+                                when first_axis_len: Result.Ok(first_axis_len) <- first_joystick_snapshot.axes.count :: :: method as Maybe[CInt]
+                                when first_button_len: Result.Ok(first_button_len) <- first_joystick_snapshot.buttons.count :: :: method as Maybe[CInt]
+                                when first_hat_len: Result.Ok(first_hat_len) <- first_joystick_snapshot.hats.count :: :: method as Maybe[CInt] =>
+                                    select:
+                                        when first_axis_len != first_joystick_snapshot.axis_count =>
+                                            app.terminate :: :: method
+                                            return 1202
+                                        when first_button_len != first_joystick_snapshot.button_count =>
+                                            app.terminate :: :: method
+                                            return 1203
+                                        when first_hat_len != first_joystick_snapshot.hat_count =>
+                                            app.terminate :: :: method
+                                            return 1204
+                                        else => ()
+
+                            with Result.Err(_):
+                                first_axis_len =>
                                     app.terminate :: :: method
-                                    return 1202
-                                when first_button_len != first_joystick_snapshot.button_count =>
+                                    return 1199
+                                first_button_len =>
                                     app.terminate :: :: method
-                                    return 1203
-                                when first_hat_len != first_joystick_snapshot.hat_count =>
+                                    return 1200
+                                first_hat_len =>
                                     app.terminate :: :: method
-                                    return 1204
-                                else => ()
+                                    return 1201
                             select:
                                 when first_joystick_snapshot.gamepad =>
                                     select first_joystick_snapshot.gamepad_name_text:
@@ -2711,26 +2685,32 @@ fn main() -> I32:
                             when _ =>
                                 app.terminate :: :: method
                                 return 1219
-                        let Result.Ok(axis_len) = snapshot.axes.count :: :: method as Maybe[CInt] else =>
-                            app.terminate :: :: method
-                            return 1220
-                        let Result.Ok(button_len) = snapshot.buttons.count :: :: method as Maybe[CInt] else =>
-                            app.terminate :: :: method
-                            return 1221
-                        let Result.Ok(hat_len) = snapshot.hats.count :: :: method as Maybe[CInt] else =>
-                            app.terminate :: :: method
-                            return 1222
-                        select:
-                            when axis_len != snapshot.axis_count =>
+                        select either:
+                            when axis_len: Result.Ok(axis_len) <- snapshot.axes.count :: :: method as Maybe[CInt]
+                            when button_len: Result.Ok(button_len) <- snapshot.buttons.count :: :: method as Maybe[CInt]
+                            when hat_len: Result.Ok(hat_len) <- snapshot.hats.count :: :: method as Maybe[CInt] =>
+                                select:
+                                    when axis_len != snapshot.axis_count =>
+                                        app.terminate :: :: method
+                                        return 1223
+                                    when button_len != snapshot.button_count =>
+                                        app.terminate :: :: method
+                                        return 1224
+                                    when hat_len != snapshot.hat_count =>
+                                        app.terminate :: :: method
+                                        return 1225
+                                    else => ()
+
+                        with Result.Err(_):
+                            axis_len =>
                                 app.terminate :: :: method
-                                return 1223
-                            when button_len != snapshot.button_count =>
+                                return 1220
+                            button_len =>
                                 app.terminate :: :: method
-                                return 1224
-                            when hat_len != snapshot.hat_count =>
+                                return 1221
+                            hat_len =>
                                 app.terminate :: :: method
-                                return 1225
-                            else => ()
+                                return 1222
                         select:
                             when snapshot.gamepad =>
                                 select snapshot.gamepad_name_text:
@@ -2913,16 +2893,12 @@ fn main() -> I32:
                             app.terminate :: :: method
                             return 1
                         else => ()
-                    select closing_snapshot.title:
-                        when Result.Ok(text) =>
-                            select text.find :: "runa_app smoke active" :: method:
-                                when Option.Some(0) => ()
-                                when _ =>
-                                    app.terminate :: :: method
-                                    return 1191
-                        when Result.Err(_) =>
+                    let closing_title_status = expect_active_title_result :: closing_snapshot.title, 1191, 1192 :: call
+                    select:
+                        when closing_title_status != 0 =>
                             app.terminate :: :: method
-                            return 1192
+                            return closing_title_status
+                        else => ()
                     select:
                         when closing_snapshot.hwnd.is_null :: :: method =>
                             app.terminate :: :: method

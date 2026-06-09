@@ -1,0 +1,68 @@
+use std.{Option, Result, Str}
+use runa_app.App
+use runa_app.{Window, rgba_color, solid_rgba_image}
+
+fn expect_text_prefix_result[Error](take text_result: Result[Str, Error], read prefix: Str, mismatch_code: I32, error_code: I32) -> I32:
+    select either:
+        when text: Result.Ok(text) <- text_result
+        when found: Option.Some(found) <- text.find :: prefix :: method =>
+            select:
+                when found != 0 => return mismatch_code
+                else => return 0
+
+    with Result.Err(_):
+        text => return error_code
+
+    with Option.None:
+        found => return mismatch_code
+
+fn expect_window_clipboard_prefix(read window: Window, read prefix: Str, mismatch_code: I32, error_code: I32) -> I32:
+    let text_result = window.clipboard_string :: :: method
+    return expect_text_prefix_result :: text_result, prefix, mismatch_code, error_code :: call
+
+fn expect_app_clipboard_prefix(edit app: App, read prefix: Str, mismatch_code: I32, error_code: I32) -> I32:
+    let text_result = app.clipboard_string :: :: method
+    return expect_text_prefix_result :: text_result, prefix, mismatch_code, error_code :: call
+
+pub fn expect_active_title_result[Error](take title_result: Result[Str, Error], mismatch_code: I32, error_code: I32) -> I32:
+    return expect_text_prefix_result :: title_result, "runa_app smoke active", mismatch_code, error_code :: call
+
+pub fn expect_active_window_title(read window: Window, mismatch_code: I32, error_code: I32) -> I32:
+    let title_result = window.title :: :: method
+    return expect_active_title_result :: title_result, mismatch_code, error_code :: call
+
+pub fn prove_clipboard_smoke(edit app: App, edit window: Window) -> I32:
+    select window.set_clipboard_string :: "rnaglfw clipboard smoke" :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 1151
+
+    let window_status = expect_window_clipboard_prefix :: window, "rnaglfw clipboard smoke", 1152, 1153 :: call
+    select:
+        when window_status != 0 => return window_status
+        else => ()
+
+    let app_status = expect_app_clipboard_prefix :: app, "rnaglfw clipboard smoke", 1253, 1254 :: call
+    select:
+        when app_status != 0 => return app_status
+        else => ()
+
+    select app.set_clipboard_string :: "rnaglfw app clipboard smoke" :: method:
+        when Result.Ok(_) => ()
+        when Result.Err(_) => return 1255
+
+    return expect_window_clipboard_prefix :: window, "rnaglfw app clipboard smoke", 1256, 1257 :: call
+
+pub fn prove_cursor_image_smoke(edit window: Window) -> I32:
+    let green_cursor = rgba_color :: 0U8, 255U8, 0U8, 255U8 :: call
+    select either:
+        when cursor_image: Result.Ok(cursor_image) <- solid_rgba_image :: 1, 1, green_cursor :: call
+        when cursor: Option.Some(cursor) <- window.set_cursor_image :: cursor_image, 0, 0 :: method =>
+            window.use_default_cursor :: :: method
+            cursor.destroy :: :: method
+            return 0
+
+    with Result.Err(_):
+        cursor_image => return 208
+
+    with Option.None:
+        cursor => return 207

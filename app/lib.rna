@@ -6,6 +6,7 @@ pub mod event
 pub mod graphics
 pub mod joystick
 pub mod runtime
+pub mod runner
 pub mod system
 pub mod window
 
@@ -99,6 +100,7 @@ pub use runtime.app_init_config_with_wayland_libdecor
 pub use runtime.app_init_config_with_x11_xcb_vulkan_surface
 pub use runtime.{wayland_libdecor_mode_from_raw, wayland_libdecor_mode_raw}
 pub use runtime.win32_app_init_config
+pub use runner.{run, run_with_config, run_with_config_and_flow, run_with_flow}
 pub use system.{Platform, RuntimeErrorInfo, RuntimeErrorKind, VersionInfo}
 pub use system.{runtime_last_error, runtime_platform, runtime_platform_from_raw}
 pub use system.{runtime_platform_raw, runtime_platform_supported}

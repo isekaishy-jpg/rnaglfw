@@ -22,40 +22,47 @@ fn byte_buffers_equal(read left: ByteBuffer, read right: ByteBuffer) -> Bool:
 
 pub fn check_vulkan_transfer_helpers(edit present_app: VulkanPresentApp) -> I32:
     let fill = rgba_color :: 31U8, 79U8, 143U8, 255U8 :: call
-    let Result.Ok(source_image) = present_app.surface_image :: fill :: method else => return 1
-    let Result.Ok(source_pixels) = source_image.copy_pixels :: :: method else => return 2
+    let source_pixels = ByteBuffer :: :: call
+    select either:
+        when source_image: Result.Ok(source_image) <- present_app.surface_image :: fill :: method
+        when loaded_pixels: Result.Ok(loaded_pixels) <- source_image.copy_pixels :: :: method =>
+            let frozen_loaded_pixels = loaded_pixels.freeze :: :: method
+            source_pixels.extend :: frozen_loaded_pixels :: method
+
+    with Result.Err(_):
+        source_image => return 1
+        loaded_pixels => return 2
     let source_byte_count = source_pixels.byte_count :: :: method
     let buffer_usage = present_app.transfer_source_buffer_usage :: :: method | present_app.transfer_destination_buffer_usage :: :: method
     let image_usage = present_app.transfer_source_image_usage :: :: method | present_app.transfer_destination_image_usage :: :: method
     select present_app.surface_transfer_destination_image_plan :: :: method:
         when Result.Ok(surface_plan) =>
             let surface_format = surface_plan.surface_format :: :: method
-            select present_app.host_coherent_buffer :: source_byte_count, buffer_usage :: method:
-                when Result.Ok(source_buffer) =>
-                    select present_app.write_buffer :: source_buffer, source_pixels :: method:
-                        when Result.Ok(_) =>
-                            select present_app.buffer_bytes :: source_buffer :: method:
-                                when Result.Ok(expected_bytes) =>
+            select either:
+                when source_buffer: Result.Ok(source_buffer) <- present_app.host_coherent_buffer :: source_byte_count, buffer_usage :: method
+                when write_complete: Result.Ok(_) <- present_app.write_buffer :: source_buffer, source_pixels :: method
+                when expected_bytes: Result.Ok(expected_bytes) <- present_app.buffer_bytes :: source_buffer :: method =>
                                     select present_app.host_coherent_buffer :: source_byte_count, buffer_usage :: method:
                                         when Result.Ok(mirror_buffer) =>
-                                            select present_app.copy_buffer :: source_buffer, mirror_buffer :: method:
-                                                when Result.Ok(_) =>
-                                                    select present_app.buffer_bytes :: mirror_buffer :: method:
-                                                        when Result.Ok(mirror_bytes) =>
-                                                            select:
-                                                                when !byte_buffers_equal :: expected_bytes, mirror_bytes :: call =>
-                                                                    present_app.destroy_buffer :: mirror_buffer :: method
-                                                                    present_app.destroy_buffer :: source_buffer :: method
-                                                                    return 3
-                                                                else => ()
-                                                        when Result.Err(_) =>
+                                            select either:
+                                                when copied: Result.Ok(_) <- present_app.copy_buffer :: source_buffer, mirror_buffer :: method
+                                                when mirror_bytes: Result.Ok(mirror_bytes) <- present_app.buffer_bytes :: mirror_buffer :: method =>
+                                                    select:
+                                                        when !byte_buffers_equal :: expected_bytes, mirror_bytes :: call =>
                                                             present_app.destroy_buffer :: mirror_buffer :: method
                                                             present_app.destroy_buffer :: source_buffer :: method
-                                                            return 4
-                                                when Result.Err(_) =>
+                                                            return 3
+                                                        else => ()
+
+                                            with Result.Err(_):
+                                                copied =>
                                                     present_app.destroy_buffer :: mirror_buffer :: method
                                                     present_app.destroy_buffer :: source_buffer :: method
                                                     return 5
+                                                mirror_bytes =>
+                                                    present_app.destroy_buffer :: mirror_buffer :: method
+                                                    present_app.destroy_buffer :: source_buffer :: method
+                                                    return 4
                                             present_app.destroy_buffer :: mirror_buffer :: method
                                         when Result.Err(_) =>
                                             present_app.destroy_buffer :: source_buffer :: method
@@ -64,53 +71,51 @@ pub fn check_vulkan_transfer_helpers(edit present_app: VulkanPresentApp) -> I32:
                                         when Result.Ok(transfer_image) =>
                                             select present_app.host_coherent_buffer :: source_byte_count, buffer_usage :: method:
                                                 when Result.Ok(roundtrip_buffer) =>
-                                                    select present_app.command_resources :: :: method:
-                                                        when Result.Ok(resources) =>
-                                                            select present_app.begin_command_resources :: resources :: method:
-                                                                when Result.Ok(_) =>
-                                                                    select present_app.record_copy_buffer_to_image :: resources, source_buffer, transfer_image :: method:
-                                                                        when Result.Ok(_) =>
-                                                                            select present_app.record_copy_image_to_buffer :: resources, transfer_image, roundtrip_buffer :: method:
-                                                                                when Result.Ok(_) =>
-                                                                                    select present_app.end_command_resources :: resources :: method:
-                                                                                        when Result.Ok(_) =>
-                                                                                            select present_app.submit_command_resources :: resources :: method:
-                                                                                                when Result.Ok(_) => ()
-                                                                                                when Result.Err(_) =>
-                                                                                                    present_app.destroy_command_resources :: resources :: method
-                                                                                                    present_app.destroy_buffer :: roundtrip_buffer :: method
-                                                                                                    present_app.destroy_image :: transfer_image :: method
-                                                                                                    present_app.destroy_buffer :: source_buffer :: method
-                                                                                                    return 7
-                                                                                        when Result.Err(_) =>
-                                                                                            present_app.destroy_command_resources :: resources :: method
-                                                                                            present_app.destroy_buffer :: roundtrip_buffer :: method
-                                                                                            present_app.destroy_image :: transfer_image :: method
-                                                                                            present_app.destroy_buffer :: source_buffer :: method
-                                                                                            return 8
-                                                                                when Result.Err(_) =>
-                                                                                    present_app.destroy_command_resources :: resources :: method
-                                                                                    present_app.destroy_buffer :: roundtrip_buffer :: method
-                                                                                    present_app.destroy_image :: transfer_image :: method
-                                                                                    present_app.destroy_buffer :: source_buffer :: method
-                                                                                    return 9
-                                                                        when Result.Err(_) =>
-                                                                            present_app.destroy_command_resources :: resources :: method
-                                                                            present_app.destroy_buffer :: roundtrip_buffer :: method
-                                                                            present_app.destroy_image :: transfer_image :: method
-                                                                            present_app.destroy_buffer :: source_buffer :: method
-                                                                            return 10
-                                                                when Result.Err(_) =>
-                                                                    present_app.destroy_command_resources :: resources :: method
-                                                                    present_app.destroy_buffer :: roundtrip_buffer :: method
-                                                                    present_app.destroy_image :: transfer_image :: method
-                                                                    present_app.destroy_buffer :: source_buffer :: method
-                                                                    return 11
-                                                        when Result.Err(_) =>
+                                                    select either:
+                                                        when resources: Result.Ok(resources) <- present_app.command_resources :: :: method
+                                                        when began: Result.Ok(_) <- present_app.begin_command_resources :: resources :: method
+                                                        when recorded_copy_to_image: Result.Ok(_) <- present_app.record_copy_buffer_to_image :: resources, source_buffer, transfer_image :: method
+                                                        when recorded_copy_to_buffer: Result.Ok(_) <- present_app.record_copy_image_to_buffer :: resources, transfer_image, roundtrip_buffer :: method
+                                                        when ended: Result.Ok(_) <- present_app.end_command_resources :: resources :: method
+                                                        when submitted: Result.Ok(_) <- present_app.submit_command_resources :: resources :: method =>
+                                                            ()
+
+                                                    with Result.Err(_):
+                                                        resources =>
                                                             present_app.destroy_buffer :: roundtrip_buffer :: method
                                                             present_app.destroy_image :: transfer_image :: method
                                                             present_app.destroy_buffer :: source_buffer :: method
                                                             return 12
+                                                        began =>
+                                                            present_app.destroy_command_resources :: resources :: method
+                                                            present_app.destroy_buffer :: roundtrip_buffer :: method
+                                                            present_app.destroy_image :: transfer_image :: method
+                                                            present_app.destroy_buffer :: source_buffer :: method
+                                                            return 11
+                                                        recorded_copy_to_image =>
+                                                            present_app.destroy_command_resources :: resources :: method
+                                                            present_app.destroy_buffer :: roundtrip_buffer :: method
+                                                            present_app.destroy_image :: transfer_image :: method
+                                                            present_app.destroy_buffer :: source_buffer :: method
+                                                            return 10
+                                                        recorded_copy_to_buffer =>
+                                                            present_app.destroy_command_resources :: resources :: method
+                                                            present_app.destroy_buffer :: roundtrip_buffer :: method
+                                                            present_app.destroy_image :: transfer_image :: method
+                                                            present_app.destroy_buffer :: source_buffer :: method
+                                                            return 9
+                                                        ended =>
+                                                            present_app.destroy_command_resources :: resources :: method
+                                                            present_app.destroy_buffer :: roundtrip_buffer :: method
+                                                            present_app.destroy_image :: transfer_image :: method
+                                                            present_app.destroy_buffer :: source_buffer :: method
+                                                            return 8
+                                                        submitted =>
+                                                            present_app.destroy_command_resources :: resources :: method
+                                                            present_app.destroy_buffer :: roundtrip_buffer :: method
+                                                            present_app.destroy_image :: transfer_image :: method
+                                                            present_app.destroy_buffer :: source_buffer :: method
+                                                            return 7
                                                     select:
                                                         when !transfer_image.transfer_source_ready :: :: method =>
                                                             present_app.destroy_buffer :: roundtrip_buffer :: method
@@ -158,40 +163,41 @@ pub fn check_vulkan_transfer_helpers(edit present_app: VulkanPresentApp) -> I32:
                                                                     return 18
                                                             select present_app.host_coherent_buffer :: source_byte_count, buffer_usage :: method:
                                                                 when Result.Ok(copied_bytes_buffer) =>
-                                                                    select present_app.copy_image_to_buffer :: image_copy, copied_bytes_buffer :: method:
-                                                                        when Result.Ok(_) =>
-                                                                            select present_app.buffer_bytes :: copied_bytes_buffer :: method:
-                                                                                when Result.Ok(copied_bytes) =>
-                                                                                    select:
-                                                                                        when !byte_buffers_equal :: expected_bytes, copied_bytes :: call =>
-                                                                                            present_app.destroy_buffer :: copied_bytes_buffer :: method
-                                                                                            present_app.destroy_image :: image_copy :: method
-                                                                                            present_app.destroy_buffer :: roundtrip_buffer :: method
-                                                                                            present_app.destroy_image :: transfer_image :: method
-                                                                                            present_app.destroy_buffer :: source_buffer :: method
-                                                                                            return 19
-                                                                                        when !image_copy.transfer_source_ready :: :: method =>
-                                                                                            present_app.destroy_buffer :: copied_bytes_buffer :: method
-                                                                                            present_app.destroy_image :: image_copy :: method
-                                                                                            present_app.destroy_buffer :: roundtrip_buffer :: method
-                                                                                            present_app.destroy_image :: transfer_image :: method
-                                                                                            present_app.destroy_buffer :: source_buffer :: method
-                                                                                            return 20
-                                                                                        else => ()
-                                                                                when Result.Err(_) =>
+                                                                    select either:
+                                                                        when copied: Result.Ok(_) <- present_app.copy_image_to_buffer :: image_copy, copied_bytes_buffer :: method
+                                                                        when copied_bytes: Result.Ok(copied_bytes) <- present_app.buffer_bytes :: copied_bytes_buffer :: method =>
+                                                                            select:
+                                                                                when !byte_buffers_equal :: expected_bytes, copied_bytes :: call =>
                                                                                     present_app.destroy_buffer :: copied_bytes_buffer :: method
                                                                                     present_app.destroy_image :: image_copy :: method
                                                                                     present_app.destroy_buffer :: roundtrip_buffer :: method
                                                                                     present_app.destroy_image :: transfer_image :: method
                                                                                     present_app.destroy_buffer :: source_buffer :: method
-                                                                                    return 21
-                                                                        when Result.Err(_) =>
+                                                                                    return 19
+                                                                                when !image_copy.transfer_source_ready :: :: method =>
+                                                                                    present_app.destroy_buffer :: copied_bytes_buffer :: method
+                                                                                    present_app.destroy_image :: image_copy :: method
+                                                                                    present_app.destroy_buffer :: roundtrip_buffer :: method
+                                                                                    present_app.destroy_image :: transfer_image :: method
+                                                                                    present_app.destroy_buffer :: source_buffer :: method
+                                                                                    return 20
+                                                                                else => ()
+
+                                                                    with Result.Err(_):
+                                                                        copied =>
                                                                             present_app.destroy_buffer :: copied_bytes_buffer :: method
                                                                             present_app.destroy_image :: image_copy :: method
                                                                             present_app.destroy_buffer :: roundtrip_buffer :: method
                                                                             present_app.destroy_image :: transfer_image :: method
                                                                             present_app.destroy_buffer :: source_buffer :: method
                                                                             return 22
+                                                                        copied_bytes =>
+                                                                            present_app.destroy_buffer :: copied_bytes_buffer :: method
+                                                                            present_app.destroy_image :: image_copy :: method
+                                                                            present_app.destroy_buffer :: roundtrip_buffer :: method
+                                                                            present_app.destroy_image :: transfer_image :: method
+                                                                            present_app.destroy_buffer :: source_buffer :: method
+                                                                            return 21
                                                                     present_app.destroy_buffer :: copied_bytes_buffer :: method
                                                                 when Result.Err(_) =>
                                                                     present_app.destroy_image :: image_copy :: method
@@ -215,12 +221,14 @@ pub fn check_vulkan_transfer_helpers(edit present_app: VulkanPresentApp) -> I32:
                                             present_app.destroy_buffer :: source_buffer :: method
                                             return 26
                                     present_app.destroy_buffer :: source_buffer :: method
-                                when Result.Err(_) =>
-                                    present_app.destroy_buffer :: source_buffer :: method
-                                    return 27
-                        when Result.Err(_) =>
-                            present_app.destroy_buffer :: source_buffer :: method
-                            return 28
-                when Result.Err(_) => return 29
+
+            with Result.Err(_):
+                source_buffer => return 29
+                write_complete =>
+                    present_app.destroy_buffer :: source_buffer :: method
+                    return 28
+                expected_bytes =>
+                    present_app.destroy_buffer :: source_buffer :: method
+                    return 27
         when Result.Err(_) => return 30
     return 0

@@ -668,37 +668,43 @@ fn main() -> I32:
                         when Option.None => ()
             select snapshot.primary_monitor_id:
                 when Option.Some(primary_monitor_id) =>
-                    select present_app.monitor_option :: primary_monitor_id :: method:
-                        when Option.Some(optional_monitor) =>
-                            select present_app.monitor :: primary_monitor_id :: method:
-                                when Result.Ok(strict_monitor) =>
-                                    let optional_monitor_pos = optional_monitor.screen_pos :: :: method
-                                    let strict_monitor_pos = strict_monitor.screen_pos :: :: method
-                                    select:
-                                        when optional_monitor_pos.x != strict_monitor_pos.x => return 42
-                                        when optional_monitor_pos.y != strict_monitor_pos.y => return 43
-                                        else => ()
-                                when Result.Err(_) => return 44
-                        when Option.None => return 45
+                    select either:
+                        when optional_monitor: Option.Some(optional_monitor) <- present_app.monitor_option :: primary_monitor_id :: method
+                        when strict_monitor: Result.Ok(strict_monitor) <- present_app.monitor :: primary_monitor_id :: method =>
+                            let optional_monitor_pos = optional_monitor.screen_pos :: :: method
+                            let strict_monitor_pos = strict_monitor.screen_pos :: :: method
+                            select:
+                                when optional_monitor_pos.x != strict_monitor_pos.x => return 42
+                                when optional_monitor_pos.y != strict_monitor_pos.y => return 43
+                                else => ()
+
+                    with Option.None:
+                        optional_monitor => return 45
+
+                    with Result.Err(_):
+                        strict_monitor => return 44
                     select present_app.monitor_snapshot_option :: primary_monitor_id :: method:
                         when Option.Some(optional_monitor_snapshot) =>
                             select:
                                 when optional_monitor_snapshot.id != primary_monitor_id => return 46
                                 else => ()
                         when Option.None => return 47
-                    select present_app.primary_monitor_option :: :: method:
-                        when Option.Some(primary_monitor) =>
-                            select present_app.primary_monitor :: :: method:
-                                when Result.Ok(strict_primary_monitor) =>
-                                    let optional_primary_pos = primary_monitor.screen_pos :: :: method
-                                    let strict_primary_pos = strict_primary_monitor.screen_pos :: :: method
-                                    select:
-                                        when !primary_monitor.primary :: :: method => return 48
-                                        when optional_primary_pos.x != strict_primary_pos.x => return 49
-                                        when optional_primary_pos.y != strict_primary_pos.y => return 50
-                                        else => ()
-                                when Result.Err(_) => return 51
-                        when Option.None => return 52
+                    select either:
+                        when primary_monitor: Option.Some(primary_monitor) <- present_app.primary_monitor_option :: :: method
+                        when strict_primary_monitor: Result.Ok(strict_primary_monitor) <- present_app.primary_monitor :: :: method =>
+                            let optional_primary_pos = primary_monitor.screen_pos :: :: method
+                            let strict_primary_pos = strict_primary_monitor.screen_pos :: :: method
+                            select:
+                                when !primary_monitor.primary :: :: method => return 48
+                                when optional_primary_pos.x != strict_primary_pos.x => return 49
+                                when optional_primary_pos.y != strict_primary_pos.y => return 50
+                                else => ()
+
+                    with Option.None:
+                        primary_monitor => return 52
+
+                    with Result.Err(_):
+                        strict_primary_monitor => return 51
                     select present_app.primary_monitor_id_option :: :: method:
                         when Option.Some(optional_primary_monitor_id) =>
                             select:
@@ -857,12 +863,15 @@ fn main() -> I32:
             present_app.set_sticky_mouse_buttons :: true :: method
             present_app.set_lock_key_mods :: true :: method
             present_app.hide_cursor :: :: method
-            select present_app.title :: :: method:
-                when Result.Ok(title) =>
-                    select title.find :: UPDATED_WINDOW_TITLE :: method:
-                        when Option.Some(_) => ()
-                        when Option.None => return 311
-                when Result.Err(_) => return 312
+            select either:
+                when title: Result.Ok(title) <- present_app.title :: :: method
+                when title_match: Option.Some(_) <- title.find :: UPDATED_WINDOW_TITLE :: method => ()
+
+            with Result.Err(_):
+                title => return 312
+
+            with Option.None:
+                title_match => return 311
             let owned_input_snapshot = present_app.input_snapshot :: :: method
             let owned_keyboard_snapshot = present_app.keyboard_snapshot :: :: method
             let owned_mouse_snapshot = present_app.mouse_snapshot :: :: method
@@ -971,12 +980,15 @@ fn main() -> I32:
                         when owned_keyboard_snapshot.repeating_keys.count :: :: method != owned_input_snapshot.keyboard.repeating_keys.count :: :: method => return 351
                         when owned_mouse_snapshot.buttons_down.count :: :: method != owned_input_snapshot.mouse.buttons_down.count :: :: method => return 352
                         else => ()
-                    select owned_window_snapshot.title:
-                        when Result.Ok(title) =>
-                            select title.find :: UPDATED_WINDOW_TITLE :: method:
-                                when Option.Some(_) => ()
-                                when Option.None => return 313
-                        when Result.Err(_) => return 314
+                    select either:
+                        when title: Result.Ok(title) <- owned_window_snapshot.title
+                        when title_match: Option.Some(_) <- title.find :: UPDATED_WINDOW_TITLE :: method => ()
+
+                    with Result.Err(_):
+                        title => return 314
+
+                    with Option.None:
+                        title_match => return 313
                     select present_app.cursor_mode :: :: method:
                         when CursorMode.Hidden => ()
                         when _ => return 367
@@ -1129,12 +1141,15 @@ fn main() -> I32:
             select present_app.set_clipboard_string :: "runa_app_vulkan clipboard smoke" :: method:
                 when Result.Ok(_) => ()
                 when Result.Err(_) => return 53
-            select present_app.clipboard_string :: :: method:
-                when Result.Ok(text) =>
-                    select text.find :: "runa_app_vulkan clipboard smoke" :: method:
-                        when Option.Some(_) => ()
-                        when Option.None => return 54
-                when Result.Err(_) => return 55
+            select either:
+                when text: Result.Ok(text) <- present_app.clipboard_string :: :: method
+                when text_match: Option.Some(_) <- text.find :: "runa_app_vulkan clipboard smoke" :: method => ()
+
+            with Result.Err(_):
+                text => return 55
+
+            with Option.None:
+                text_match => return 54
             let startup_pending_window_ids = present_app.pending_window_ids :: :: method
             select:
                 when startup_pending_window_ids.count :: :: method != 1 => return 688
@@ -1207,12 +1222,16 @@ fn main() -> I32:
                 when Option.Some(cursor) => present_app.set_cursor :: cursor :: method
                 when Option.None => return 426
             let cursor_fill = rgba_color :: 255U8, 64U8, 32U8, 255U8 :: call
-            select solid_rgba_image :: 2, 2, cursor_fill :: call:
-                when Result.Ok(cursor_image) =>
-                    select present_app.set_cursor_image :: cursor_image, 0, 0 :: method:
-                        when Option.Some(cursor) => present_app.set_cursor :: cursor :: method
-                        when Option.None => return 427
-                when Result.Err(_) => return 428
+            select either:
+                when cursor_image: Result.Ok(cursor_image) <- solid_rgba_image :: 2, 2, cursor_fill :: call
+                when cursor: Option.Some(cursor) <- present_app.set_cursor_image :: cursor_image, 0, 0 :: method =>
+                    present_app.set_cursor :: cursor :: method
+
+            with Result.Err(_):
+                cursor_image => return 428
+
+            with Option.None:
+                cursor => return 427
             present_app.use_default_cursor :: :: method
             let original_placement = present_app.windowed_placement :: :: method
             present_app.set_pos :: 24, 36 :: method
@@ -1894,44 +1913,50 @@ fn main() -> I32:
                 when pending_user_id != 91 => return 574
                 else => ()
             present_app.post_user_event :: 92 :: method
-            select present_app.wait_timeout :: 0.0 :: method:
-                when Result.Ok(event) =>
-                    select event:
-                        when Option.Some(app_event) =>
-                            select app_event.user_id :: :: method:
-                                when Option.Some(id) =>
-                                    select:
-                                        when id != 92 => return 82
-                                        else => ()
-                                when Option.None => return 83
-                        when Option.None => return 84
-                when Result.Err(_) => return 85
+            select either:
+                when event: Result.Ok(event) <- present_app.wait_timeout :: 0.0 :: method
+                when app_event: Option.Some(app_event) <- event
+                when id: Option.Some(id) <- app_event.user_id :: :: method =>
+                    select:
+                        when id != 92 => return 82
+                        else => ()
+
+            with Result.Err(_):
+                event => return 85
+
+            with Option.None:
+                app_event => return 84
+                id => return 83
             present_app.post_user_event :: 93 :: method
-            select present_app.poll :: :: method:
-                when Result.Ok(event) =>
-                    select event:
-                        when Option.Some(app_event) =>
-                            select app_event.user_id :: :: method:
-                                when Option.Some(id) =>
-                                    select:
-                                        when id != 93 => return 86
-                                        else => ()
-                                when Option.None => return 87
-                        when Option.None => return 88
-                when Result.Err(_) => return 89
+            select either:
+                when event: Result.Ok(event) <- present_app.poll :: :: method
+                when app_event: Option.Some(app_event) <- event
+                when id: Option.Some(id) <- app_event.user_id :: :: method =>
+                    select:
+                        when id != 93 => return 86
+                        else => ()
+
+            with Result.Err(_):
+                event => return 89
+
+            with Option.None:
+                app_event => return 88
+                id => return 87
             present_app.post_user_event :: 94 :: method
-            select present_app.wait :: :: method:
-                when Result.Ok(event) =>
-                    select event:
-                        when Option.Some(app_event) =>
-                            select app_event.user_id :: :: method:
-                                when Option.Some(id) =>
-                                    select:
-                                        when id != 94 => return 90
-                                        else => ()
-                                when Option.None => return 91
-                        when Option.None => return 92
-                when Result.Err(_) => return 93
+            select either:
+                when event: Result.Ok(event) <- present_app.wait :: :: method
+                when app_event: Option.Some(app_event) <- event
+                when id: Option.Some(id) <- app_event.user_id :: :: method =>
+                    select:
+                        when id != 94 => return 90
+                        else => ()
+
+            with Result.Err(_):
+                event => return 93
+
+            with Option.None:
+                app_event => return 92
+                id => return 91
             repeat:
                 select present_app.next_window_event :: :: method:
                     when Option.Some(_) => ()
@@ -1973,15 +1998,18 @@ fn main() -> I32:
                         else => ()
                 when _ => return 328
             present_app.post_user_event :: 96 :: method
-            select present_app.poll_user_event :: :: method:
-                when Result.Ok(event) =>
-                    select event:
-                        when Option.Some(user_event) =>
-                            select:
-                                when user_event.user_id :: :: method != 96 => return 81
-                                else => ()
-                        when Option.None => return 82
-                when Result.Err(_) => return 83
+            select either:
+                when event: Result.Ok(event) <- present_app.poll_user_event :: :: method
+                when user_event: Option.Some(user_event) <- event =>
+                    select:
+                        when user_event.user_id :: :: method != 96 => return 81
+                        else => ()
+
+            with Result.Err(_):
+                event => return 83
+
+            with Option.None:
+                user_event => return 82
             present_app.post_user_event :: 97 :: method
             let polled_user_ids = present_app.poll_user_ids :: :: method
             select:
@@ -2005,15 +2033,18 @@ fn main() -> I32:
                         else => ()
                 when _ => return 330
             present_app.post_user_event :: 99 :: method
-            select present_app.wait_user_event :: :: method:
-                when Result.Ok(event) =>
-                    select event:
-                        when Option.Some(user_event) =>
-                            select:
-                                when user_event.user_id :: :: method != 99 => return 88
-                                else => ()
-                        when Option.None => return 89
-                when Result.Err(_) => return 90
+            select either:
+                when event: Result.Ok(event) <- present_app.wait_user_event :: :: method
+                when user_event: Option.Some(user_event) <- event =>
+                    select:
+                        when user_event.user_id :: :: method != 99 => return 88
+                        else => ()
+
+            with Result.Err(_):
+                event => return 90
+
+            with Option.None:
+                user_event => return 89
             present_app.post_user_event :: 100 :: method
             let waited_user_ids = present_app.wait_user_ids :: :: method
             select:
@@ -2037,15 +2068,18 @@ fn main() -> I32:
                         else => ()
                 when _ => return 332
             present_app.post_user_event :: 102 :: method
-            select present_app.wait_timeout_user_event :: 0.0 :: method:
-                when Result.Ok(event) =>
-                    select event:
-                        when Option.Some(user_event) =>
-                            select:
-                                when user_event.user_id :: :: method != 102 => return 95
-                                else => ()
-                        when Option.None => return 96
-                when Result.Err(_) => return 97
+            select either:
+                when event: Result.Ok(event) <- present_app.wait_timeout_user_event :: 0.0 :: method
+                when user_event: Option.Some(user_event) <- event =>
+                    select:
+                        when user_event.user_id :: :: method != 102 => return 95
+                        else => ()
+
+            with Result.Err(_):
+                event => return 97
+
+            with Option.None:
+                user_event => return 96
             present_app.post_user_event :: 103 :: method
             let timeout_user_ids = present_app.wait_timeout_user_ids :: 0.0 :: method
             select:

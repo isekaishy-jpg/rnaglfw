@@ -12,31 +12,58 @@ pub fn check_present_pixel_path(edit present_app: VulkanPresentApp, read present
         when surface_width != extent.width => return 10
         when surface_height != extent.height => return 11
         else => ()
-    let Result.Ok(surface_width_index) = surface_width as Maybe[Index] else => return 638
-    let Result.Ok(surface_height_index) = surface_height as Maybe[Index] else => return 639
-    let Result.Ok(surface_width_wide) = surface_width_index as Maybe[USize] else => return 734
-    let Result.Ok(surface_height_wide) = surface_height_index as Maybe[USize] else => return 735
-    let expected_pixel_count_wide: USize = surface_width_wide * surface_height_wide
-    let Result.Ok(expected_pixel_count) = expected_pixel_count_wide as Maybe[Index] else => return 736
-    let Result.Ok(surface_pixel_count) = present_app.surface_pixel_count :: :: method else => return 742
-    let Result.Ok(snapshot_pixel_count) = present_snapshot.surface_pixel_count :: :: method else => return 743
-    select:
-        when surface_pixel_count != expected_pixel_count => return 744
-        when snapshot_pixel_count != expected_pixel_count => return 745
-        when snapshot_pixel_count != surface_pixel_count => return 746
-        else => ()
-    let Result.Ok(surface_pixel_format) = present_app.surface_pixel_format :: :: method else => return 640
-    let Result.Ok(snapshot_pixel_format) = present_snapshot.surface_pixel_format :: :: method else => return 641
-    let surface_pixel_format_code = vulkan_pixel_format_code :: surface_pixel_format :: call
-    let snapshot_pixel_format_code = vulkan_pixel_format_code :: snapshot_pixel_format :: call
-    select:
-        when surface_pixel_format_code != snapshot_pixel_format_code => return 642
-        else => ()
-    let Result.Ok(surface_tight_stride) = present_app.surface_tight_stride :: :: method else => return 643
-    let Result.Ok(snapshot_tight_stride) = present_snapshot.surface_tight_stride :: :: method else => return 644
-    select:
-        when surface_tight_stride != snapshot_tight_stride => return 645
-        else => ()
+    let surface_width_index: Index = 0
+    let surface_height_index: Index = 0
+    let expected_pixel_count: Index = 0
+    let surface_pixel_format_code: CInt = 0
+    let snapshot_pixel_format_code: CInt = 0
+    let surface_tight_stride: Index = 0
+    let snapshot_tight_stride: Index = 0
+    let surface_byte_count: Index = 0
+    select either:
+        when checked_surface_width_index: Result.Ok(checked_surface_width_index) <- surface_width as Maybe[Index]
+        when checked_surface_height_index: Result.Ok(checked_surface_height_index) <- surface_height as Maybe[Index]
+        when surface_width_wide: Result.Ok(surface_width_wide) <- checked_surface_width_index as Maybe[USize]
+        when surface_height_wide: Result.Ok(surface_height_wide) <- checked_surface_height_index as Maybe[USize]
+        when checked_expected_pixel_count: Result.Ok(checked_expected_pixel_count) <- ((surface_width_wide * surface_height_wide) as Maybe[Index])
+        when surface_pixel_count: Result.Ok(surface_pixel_count) <- present_app.surface_pixel_count :: :: method
+        when snapshot_pixel_count: Result.Ok(snapshot_pixel_count) <- present_snapshot.surface_pixel_count :: :: method =>
+            surface_width_index = checked_surface_width_index
+            surface_height_index = checked_surface_height_index
+            expected_pixel_count = checked_expected_pixel_count
+            select:
+                when surface_pixel_count != expected_pixel_count => return 744
+                when snapshot_pixel_count != expected_pixel_count => return 745
+                when snapshot_pixel_count != surface_pixel_count => return 746
+                else => ()
+
+    with Result.Err(_):
+        checked_surface_width_index => return 638
+        checked_surface_height_index => return 639
+        surface_width_wide => return 734
+        surface_height_wide => return 735
+        checked_expected_pixel_count => return 736
+        surface_pixel_count => return 742
+        snapshot_pixel_count => return 743
+    select either:
+        when surface_pixel_format: Result.Ok(surface_pixel_format) <- present_app.surface_pixel_format :: :: method
+        when snapshot_pixel_format: Result.Ok(snapshot_pixel_format) <- present_snapshot.surface_pixel_format :: :: method
+        when checked_surface_tight_stride: Result.Ok(checked_surface_tight_stride) <- present_app.surface_tight_stride :: :: method
+        when checked_snapshot_tight_stride: Result.Ok(checked_snapshot_tight_stride) <- present_snapshot.surface_tight_stride :: :: method =>
+            surface_pixel_format_code = vulkan_pixel_format_code :: surface_pixel_format :: call
+            snapshot_pixel_format_code = vulkan_pixel_format_code :: snapshot_pixel_format :: call
+            surface_tight_stride = checked_surface_tight_stride
+            snapshot_tight_stride = checked_snapshot_tight_stride
+            select:
+                when surface_pixel_format_code != snapshot_pixel_format_code => return 642
+                when surface_tight_stride != snapshot_tight_stride => return 645
+                else => ()
+
+    with Result.Err(_):
+        surface_pixel_format => return 640
+        snapshot_pixel_format => return 641
+        checked_surface_tight_stride => return 643
+        checked_snapshot_tight_stride => return 644
     let fill = rgba_color :: 32U8, 96U8, 224U8, 255U8 :: call
     select present_snapshot.surface_pixel_frame :: fill :: method:
         when Result.Ok(snapshot_frame) =>
@@ -53,23 +80,30 @@ pub fn check_present_pixel_path(edit present_app: VulkanPresentApp, read present
                         else => ()
                 when Result.Err(_) => return 687
         when Result.Err(_) => return 688
-    select present_snapshot.surface_pixel_frame_with_color :: VulkanPixelFormat.Rgba8, fill :: method:
-        when Result.Ok(snapshot_frame) =>
-            select snapshot_frame.pixel :: 0, 0 :: method:
-                when Result.Ok(snapshot_color) =>
-                    select:
-                        when snapshot_color.red != fill.red => return 674
-                        when snapshot_color.green != fill.green => return 675
-                        when snapshot_color.blue != fill.blue => return 676
-                        when snapshot_color.alpha != fill.alpha => return 677
-                        else => ()
-                when Result.Err(_) => return 678
-        when Result.Err(_) => return 679
-    let Result.Ok(surface_byte_count) = present_app.surface_rgba_byte_count :: :: method else => return 32
-    let Result.Ok(snapshot_byte_count) = present_snapshot.surface_rgba_byte_count :: :: method else => return 33
-    select:
-        when surface_byte_count != snapshot_byte_count => return 34
-        else => ()
+    select either:
+        when snapshot_frame: Result.Ok(snapshot_frame) <- present_snapshot.surface_pixel_frame_with_color :: VulkanPixelFormat.Rgba8, fill :: method
+        when snapshot_color: Result.Ok(snapshot_color) <- snapshot_frame.pixel :: 0, 0 :: method =>
+            select:
+                when snapshot_color.red != fill.red => return 674
+                when snapshot_color.green != fill.green => return 675
+                when snapshot_color.blue != fill.blue => return 676
+                when snapshot_color.alpha != fill.alpha => return 677
+                else => ()
+
+    with Result.Err(_):
+        snapshot_frame => return 679
+        snapshot_color => return 678
+    select either:
+        when checked_surface_byte_count: Result.Ok(checked_surface_byte_count) <- present_app.surface_rgba_byte_count :: :: method
+        when snapshot_byte_count: Result.Ok(snapshot_byte_count) <- present_snapshot.surface_rgba_byte_count :: :: method =>
+            surface_byte_count = checked_surface_byte_count
+            select:
+                when surface_byte_count != snapshot_byte_count => return 34
+                else => ()
+
+    with Result.Err(_):
+        checked_surface_byte_count => return 32
+        snapshot_byte_count => return 33
     select present_app.surface_image :: fill :: method:
         when Result.Ok(surface_image) =>
             let snapshot_surface_pixels = surface_image.take_pixels :: :: method
@@ -145,245 +179,249 @@ pub fn check_present_pixel_path(edit present_app: VulkanPresentApp, read present
                                 when Result.Ok(_) => ()
                                 when Result.Err(_) => return 704
                         when Result.Err(_) => return 705
-                    select present_app.present :: color :: method:
-                        when Result.Ok(_) =>
-                            select present_app.present_solid_rgba :: fill :: method:
-                                when Result.Ok(_) =>
-                                    select present_app.surface_pixel_frame_with_color :: VulkanPixelFormat.Rgba8, fill :: method:
-                                        when Result.Ok(surface_frame) =>
+                    select either:
+                        when presented: Result.Ok(_) <- present_app.present :: color :: method
+                        when solid_presented: Result.Ok(_) <- present_app.present_solid_rgba :: fill :: method
+                        when surface_frame: Result.Ok(surface_frame) <- present_app.surface_pixel_frame_with_color :: VulkanPixelFormat.Rgba8, fill :: method =>
+                            select:
+                                when surface_frame.width :: :: method != surface_width_index => return 646
+                                when surface_frame.height :: :: method != surface_height_index => return 647
+                                when surface_frame.stride :: :: method != surface_tight_stride => return 648
+                                when surface_frame.format_code :: :: method != 0 => return 649
+                                else => ()
+                            select surface_frame.pixel :: 0, 0 :: method:
+                                when Result.Ok(surface_color) =>
+                                    select:
+                                        when surface_color.red != fill.red => return 657
+                                        when surface_color.green != fill.green => return 658
+                                        when surface_color.blue != fill.blue => return 659
+                                        when surface_color.alpha != fill.alpha => return 660
+                                        else => ()
+                                when Result.Err(_) => return 661
+                            let accent = rgba_color :: 240U8, 32U8, 24U8, 255U8 :: call
+                            select surface_frame.set_pixel :: 0, 0, accent :: method:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) => return 662
+                            select surface_frame.pixel :: 0, 0 :: method:
+                                when Result.Ok(surface_color) =>
+                                    select:
+                                        when surface_color.red != accent.red => return 663
+                                        when surface_color.green != accent.green => return 664
+                                        when surface_color.blue != accent.blue => return 665
+                                        when surface_color.alpha != accent.alpha => return 666
+                                        else => ()
+                                when Result.Err(_) => return 667
+                            let rect_fill = rgba_color :: 16U8, 120U8, 48U8, 255U8 :: call
+                            select surface_frame.fill_rect :: 0, 0, 2, 2, rect_fill :: method:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) => return 706
+                            select surface_frame.pixel :: 1, 1 :: method:
+                                when Result.Ok(surface_color) =>
+                                    select:
+                                        when surface_color.red != rect_fill.red => return 707
+                                        when surface_color.green != rect_fill.green => return 708
+                                        when surface_color.blue != rect_fill.blue => return 709
+                                        when surface_color.alpha != rect_fill.alpha => return 710
+                                        else => ()
+                                when Result.Err(_) => return 711
+                            select surface_frame.draw_hline :: 0, 0, surface_width_index, accent :: method:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) => return 774
+                            select surface_frame.pixel :: 0, 0 :: method:
+                                when Result.Ok(surface_color) =>
+                                    select:
+                                        when surface_color.red != accent.red => return 775
+                                        when surface_color.green != accent.green => return 776
+                                        when surface_color.blue != accent.blue => return 777
+                                        when surface_color.alpha != accent.alpha => return 778
+                                        else => ()
+                                when Result.Err(_) => return 779
+                            select surface_frame.stroke_rect :: 0, 0, surface_width_index, surface_height_index, rect_fill :: method:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) => return 780
+                            select surface_frame.pixel :: 0, 0 :: method:
+                                when Result.Ok(surface_color) =>
+                                    select:
+                                        when surface_color.red != rect_fill.red => return 781
+                                        when surface_color.green != rect_fill.green => return 782
+                                        when surface_color.blue != rect_fill.blue => return 783
+                                        when surface_color.alpha != rect_fill.alpha => return 784
+                                        else => ()
+                                when Result.Err(_) => return 785
+                            select surface_frame.draw_line :: 0, 0, 3, 3, accent :: method:
+                                when Result.Ok(_) => ()
+                                when Result.Err(_) => return 802
+                            select surface_frame.pixel :: 2, 2 :: method:
+                                when Result.Ok(surface_color) =>
+                                    select:
+                                        when surface_color.red != accent.red => return 803
+                                        when surface_color.green != accent.green => return 804
+                                        when surface_color.blue != accent.blue => return 805
+                                        when surface_color.alpha != accent.alpha => return 806
+                                        else => ()
+                                when Result.Err(_) => return 807
+                            let blend_overlay = rgba_color :: 180U8, 210U8, 40U8, 128U8 :: call
+                            select either:
+                                when pre_blend_color: Result.Ok(pre_blend_color) <- surface_frame.pixel :: 0, 0 :: method
+                                when expected_blend: Result.Ok(expected_blend) <- rgba_blend_source_over :: pre_blend_color, blend_overlay :: call =>
+                                    select surface_frame.blend_pixel :: 0, 0, blend_overlay :: method:
+                                        when Result.Ok(_) => ()
+                                        when Result.Err(_) => return 786
+                                    select surface_frame.pixel :: 0, 0 :: method:
+                                        when Result.Ok(surface_color) =>
                                             select:
-                                                when surface_frame.width :: :: method != surface_width_index => return 646
-                                                when surface_frame.height :: :: method != surface_height_index => return 647
-                                                when surface_frame.stride :: :: method != surface_tight_stride => return 648
-                                                when surface_frame.format_code :: :: method != 0 => return 649
+                                                when surface_color.red != expected_blend.red => return 787
+                                                when surface_color.green != expected_blend.green => return 788
+                                                when surface_color.blue != expected_blend.blue => return 789
+                                                when surface_color.alpha != expected_blend.alpha => return 790
                                                 else => ()
-                                            select surface_frame.pixel :: 0, 0 :: method:
-                                                when Result.Ok(surface_color) =>
-                                                    select:
-                                                        when surface_color.red != fill.red => return 657
-                                                        when surface_color.green != fill.green => return 658
-                                                        when surface_color.blue != fill.blue => return 659
-                                                        when surface_color.alpha != fill.alpha => return 660
-                                                        else => ()
-                                                when Result.Err(_) => return 661
-                                            let accent = rgba_color :: 240U8, 32U8, 24U8, 255U8 :: call
-                                            select surface_frame.set_pixel :: 0, 0, accent :: method:
+                                        when Result.Err(_) => return 791
+                                    let transparent = rgba_color :: 0U8, 0U8, 0U8, 0U8 :: call
+                                    let frame_overlay = rgba_color :: 12U8, 64U8, 220U8, 96U8 :: call
+                                    select either:
+                                        when expected_frame_blend: Result.Ok(expected_frame_blend) <- rgba_blend_source_over :: expected_blend, frame_overlay :: call
+                                        when blend_frame: Result.Ok(blend_frame) <- present_app.surface_pixel_frame_with_color :: VulkanPixelFormat.Bgra8, transparent :: method =>
+                                            select blend_frame.set_pixel :: 0, 0, frame_overlay :: method:
                                                 when Result.Ok(_) => ()
-                                                when Result.Err(_) => return 662
-                                            select surface_frame.pixel :: 0, 0 :: method:
-                                                when Result.Ok(surface_color) =>
-                                                    select:
-                                                        when surface_color.red != accent.red => return 663
-                                                        when surface_color.green != accent.green => return 664
-                                                        when surface_color.blue != accent.blue => return 665
-                                                        when surface_color.alpha != accent.alpha => return 666
-                                                        else => ()
-                                                when Result.Err(_) => return 667
-                                            let rect_fill = rgba_color :: 16U8, 120U8, 48U8, 255U8 :: call
-                                            select surface_frame.fill_rect :: 0, 0, 2, 2, rect_fill :: method:
+                                                when Result.Err(_) => return 792
+                                            select surface_frame.blend_frame :: 0, 0, blend_frame :: method:
                                                 when Result.Ok(_) => ()
-                                                when Result.Err(_) => return 706
-                                            select surface_frame.pixel :: 1, 1 :: method:
-                                                when Result.Ok(surface_color) =>
-                                                    select:
-                                                        when surface_color.red != rect_fill.red => return 707
-                                                        when surface_color.green != rect_fill.green => return 708
-                                                        when surface_color.blue != rect_fill.blue => return 709
-                                                        when surface_color.alpha != rect_fill.alpha => return 710
-                                                        else => ()
-                                                when Result.Err(_) => return 711
-                                            select surface_frame.draw_hline :: 0, 0, surface_width_index, accent :: method:
-                                                when Result.Ok(_) => ()
-                                                when Result.Err(_) => return 774
+                                                when Result.Err(_) => return 793
                                             select surface_frame.pixel :: 0, 0 :: method:
                                                 when Result.Ok(surface_color) =>
                                                     select:
-                                                        when surface_color.red != accent.red => return 775
-                                                        when surface_color.green != accent.green => return 776
-                                                        when surface_color.blue != accent.blue => return 777
-                                                        when surface_color.alpha != accent.alpha => return 778
+                                                        when surface_color.red != expected_frame_blend.red => return 794
+                                                        when surface_color.green != expected_frame_blend.green => return 795
+                                                        when surface_color.blue != expected_frame_blend.blue => return 796
+                                                        when surface_color.alpha != expected_frame_blend.alpha => return 797
                                                         else => ()
-                                                when Result.Err(_) => return 779
-                                            select surface_frame.stroke_rect :: 0, 0, surface_width_index, surface_height_index, rect_fill :: method:
-                                                when Result.Ok(_) => ()
-                                                when Result.Err(_) => return 780
-                                            select surface_frame.pixel :: 0, 0 :: method:
-                                                when Result.Ok(surface_color) =>
-                                                    select:
-                                                        when surface_color.red != rect_fill.red => return 781
-                                                        when surface_color.green != rect_fill.green => return 782
-                                                        when surface_color.blue != rect_fill.blue => return 783
-                                                        when surface_color.alpha != rect_fill.alpha => return 784
-                                                        else => ()
-                                                when Result.Err(_) => return 785
-                                            select surface_frame.draw_line :: 0, 0, 3, 3, accent :: method:
-                                                when Result.Ok(_) => ()
-                                                when Result.Err(_) => return 802
-                                            select surface_frame.pixel :: 2, 2 :: method:
-                                                when Result.Ok(surface_color) =>
-                                                    select:
-                                                        when surface_color.red != accent.red => return 803
-                                                        when surface_color.green != accent.green => return 804
-                                                        when surface_color.blue != accent.blue => return 805
-                                                        when surface_color.alpha != accent.alpha => return 806
-                                                        else => ()
-                                                when Result.Err(_) => return 807
-                                            let blend_overlay = rgba_color :: 180U8, 210U8, 40U8, 128U8 :: call
-                                            select surface_frame.pixel :: 0, 0 :: method:
-                                                when Result.Ok(pre_blend_color) =>
-                                                    select rgba_blend_source_over :: pre_blend_color, blend_overlay :: call:
-                                                        when Result.Ok(expected_blend) =>
-                                                            select surface_frame.blend_pixel :: 0, 0, blend_overlay :: method:
-                                                                when Result.Ok(_) => ()
-                                                                when Result.Err(_) => return 786
-                                                            select surface_frame.pixel :: 0, 0 :: method:
-                                                                when Result.Ok(surface_color) =>
-                                                                    select:
-                                                                        when surface_color.red != expected_blend.red => return 787
-                                                                        when surface_color.green != expected_blend.green => return 788
-                                                                        when surface_color.blue != expected_blend.blue => return 789
-                                                                        when surface_color.alpha != expected_blend.alpha => return 790
-                                                                        else => ()
-                                                                when Result.Err(_) => return 791
-                                                            let transparent = rgba_color :: 0U8, 0U8, 0U8, 0U8 :: call
-                                                            let frame_overlay = rgba_color :: 12U8, 64U8, 220U8, 96U8 :: call
-                                                            select rgba_blend_source_over :: expected_blend, frame_overlay :: call:
-                                                                when Result.Ok(expected_frame_blend) =>
-                                                                    select present_app.surface_pixel_frame_with_color :: VulkanPixelFormat.Bgra8, transparent :: method:
-                                                                        when Result.Ok(blend_frame) =>
-                                                                            select blend_frame.set_pixel :: 0, 0, frame_overlay :: method:
-                                                                                when Result.Ok(_) => ()
-                                                                                when Result.Err(_) => return 792
-                                                                            select surface_frame.blend_frame :: 0, 0, blend_frame :: method:
-                                                                                when Result.Ok(_) => ()
-                                                                                when Result.Err(_) => return 793
-                                                                            select surface_frame.pixel :: 0, 0 :: method:
-                                                                                when Result.Ok(surface_color) =>
-                                                                                    select:
-                                                                                        when surface_color.red != expected_frame_blend.red => return 794
-                                                                                        when surface_color.green != expected_frame_blend.green => return 795
-                                                                                        when surface_color.blue != expected_frame_blend.blue => return 796
-                                                                                        when surface_color.alpha != expected_frame_blend.alpha => return 797
-                                                                                        else => ()
-                                                                                when Result.Err(_) => return 798
-                                                                        when Result.Err(_) => return 799
-                                                                when Result.Err(_) => return 800
-                                                        when Result.Err(_) => return 801
-                                                when Result.Err(_) => return 808
-                                            let blit_fill = rgba_color :: 220U8, 44U8, 180U8, 255U8 :: call
-                                            select present_app.surface_pixel_frame_with_color :: VulkanPixelFormat.Bgra8, blit_fill :: method:
-                                                when Result.Ok(blit_frame) =>
-                                                    select blit_frame.fill_rect :: 1, 1, 2, 2, accent :: method:
-                                                        when Result.Ok(_) => ()
-                                                        when Result.Err(_) => return 712
-                                                    select surface_frame.blit_frame :: 0, 0, blit_frame :: method:
-                                                        when Result.Ok(_) => ()
-                                                        when Result.Err(_) => return 713
-                                                when Result.Err(_) => return 714
-                                            select surface_frame.pixel :: 0, 0 :: method:
-                                                when Result.Ok(surface_color) =>
-                                                    select:
-                                                        when surface_color.red != blit_fill.red => return 715
-                                                        when surface_color.green != blit_fill.green => return 716
-                                                        when surface_color.blue != blit_fill.blue => return 717
-                                                        when surface_color.alpha != blit_fill.alpha => return 718
-                                                        else => ()
-                                                when Result.Err(_) => return 719
-                                            select surface_frame.pixel :: 1, 1 :: method:
-                                                when Result.Ok(surface_color) =>
-                                                    select:
-                                                        when surface_color.red != accent.red => return 720
-                                                        when surface_color.green != accent.green => return 721
-                                                        when surface_color.blue != accent.blue => return 722
-                                                        when surface_color.alpha != accent.alpha => return 723
-                                                        else => ()
-                                                when Result.Err(_) => return 724
-                                            select surface_frame.pixel_count :: :: method:
-                                                when Result.Ok(pixel_count) =>
-                                                    select:
-                                                        when pixel_count != expected_pixel_count => return 725
-                                                        else => ()
-                                                when Result.Err(_) => return 726
-                                            select surface_frame.copy_pixels :: :: method:
-                                                when Result.Ok(copied_pixels) =>
-                                                    select:
-                                                        when copied_pixels.byte_count :: :: method != surface_frame.byte_count :: :: method => return 727
-                                                        else => ()
-                                                when Result.Err(_) => return 728
-                                            select surface_frame.copy_frame :: :: method:
-                                                when Result.Ok(copied_frame) =>
-                                                    select:
-                                                        when copied_frame.width :: :: method != surface_width_index => return 737
-                                                        when copied_frame.height :: :: method != surface_height_index => return 738
-                                                        when copied_frame.format_code :: :: method != surface_frame.format_code :: :: method => return 739
-                                                        else => ()
-                                                    select present_app.present_pixel_frame :: copied_frame :: method:
-                                                        when Result.Ok(_) => ()
-                                                        when Result.Err(_) => return 740
-                                                when Result.Err(_) => return 741
-                                            select surface_frame.sub_frame :: 0, 0, surface_width_index, surface_height_index :: method:
-                                                when Result.Ok(surface_sub_frame) =>
-                                                    select:
-                                                        when surface_sub_frame.width :: :: method != surface_width_index => return 729
-                                                        when surface_sub_frame.height :: :: method != surface_height_index => return 730
-                                                        when surface_sub_frame.format_code :: :: method != surface_frame.format_code :: :: method => return 731
-                                                        else => ()
-                                                    select present_app.present_pixel_frame :: surface_sub_frame :: method:
-                                                        when Result.Ok(_) => ()
-                                                        when Result.Err(_) => return 732
-                                                when Result.Err(_) => return 733
-                                            select present_app.present_pixel_frame :: surface_frame :: method:
-                                                when Result.Ok(_) =>
-                                                    select present_app.surface_pixel_frame_with_color :: VulkanPixelFormat.Bgra8, fill :: method:
-                                                        when Result.Ok(bgra_frame) =>
-                                                            select bgra_frame.clear :: accent :: method:
-                                                                when Result.Ok(_) => ()
-                                                                when Result.Err(_) => return 668
-                                                            select bgra_frame.pixel :: 0, 0 :: method:
-                                                                when Result.Ok(surface_color) =>
-                                                                    select:
-                                                                        when surface_color.red != accent.red => return 669
-                                                                        when surface_color.green != accent.green => return 670
-                                                                        when surface_color.blue != accent.blue => return 671
-                                                                        when surface_color.alpha != accent.alpha => return 672
-                                                                        else => ()
-                                                                when Result.Err(_) => return 673
-                                                            select present_app.present_pixel_frame :: bgra_frame :: method:
-                                                                when Result.Ok(_) =>
-                                                                    select present_app.present_pixels :: surface_pixels :: method:
-                                                                        when Result.Ok(_) =>
-                                                                            select present_app.surface_image :: fill :: method:
-                                                                                when Result.Ok(rebuild_source) =>
-                                                                                    let rebuild_pixels = rebuild_source.take_pixels :: :: method
-                                                                                    select present_app.surface_pixel_frame_from_pixels :: surface_width_index, surface_height_index, surface_tight_stride, VulkanPixelFormat.Rgba8, rebuild_pixels :: method:
-                                                                                        when Result.Ok(rebuild_frame) =>
-                                                                                            select present_app.present_pixel_frame :: rebuild_frame :: method:
-                                                                                                when Result.Ok(_) =>
-                                                                                                    select present_app.surface_image :: fill :: method:
-                                                                                                        when Result.Ok(image_source) =>
-                                                                                                            let image_pixels = image_source.take_pixels :: :: method
-                                                                                                            select present_app.surface_image_from_pixels :: image_pixels :: method:
-                                                                                                                when Result.Ok(image) =>
-                                                                                                                    select present_app.present_image :: image :: method:
-                                                                                                                        when Result.Ok(_) =>
-                                                                                                                            let after_present_snapshot = present_app.present_snapshot :: :: method
-                                                                                                                            select:
-                                                                                                                                when !after_present_snapshot.presented_once => return 18
-                                                                                                                                when after_present_snapshot.window_id != present_snapshot.window_id => return 19
-                                                                                                                                when after_present_snapshot.queuefamily_index != present_snapshot.queuefamily_index => return 20
-                                                                                                                                else => return 0
-                                                                                                                        when Result.Err(_) => return 5
-                                                                                                                when Result.Err(_) => return 5
-                                                                                                        when Result.Err(_) => return 5
-                                                                                                when Result.Err(_) => return 5
-                                                                                        when Result.Err(_) => return 5
-                                                                                when Result.Err(_) => return 5
-                                                                        when Result.Err(_) => return 5
-                                                                when Result.Err(_) => return 5
-                                                        when Result.Err(_) => return 5
-                                                when Result.Err(_) => return 5
-                                        when Result.Err(_) => return 5
-                                when Result.Err(_) => return 5
-                        when Result.Err(_) => return 5
+                                                when Result.Err(_) => return 798
+
+                                    with Result.Err(_):
+                                        expected_frame_blend => return 800
+                                        blend_frame => return 799
+
+                            with Result.Err(_):
+                                pre_blend_color => return 808
+                                expected_blend => return 801
+                            let blit_fill = rgba_color :: 220U8, 44U8, 180U8, 255U8 :: call
+                            select present_app.surface_pixel_frame_with_color :: VulkanPixelFormat.Bgra8, blit_fill :: method:
+                                when Result.Ok(blit_frame) =>
+                                    select blit_frame.fill_rect :: 1, 1, 2, 2, accent :: method:
+                                        when Result.Ok(_) => ()
+                                        when Result.Err(_) => return 712
+                                    select surface_frame.blit_frame :: 0, 0, blit_frame :: method:
+                                        when Result.Ok(_) => ()
+                                        when Result.Err(_) => return 713
+                                when Result.Err(_) => return 714
+                            select surface_frame.pixel :: 0, 0 :: method:
+                                when Result.Ok(surface_color) =>
+                                    select:
+                                        when surface_color.red != blit_fill.red => return 715
+                                        when surface_color.green != blit_fill.green => return 716
+                                        when surface_color.blue != blit_fill.blue => return 717
+                                        when surface_color.alpha != blit_fill.alpha => return 718
+                                        else => ()
+                                when Result.Err(_) => return 719
+                            select surface_frame.pixel :: 1, 1 :: method:
+                                when Result.Ok(surface_color) =>
+                                    select:
+                                        when surface_color.red != accent.red => return 720
+                                        when surface_color.green != accent.green => return 721
+                                        when surface_color.blue != accent.blue => return 722
+                                        when surface_color.alpha != accent.alpha => return 723
+                                        else => ()
+                                when Result.Err(_) => return 724
+                            select surface_frame.pixel_count :: :: method:
+                                when Result.Ok(pixel_count) =>
+                                    select:
+                                        when pixel_count != expected_pixel_count => return 725
+                                        else => ()
+                                when Result.Err(_) => return 726
+                            select surface_frame.copy_pixels :: :: method:
+                                when Result.Ok(copied_pixels) =>
+                                    select:
+                                        when copied_pixels.byte_count :: :: method != surface_frame.byte_count :: :: method => return 727
+                                        else => ()
+                                when Result.Err(_) => return 728
+                            select surface_frame.copy_frame :: :: method:
+                                when Result.Ok(copied_frame) =>
+                                    select:
+                                        when copied_frame.width :: :: method != surface_width_index => return 737
+                                        when copied_frame.height :: :: method != surface_height_index => return 738
+                                        when copied_frame.format_code :: :: method != surface_frame.format_code :: :: method => return 739
+                                        else => ()
+                                    select present_app.present_pixel_frame :: copied_frame :: method:
+                                        when Result.Ok(_) => ()
+                                        when Result.Err(_) => return 740
+                                when Result.Err(_) => return 741
+                            select surface_frame.sub_frame :: 0, 0, surface_width_index, surface_height_index :: method:
+                                when Result.Ok(surface_sub_frame) =>
+                                    select:
+                                        when surface_sub_frame.width :: :: method != surface_width_index => return 729
+                                        when surface_sub_frame.height :: :: method != surface_height_index => return 730
+                                        when surface_sub_frame.format_code :: :: method != surface_frame.format_code :: :: method => return 731
+                                        else => ()
+                                    select present_app.present_pixel_frame :: surface_sub_frame :: method:
+                                        when Result.Ok(_) => ()
+                                        when Result.Err(_) => return 732
+                                when Result.Err(_) => return 733
+                            select either:
+                                when presented: Result.Ok(_) <- present_app.present_pixel_frame :: surface_frame :: method
+                                when bgra_frame: Result.Ok(bgra_frame) <- present_app.surface_pixel_frame_with_color :: VulkanPixelFormat.Bgra8, fill :: method =>
+                                    select bgra_frame.clear :: accent :: method:
+                                        when Result.Ok(_) => ()
+                                        when Result.Err(_) => return 668
+                                    select bgra_frame.pixel :: 0, 0 :: method:
+                                        when Result.Ok(surface_color) =>
+                                            select:
+                                                when surface_color.red != accent.red => return 669
+                                                when surface_color.green != accent.green => return 670
+                                                when surface_color.blue != accent.blue => return 671
+                                                when surface_color.alpha != accent.alpha => return 672
+                                                else => ()
+                                        when Result.Err(_) => return 673
+                                    select either:
+                                        when bgra_presented: Result.Ok(_) <- present_app.present_pixel_frame :: bgra_frame :: method
+                                        when pixels_presented: Result.Ok(_) <- present_app.present_pixels :: surface_pixels :: method
+                                        when rebuild_source: Result.Ok(rebuild_source) <- present_app.surface_image :: fill :: method =>
+                                            let rebuild_pixels = rebuild_source.take_pixels :: :: method
+                                            select either:
+                                                when rebuild_frame: Result.Ok(rebuild_frame) <- present_app.surface_pixel_frame_from_pixels :: surface_width_index, surface_height_index, surface_tight_stride, VulkanPixelFormat.Rgba8, rebuild_pixels :: method
+                                                when rebuild_presented: Result.Ok(_) <- present_app.present_pixel_frame :: rebuild_frame :: method
+                                                when image_source: Result.Ok(image_source) <- present_app.surface_image :: fill :: method =>
+                                                    let image_pixels = image_source.take_pixels :: :: method
+                                                    select either:
+                                                        when image: Result.Ok(image) <- present_app.surface_image_from_pixels :: image_pixels :: method
+                                                        when image_presented: Result.Ok(_) <- present_app.present_image :: image :: method =>
+                                                            let after_present_snapshot = present_app.present_snapshot :: :: method
+                                                            select:
+                                                                when !after_present_snapshot.presented_once => return 18
+                                                                when after_present_snapshot.window_id != present_snapshot.window_id => return 19
+                                                                when after_present_snapshot.queuefamily_index != present_snapshot.queuefamily_index => return 20
+                                                                else => return 0
+
+                                                    with Result.Err(_):
+                                                        image => return 5
+                                                        image_presented => return 5
+
+                                            with Result.Err(_):
+                                                rebuild_frame => return 5
+                                                rebuild_presented => return 5
+                                                image_source => return 5
+
+                                    with Result.Err(_):
+                                        bgra_presented => return 5
+                                        pixels_presented => return 5
+                                        rebuild_source => return 5
+
+                            with Result.Err(_):
+                                presented => return 5
+                                bgra_frame => return 5
+
+                    with Result.Err(_):
+                        presented => return 5
+                        solid_presented => return 5
+                        surface_frame => return 5
                 when Result.Err(_) => return 5
         when Result.Err(_) => return 5

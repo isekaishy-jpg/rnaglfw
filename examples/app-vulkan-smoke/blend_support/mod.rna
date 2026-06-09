@@ -6,10 +6,9 @@ use runa_app_vulkan.{VulkanPixelFormat, vulkan_pixel_frame_with_color}
 pub fn check_rgba_blend_helpers() -> I32:
     let blend_base = rgba_color :: 40U8, 80U8, 120U8, 128U8 :: call
     let blend_overlay = rgba_color :: 200U8, 20U8, 10U8, 128U8 :: call
-    select rgba_blend_source_over :: blend_base, blend_overlay :: call:
-        when Result.Ok(expected_blend) =>
-            select solid_rgba_image :: 1, 1, blend_base :: call:
-                when Result.Ok(blend_target) =>
+    select either:
+        when expected_blend: Result.Ok(expected_blend) <- rgba_blend_source_over :: blend_base, blend_overlay :: call
+        when blend_target: Result.Ok(blend_target) <- solid_rgba_image :: 1, 1, blend_base :: call =>
                     select blend_target.blend_pixel :: 0, 0, blend_overlay :: method:
                         when Result.Ok(_) => ()
                         when Result.Err(_) => return 1
@@ -40,17 +39,17 @@ pub fn check_rgba_blend_helpers() -> I32:
                                         else => ()
                                 when Result.Err(_) => return 13
                         when Result.Err(_) => return 14
-                when Result.Err(_) => return 15
-        when Result.Err(_) => return 16
+    with Result.Err(_):
+        expected_blend => return 16
+        blend_target => return 15
     return 0
 
 pub fn check_vulkan_pixel_frame_blend_helpers() -> I32:
     let blend_base = rgba_color :: 40U8, 80U8, 120U8, 128U8 :: call
     let blend_overlay = rgba_color :: 200U8, 20U8, 10U8, 128U8 :: call
-    select rgba_blend_source_over :: blend_base, blend_overlay :: call:
-        when Result.Ok(expected_blend) =>
-            select vulkan_pixel_frame_with_color :: 1, 1, VulkanPixelFormat.Rgba8, blend_base :: call:
-                when Result.Ok(blend_target_frame) =>
+    select either:
+        when expected_blend: Result.Ok(expected_blend) <- rgba_blend_source_over :: blend_base, blend_overlay :: call
+        when blend_target_frame: Result.Ok(blend_target_frame) <- vulkan_pixel_frame_with_color :: 1, 1, VulkanPixelFormat.Rgba8, blend_base :: call =>
                     select blend_target_frame.blend_pixel :: 0, 0, blend_overlay :: method:
                         when Result.Ok(_) => ()
                         when Result.Err(_) => return 17
@@ -99,6 +98,7 @@ pub fn check_vulkan_pixel_frame_blend_helpers() -> I32:
                                         else => ()
                                 when Result.Err(_) => return 37
                         when Result.Err(_) => return 38
-                when Result.Err(_) => return 39
-        when Result.Err(_) => return 40
+    with Result.Err(_):
+        expected_blend => return 40
+        blend_target_frame => return 39
     return 0

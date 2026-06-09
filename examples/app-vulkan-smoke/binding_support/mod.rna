@@ -31,26 +31,28 @@ pub fn check_vulkan_present_bindings(read present_app: VulkanPresentApp, read pr
         else => ()
     let app_images = app_bindings.active_swapchain_images :: :: method
     let snapshot_images = snapshot_bindings.active_swapchain_images :: :: method
-    select app_bindings.first_swapchain_image :: :: method:
-        when Option.Some(first_image) =>
-            select snapshot_bindings.first_swapchain_image :: :: method:
-                when Option.Some(snapshot_first_image) =>
-                    select:
-                        when snapshot_first_image != first_image => return 23
-                        else => ()
-                when Option.None => return 24
-        when Option.None => return 25
+    select either:
+        when first_image: Option.Some(first_image) <- app_bindings.first_swapchain_image :: :: method
+        when snapshot_first_image: Option.Some(snapshot_first_image) <- snapshot_bindings.first_swapchain_image :: :: method =>
+            select:
+                when snapshot_first_image != first_image => return 23
+                else => ()
+
+    with Option.None:
+        first_image => return 25
+        snapshot_first_image => return 24
     let scan: CUInt = 0
     repeat while scan < app_bindings.swapchain_image_count:
-        select app_bindings.swapchain_image :: scan :: method:
-            when Option.Some(app_image) =>
-                select snapshot_bindings.swapchain_image :: scan :: method:
-                    when Option.Some(snapshot_image) =>
-                        select:
-                            when snapshot_image != app_image => return 26
-                            else => ()
-                    when Option.None => return 27
-            when Option.None => return 28
+        select either:
+            when app_image: Option.Some(app_image) <- app_bindings.swapchain_image :: scan :: method
+            when snapshot_image: Option.Some(snapshot_image) <- snapshot_bindings.swapchain_image :: scan :: method =>
+                select:
+                    when snapshot_image != app_image => return 26
+                    else => ()
+
+        with Option.None:
+            app_image => return 28
+            snapshot_image => return 27
         let Result.Ok(slot) = scan as Maybe[Index] else => return 29
         let app_list_image: VkImage = app_images[slot]
         let snapshot_list_image: VkImage = snapshot_images[slot]

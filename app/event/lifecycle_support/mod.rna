@@ -1,7 +1,9 @@
 use std.{List, Option}
+
 use event.{AppEvent, AppEventBatch, JoystickEvent, JoystickEventKind, MonitorEvent}
 use event.{MonitorEventKind, UserEvent, WindowEvent, WindowEventKind}
 use event.{JoystickId, MonitorId}
+use event.batch_support
 use window.WindowId
 
 fn push_window(edit events: List[AppEvent], event: WindowEvent) -> Unit:
@@ -32,290 +34,290 @@ fn push_app_event(edit events: List[AppEvent], event: AppEvent) -> Unit:
         when AppEvent.User(user_event) => push_user :: events, user_event :: call
     return
 
-fn window_id_matches_filter(id: WindowId, read filter: Option[WindowId]) -> Bool:
-    select filter:
-        when Option.Some(expected) => return id == expected
-        when Option.None => return true
-    return true
+fn copy_window_lifecycle_event(read event: WindowEvent) -> Option[WindowEvent]:
+    select event:
+        when WindowEvent.Created(id = id) =>
+            let copied = WindowEvent.Created :: :: call
+                id = id
+            return Option.Some :: copied :: call
+        when WindowEvent.Destroyed(id = id) =>
+            let copied = WindowEvent.Destroyed :: :: call
+                id = id
+            return Option.Some :: copied :: call
+        when WindowEvent.CloseRequested(id = id) =>
+            let copied = WindowEvent.CloseRequested :: :: call
+                id = id
+            return Option.Some :: copied :: call
+        when _ => return Option.None
 
-fn monitor_id_matches_filter(id: MonitorId, read filter: Option[MonitorId]) -> Bool:
-    select filter:
-        when Option.Some(expected) => return id == expected
-        when Option.None => return true
-    return true
+fn copy_monitor_lifecycle_event(read event: MonitorEvent) -> MonitorEvent:
+    select event:
+        when MonitorEvent.Connected(id = id) =>
+            return MonitorEvent.Connected :: :: call
+                id = id
+        when MonitorEvent.Disconnected(id = id) =>
+            return MonitorEvent.Disconnected :: :: call
+                id = id
 
-fn joystick_id_matches_filter(id: JoystickId, read filter: Option[JoystickId]) -> Bool:
-    select filter:
-        when Option.Some(expected) => return id == expected
-        when Option.None => return true
-    return true
+fn copy_joystick_lifecycle_event(read event: JoystickEvent) -> JoystickEvent:
+    select event:
+        when JoystickEvent.Connected(id = id, gamepad = gamepad) =>
+            return JoystickEvent.Connected :: :: call
+                id = id
+                gamepad = gamepad
+        when JoystickEvent.Disconnected(id = id) =>
+            return JoystickEvent.Disconnected :: :: call
+                id = id
 
-fn window_event_matches(read event: WindowEvent, read kind: WindowEventKind, read id_filter: Option[WindowId]) -> Bool:
-    select kind:
-        when WindowEventKind.Created =>
-            select event:
-                when WindowEvent.Created(id = id) => return window_id_matches_filter :: id, id_filter :: call
-                when _ => return false
-        when WindowEventKind.Destroyed =>
-            select event:
-                when WindowEvent.Destroyed(id = id) => return window_id_matches_filter :: id, id_filter :: call
-                when _ => return false
-        when WindowEventKind.CloseRequested =>
-            select event:
-                when WindowEvent.CloseRequested(id = id) => return window_id_matches_filter :: id, id_filter :: call
-                when _ => return false
-        when _ => return false
-    return false
-
-fn monitor_event_matches(read event: MonitorEvent, read kind: MonitorEventKind, read id_filter: Option[MonitorId]) -> Bool:
-    select kind:
-        when MonitorEventKind.Connected =>
-            select event:
-                when MonitorEvent.Connected(id = id) => return monitor_id_matches_filter :: id, id_filter :: call
-                when _ => return false
-        when MonitorEventKind.Disconnected =>
-            select event:
-                when MonitorEvent.Disconnected(id = id) => return monitor_id_matches_filter :: id, id_filter :: call
-                when _ => return false
-    return false
-
-fn joystick_event_matches(read event: JoystickEvent, read kind: JoystickEventKind, read id_filter: Option[JoystickId]) -> Bool:
-    select kind:
-        when JoystickEventKind.Connected =>
-            select event:
-                when JoystickEvent.Connected(id = id, gamepad = _) => return joystick_id_matches_filter :: id, id_filter :: call
-                when _ => return false
-        when JoystickEventKind.Disconnected =>
-            select event:
-                when JoystickEvent.Disconnected(id = id) => return joystick_id_matches_filter :: id, id_filter :: call
-                when _ => return false
-    return false
-
-fn pop_window_event(edit batch: AppEventBatch, read kind: WindowEventKind, read id_filter: Option[WindowId]) -> Option[WindowEvent]:
-    let remaining = List[AppEvent] :: :: call
-    let found: Option[WindowEvent] = Option.None
-    repeat while !batch.events.is_empty :: :: method:
-        let event = batch.events.remove :: 0 :: method
-        select event:
-            when AppEvent.Window(window_event) =>
-                select found:
-                    when Option.None =>
-                        select:
-                            when window_event_matches :: window_event, kind, id_filter :: call => found = Option.Some :: window_event :: call
-                            else => push_window :: remaining, window_event :: call
-                    when Option.Some(_) => push_window :: remaining, window_event :: call
-            when other => push_app_event :: remaining, other :: call
-    batch.events = remaining
-    return found
-
-fn pop_monitor_event(edit batch: AppEventBatch, read kind: MonitorEventKind, read id_filter: Option[MonitorId]) -> Option[MonitorEvent]:
-    let remaining = List[AppEvent] :: :: call
-    let found: Option[MonitorEvent] = Option.None
-    repeat while !batch.events.is_empty :: :: method:
-        let event = batch.events.remove :: 0 :: method
-        select event:
-            when AppEvent.Monitor(monitor_event) =>
-                select found:
-                    when Option.None =>
-                        select:
-                            when monitor_event_matches :: monitor_event, kind, id_filter :: call => found = Option.Some :: monitor_event :: call
-                            else => push_monitor :: remaining, monitor_event :: call
-                    when Option.Some(_) => push_monitor :: remaining, monitor_event :: call
-            when other => push_app_event :: remaining, other :: call
-    batch.events = remaining
-    return found
-
-fn pop_joystick_event(edit batch: AppEventBatch, read kind: JoystickEventKind, read id_filter: Option[JoystickId]) -> Option[JoystickEvent]:
-    let remaining = List[AppEvent] :: :: call
-    let found: Option[JoystickEvent] = Option.None
-    repeat while !batch.events.is_empty :: :: method:
-        let event = batch.events.remove :: 0 :: method
-        select event:
-            when AppEvent.Joystick(joystick_event) =>
-                select found:
-                    when Option.None =>
-                        select:
-                            when joystick_event_matches :: joystick_event, kind, id_filter :: call => found = Option.Some :: joystick_event :: call
-                            else => push_joystick :: remaining, joystick_event :: call
-                    when Option.Some(_) => push_joystick :: remaining, joystick_event :: call
-            when other => push_app_event :: remaining, other :: call
-    batch.events = remaining
-    return found
-
-fn take_window_events(edit batch: AppEventBatch, read kind: WindowEventKind, read id_filter: Option[WindowId]) -> List[WindowEvent]:
+fn collect_window_lifecycle_events(edit batch: AppEventBatch, read kind: WindowEventKind, read id_filter: Option[WindowId]) -> List[WindowEvent]:
+    let staged = batch_support.take_batch_events_reversed :: batch :: call
     let matched = List[WindowEvent] :: :: call
     let remaining = List[AppEvent] :: :: call
-    repeat while !batch.events.is_empty :: :: method:
-        let event = batch.events.remove :: 0 :: method
-        select event:
-            when AppEvent.Window(window_event) =>
-                select:
-                    when window_event_matches :: window_event, kind, id_filter :: call => matched.push :: window_event :: method
-                    else => push_window :: remaining, window_event :: call
-            when other => push_app_event :: remaining, other :: call
+    repeat while !staged.is_empty :: :: method:
+        select staged.pop :: :: method:
+            when Option.Some(event) =>
+                select event:
+                    when AppEvent.Window(window_event) =>
+                        select batch_support.window_event_matches_filter :: window_event, kind, id_filter :: call:
+                            when true =>
+                                select copy_window_lifecycle_event :: window_event :: call:
+                                    when Option.Some(copied) =>
+                                        let restored = copy_window_lifecycle_event :: window_event :: call
+                                        matched.push :: copied :: method
+                                        select restored:
+                                            when Option.Some(value) => push_window :: remaining, value :: call
+                                            when Option.None => push_window :: remaining, window_event :: call
+                                    when Option.None => push_window :: remaining, window_event :: call
+                            when false => push_window :: remaining, window_event :: call
+                    when other => push_app_event :: remaining, other :: call
+            when Option.None => break
     batch.events = remaining
     return matched
 
-fn take_monitor_events(edit batch: AppEventBatch, read kind: MonitorEventKind, read id_filter: Option[MonitorId]) -> List[MonitorEvent]:
+fn collect_monitor_lifecycle_events(edit batch: AppEventBatch, read kind: MonitorEventKind, read id_filter: Option[MonitorId]) -> List[MonitorEvent]:
+    let staged = batch_support.take_batch_events_reversed :: batch :: call
     let matched = List[MonitorEvent] :: :: call
     let remaining = List[AppEvent] :: :: call
-    repeat while !batch.events.is_empty :: :: method:
-        let event = batch.events.remove :: 0 :: method
-        select event:
-            when AppEvent.Monitor(monitor_event) =>
-                select:
-                    when monitor_event_matches :: monitor_event, kind, id_filter :: call => matched.push :: monitor_event :: method
-                    else => push_monitor :: remaining, monitor_event :: call
-            when other => push_app_event :: remaining, other :: call
+    repeat while !staged.is_empty :: :: method:
+        select staged.pop :: :: method:
+            when Option.Some(event) =>
+                select event:
+                    when AppEvent.Monitor(monitor_event) =>
+                        select kind:
+                            when MonitorEventKind.Connected =>
+                                select monitor_event:
+                                    when MonitorEvent.Connected(id = id) =>
+                                        select id_filter:
+                                            when Option.Some(expected) =>
+                                                select:
+                                                    when id == expected =>
+                                                        let copied = copy_monitor_lifecycle_event :: monitor_event :: call
+                                                        let restored = copy_monitor_lifecycle_event :: monitor_event :: call
+                                                        matched.push :: copied :: method
+                                                        push_monitor :: remaining, restored :: call
+                                                    else =>
+                                                        let restored = copy_monitor_lifecycle_event :: monitor_event :: call
+                                                        push_monitor :: remaining, restored :: call
+                                            when Option.None =>
+                                                let copied = copy_monitor_lifecycle_event :: monitor_event :: call
+                                                let restored = copy_monitor_lifecycle_event :: monitor_event :: call
+                                                matched.push :: copied :: method
+                                                push_monitor :: remaining, restored :: call
+                                    when _ => push_monitor :: remaining, monitor_event :: call
+                            when MonitorEventKind.Disconnected =>
+                                select monitor_event:
+                                    when MonitorEvent.Disconnected(id = id) =>
+                                        select id_filter:
+                                            when Option.Some(expected) =>
+                                                select:
+                                                    when id == expected =>
+                                                        let copied = copy_monitor_lifecycle_event :: monitor_event :: call
+                                                        let restored = copy_monitor_lifecycle_event :: monitor_event :: call
+                                                        matched.push :: copied :: method
+                                                        push_monitor :: remaining, restored :: call
+                                                    else =>
+                                                        let restored = copy_monitor_lifecycle_event :: monitor_event :: call
+                                                        push_monitor :: remaining, restored :: call
+                                            when Option.None =>
+                                                let copied = copy_monitor_lifecycle_event :: monitor_event :: call
+                                                let restored = copy_monitor_lifecycle_event :: monitor_event :: call
+                                                matched.push :: copied :: method
+                                                push_monitor :: remaining, restored :: call
+                                    when _ => push_monitor :: remaining, monitor_event :: call
+                    when other => push_app_event :: remaining, other :: call
+            when Option.None => break
     batch.events = remaining
     return matched
 
-fn take_joystick_events(edit batch: AppEventBatch, read kind: JoystickEventKind, read id_filter: Option[JoystickId]) -> List[JoystickEvent]:
+fn collect_joystick_lifecycle_events(edit batch: AppEventBatch, read kind: JoystickEventKind, read id_filter: Option[JoystickId]) -> List[JoystickEvent]:
+    let staged = batch_support.take_batch_events_reversed :: batch :: call
     let matched = List[JoystickEvent] :: :: call
     let remaining = List[AppEvent] :: :: call
-    repeat while !batch.events.is_empty :: :: method:
-        let event = batch.events.remove :: 0 :: method
-        select event:
-            when AppEvent.Joystick(joystick_event) =>
-                select:
-                    when joystick_event_matches :: joystick_event, kind, id_filter :: call => matched.push :: joystick_event :: method
-                    else => push_joystick :: remaining, joystick_event :: call
-            when other => push_app_event :: remaining, other :: call
+    repeat while !staged.is_empty :: :: method:
+        select staged.pop :: :: method:
+            when Option.Some(event) =>
+                select event:
+                    when AppEvent.Joystick(joystick_event) =>
+                        select kind:
+                            when JoystickEventKind.Connected =>
+                                select joystick_event:
+                                    when JoystickEvent.Connected(id = id, gamepad = gamepad) =>
+                                        select id_filter:
+                                            when Option.Some(expected) =>
+                                                select:
+                                                    when id == expected =>
+                                                        let copied = copy_joystick_lifecycle_event :: joystick_event :: call
+                                                        let restored = copy_joystick_lifecycle_event :: joystick_event :: call
+                                                        matched.push :: copied :: method
+                                                        push_joystick :: remaining, restored :: call
+                                                    else =>
+                                                        let restored = JoystickEvent.Connected :: :: call
+                                                            id = id
+                                                            gamepad = gamepad
+                                                        push_joystick :: remaining, restored :: call
+                                            when Option.None =>
+                                                let copied = copy_joystick_lifecycle_event :: joystick_event :: call
+                                                let restored = copy_joystick_lifecycle_event :: joystick_event :: call
+                                                matched.push :: copied :: method
+                                                push_joystick :: remaining, restored :: call
+                                    when _ => push_joystick :: remaining, joystick_event :: call
+                            when JoystickEventKind.Disconnected =>
+                                select joystick_event:
+                                    when JoystickEvent.Disconnected(id = id) =>
+                                        select id_filter:
+                                            when Option.Some(expected) =>
+                                                select:
+                                                    when id == expected =>
+                                                        let copied = copy_joystick_lifecycle_event :: joystick_event :: call
+                                                        let restored = copy_joystick_lifecycle_event :: joystick_event :: call
+                                                        matched.push :: copied :: method
+                                                        push_joystick :: remaining, restored :: call
+                                                    else =>
+                                                        let restored = copy_joystick_lifecycle_event :: joystick_event :: call
+                                                        push_joystick :: remaining, restored :: call
+                                            when Option.None =>
+                                                let copied = copy_joystick_lifecycle_event :: joystick_event :: call
+                                                let restored = copy_joystick_lifecycle_event :: joystick_event :: call
+                                                matched.push :: copied :: method
+                                                push_joystick :: remaining, restored :: call
+                                    when _ => push_joystick :: remaining, joystick_event :: call
+                    when other => push_app_event :: remaining, other :: call
+            when Option.None => break
     batch.events = remaining
-    return matched
-
-fn filter_window_events_for(take events: List[WindowEvent], id: WindowId) -> List[WindowEvent]:
-    let matched = List[WindowEvent] :: :: call
-    repeat while !events.is_empty :: :: method:
-        let event = events.remove :: 0 :: method
-        select:
-            when event.window_id :: :: method == id => matched.push :: event :: method
-            else => ()
-    return matched
-
-fn filter_monitor_events_for(take events: List[MonitorEvent], id: MonitorId) -> List[MonitorEvent]:
-    let matched = List[MonitorEvent] :: :: call
-    repeat while !events.is_empty :: :: method:
-        let event = events.remove :: 0 :: method
-        select:
-            when event.monitor_id :: :: method == id => matched.push :: event :: method
-            else => ()
-    return matched
-
-fn filter_joystick_events_for(take events: List[JoystickEvent], id: JoystickId) -> List[JoystickEvent]:
-    let matched = List[JoystickEvent] :: :: call
-    repeat while !events.is_empty :: :: method:
-        let event = events.remove :: 0 :: method
-        select:
-            when event.joystick_id :: :: method == id => matched.push :: event :: method
-            else => ()
     return matched
 
 impl AppEventBatch:
     fn pop_created_window_event(edit self) -> Option[WindowEvent]:
         let id_filter: Option[WindowId] = Option.None
-        return pop_window_event :: self, WindowEventKind.Created, id_filter :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.Created, id_filter :: call
 
     fn pop_destroyed_window_event(edit self) -> Option[WindowEvent]:
         let id_filter: Option[WindowId] = Option.None
-        return pop_window_event :: self, WindowEventKind.Destroyed, id_filter :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.Destroyed, id_filter :: call
 
     fn pop_close_requested_window_event(edit self) -> Option[WindowEvent]:
         let id_filter: Option[WindowId] = Option.None
-        return pop_window_event :: self, WindowEventKind.CloseRequested, id_filter :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.CloseRequested, id_filter :: call
 
     fn pop_created_window_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
         let id_filter = Option.Some :: id :: call
-        return pop_window_event :: self, WindowEventKind.Created, id_filter :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.Created, id_filter :: call
 
     fn pop_destroyed_window_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
         let id_filter = Option.Some :: id :: call
-        return pop_window_event :: self, WindowEventKind.Destroyed, id_filter :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.Destroyed, id_filter :: call
 
     fn pop_close_requested_window_event_for(edit self, id: WindowId) -> Option[WindowEvent]:
         let id_filter = Option.Some :: id :: call
-        return pop_window_event :: self, WindowEventKind.CloseRequested, id_filter :: call
+        return batch_support.pop_window_event_matching :: self, WindowEventKind.CloseRequested, id_filter :: call
 
     fn pop_connected_monitor_event(edit self) -> Option[MonitorEvent]:
         let id_filter: Option[MonitorId] = Option.None
-        return pop_monitor_event :: self, MonitorEventKind.Connected, id_filter :: call
+        return batch_support.pop_monitor_event_matching :: self, MonitorEventKind.Connected, id_filter :: call
 
     fn pop_disconnected_monitor_event(edit self) -> Option[MonitorEvent]:
         let id_filter: Option[MonitorId] = Option.None
-        return pop_monitor_event :: self, MonitorEventKind.Disconnected, id_filter :: call
+        return batch_support.pop_monitor_event_matching :: self, MonitorEventKind.Disconnected, id_filter :: call
 
     fn pop_connected_monitor_event_for(edit self, id: MonitorId) -> Option[MonitorEvent]:
         let id_filter = Option.Some :: id :: call
-        return pop_monitor_event :: self, MonitorEventKind.Connected, id_filter :: call
+        return batch_support.pop_monitor_event_matching :: self, MonitorEventKind.Connected, id_filter :: call
 
     fn pop_disconnected_monitor_event_for(edit self, id: MonitorId) -> Option[MonitorEvent]:
         let id_filter = Option.Some :: id :: call
-        return pop_monitor_event :: self, MonitorEventKind.Disconnected, id_filter :: call
+        return batch_support.pop_monitor_event_matching :: self, MonitorEventKind.Disconnected, id_filter :: call
 
     fn pop_connected_joystick_event(edit self) -> Option[JoystickEvent]:
         let id_filter: Option[JoystickId] = Option.None
-        return pop_joystick_event :: self, JoystickEventKind.Connected, id_filter :: call
+        return batch_support.pop_joystick_event_matching :: self, JoystickEventKind.Connected, id_filter :: call
 
     fn pop_disconnected_joystick_event(edit self) -> Option[JoystickEvent]:
         let id_filter: Option[JoystickId] = Option.None
-        return pop_joystick_event :: self, JoystickEventKind.Disconnected, id_filter :: call
+        return batch_support.pop_joystick_event_matching :: self, JoystickEventKind.Disconnected, id_filter :: call
 
     fn pop_connected_joystick_event_for(edit self, id: JoystickId) -> Option[JoystickEvent]:
         let id_filter = Option.Some :: id :: call
-        return pop_joystick_event :: self, JoystickEventKind.Connected, id_filter :: call
+        return batch_support.pop_joystick_event_matching :: self, JoystickEventKind.Connected, id_filter :: call
 
     fn pop_disconnected_joystick_event_for(edit self, id: JoystickId) -> Option[JoystickEvent]:
         let id_filter = Option.Some :: id :: call
-        return pop_joystick_event :: self, JoystickEventKind.Disconnected, id_filter :: call
+        return batch_support.pop_joystick_event_matching :: self, JoystickEventKind.Disconnected, id_filter :: call
 
     fn created_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        return filter_window_events_for :: (self.created_window_events :: :: method), id :: call
+        let id_filter = Option.Some :: id :: call
+        return collect_window_lifecycle_events :: self, WindowEventKind.Created, id_filter :: call
 
     fn destroyed_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        return filter_window_events_for :: (self.destroyed_window_events :: :: method), id :: call
+        let id_filter = Option.Some :: id :: call
+        return collect_window_lifecycle_events :: self, WindowEventKind.Destroyed, id_filter :: call
 
     fn close_requested_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
-        return filter_window_events_for :: (self.close_requested_window_events :: :: method), id :: call
+        let id_filter = Option.Some :: id :: call
+        return collect_window_lifecycle_events :: self, WindowEventKind.CloseRequested, id_filter :: call
 
     fn connected_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
-        return filter_monitor_events_for :: (self.connected_monitor_events :: :: method), id :: call
+        let id_filter = Option.Some :: id :: call
+        return collect_monitor_lifecycle_events :: self, MonitorEventKind.Connected, id_filter :: call
 
     fn disconnected_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
-        return filter_monitor_events_for :: (self.disconnected_monitor_events :: :: method), id :: call
+        let id_filter = Option.Some :: id :: call
+        return collect_monitor_lifecycle_events :: self, MonitorEventKind.Disconnected, id_filter :: call
 
     fn connected_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
-        return filter_joystick_events_for :: (self.connected_joystick_events :: :: method), id :: call
+        let id_filter = Option.Some :: id :: call
+        return collect_joystick_lifecycle_events :: self, JoystickEventKind.Connected, id_filter :: call
 
     fn disconnected_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
-        return filter_joystick_events_for :: (self.disconnected_joystick_events :: :: method), id :: call
+        let id_filter = Option.Some :: id :: call
+        return collect_joystick_lifecycle_events :: self, JoystickEventKind.Disconnected, id_filter :: call
 
     fn take_created_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         let id_filter = Option.Some :: id :: call
-        return take_window_events :: self, WindowEventKind.Created, id_filter :: call
+        return batch_support.take_window_events_matching :: self, WindowEventKind.Created, id_filter :: call
 
     fn take_destroyed_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         let id_filter = Option.Some :: id :: call
-        return take_window_events :: self, WindowEventKind.Destroyed, id_filter :: call
+        return batch_support.take_window_events_matching :: self, WindowEventKind.Destroyed, id_filter :: call
 
     fn take_close_requested_window_events_for(edit self, id: WindowId) -> List[WindowEvent]:
         let id_filter = Option.Some :: id :: call
-        return take_window_events :: self, WindowEventKind.CloseRequested, id_filter :: call
+        return batch_support.take_window_events_matching :: self, WindowEventKind.CloseRequested, id_filter :: call
 
     fn take_connected_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
         let id_filter = Option.Some :: id :: call
-        return take_monitor_events :: self, MonitorEventKind.Connected, id_filter :: call
+        return batch_support.take_monitor_events_matching :: self, MonitorEventKind.Connected, id_filter :: call
 
     fn take_disconnected_monitor_events_for(edit self, id: MonitorId) -> List[MonitorEvent]:
         let id_filter = Option.Some :: id :: call
-        return take_monitor_events :: self, MonitorEventKind.Disconnected, id_filter :: call
+        return batch_support.take_monitor_events_matching :: self, MonitorEventKind.Disconnected, id_filter :: call
 
     fn take_connected_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
         let id_filter = Option.Some :: id :: call
-        return take_joystick_events :: self, JoystickEventKind.Connected, id_filter :: call
+        return batch_support.take_joystick_events_matching :: self, JoystickEventKind.Connected, id_filter :: call
 
     fn take_disconnected_joystick_events_for(edit self, id: JoystickId) -> List[JoystickEvent]:
         let id_filter = Option.Some :: id :: call
-        return take_joystick_events :: self, JoystickEventKind.Disconnected, id_filter :: call
+        return batch_support.take_joystick_events_matching :: self, JoystickEventKind.Disconnected, id_filter :: call
 
     fn pop_created_window_id(edit self) -> Option[WindowId]:
         select self.pop_created_window_event :: :: method:

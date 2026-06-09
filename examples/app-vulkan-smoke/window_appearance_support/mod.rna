@@ -8,21 +8,40 @@ use runa_app.{window_spec_with_win32_title_text_color, window_spec_with_win32_un
 use runa_app_vulkan.VulkanPresentApp
 
 fn colors_match(read left: Option[RgbaColor], read right: Option[RgbaColor]) -> Bool:
+    let left_some = left.is_some :: :: method
+    let right_some = right.is_some :: :: method
+    select:
+        when left_some != right_some => return false
+        when !left_some => return true
+        else => ()
+    let left_red = 0U8
+    let left_green = 0U8
+    let left_blue = 0U8
+    let left_alpha = 0U8
     select left:
         when Option.Some(left_color) =>
-            select right:
-                when Option.Some(right_color) =>
-                    select:
-                        when left_color.red != right_color.red => return false
-                        when left_color.green != right_color.green => return false
-                        when left_color.blue != right_color.blue => return false
-                        when left_color.alpha != right_color.alpha => return false
-                        else => return true
-                when Option.None => return false
-        when Option.None =>
-            select right:
-                when Option.Some(_) => return false
-                when Option.None => return true
+            left_red = left_color.red
+            left_green = left_color.green
+            left_blue = left_color.blue
+            left_alpha = left_color.alpha
+        when Option.None => return false
+    let right_red = 0U8
+    let right_green = 0U8
+    let right_blue = 0U8
+    let right_alpha = 0U8
+    select right:
+        when Option.Some(right_color) =>
+            right_red = right_color.red
+            right_green = right_color.green
+            right_blue = right_color.blue
+            right_alpha = right_color.alpha
+        when Option.None => return false
+    select:
+        when left_red != right_red => return false
+        when left_green != right_green => return false
+        when left_blue != right_blue => return false
+        when left_alpha != right_alpha => return false
+        else => return true
     return false
 
 fn backdrops_match(read left: WindowSystemBackdrop, read right: WindowSystemBackdrop) -> Bool:

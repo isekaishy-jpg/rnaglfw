@@ -115,16 +115,17 @@ pub fn check_raw_mouse_batch_helpers() -> I32:
         delta_y = 2
     pop_event_items.push :: AppEvent.Window :: pop_filtered_event :: call :: method
     let pop_event_batch = app_event_batch_from_events :: pop_event_items :: call
-    select pop_event_batch.pop_raw_mouse_motion_event_for :: 61 :: method:
-        when Option.Some(event) =>
-            select event.raw_mouse_motion_data :: :: method:
-                when Option.Some(data) =>
-                    select:
-                        when data.delta_x != 3 => return 3525
-                        when data.delta_y != 2 => return 3526
-                        else => ()
-                when Option.None => return 3527
-        when Option.None => return 3528
+    select either:
+        when event: Option.Some(event) <- pop_event_batch.pop_raw_mouse_motion_event_for :: 61 :: method
+        when data: Option.Some(data) <- event.raw_mouse_motion_data :: :: method =>
+            select:
+                when data.delta_x != 3 => return 3525
+                when data.delta_y != 2 => return 3526
+                else => ()
+
+    with Option.None:
+        event => return 3528
+        data => return 3527
 
     let raw_key_event = WindowEvent.RawKeyChanged :: :: call
         id = 71
@@ -254,16 +255,17 @@ pub fn check_raw_mouse_batch_helpers() -> I32:
         extended = true
     pop_raw_key_event_items.push :: AppEvent.Window :: pop_filtered_raw_key_event :: call :: method
     let pop_raw_key_event_batch = app_event_batch_from_events :: pop_raw_key_event_items :: call
-    select pop_raw_key_event_batch.pop_raw_key_changed_event_for :: 92 :: method:
-        when Option.Some(event) =>
-            select event.raw_key_data :: :: method:
-                when Option.Some(data) =>
-                    select:
-                        when data.raw_key != 0x45 => return 3551
-                        when !data.extended => return 3552
-                        else => ()
-                when Option.None => return 3553
-        when Option.None => return 3554
+    select either:
+        when event: Option.Some(event) <- pop_raw_key_event_batch.pop_raw_key_changed_event_for :: 92 :: method
+        when data: Option.Some(data) <- event.raw_key_data :: :: method =>
+            select:
+                when data.raw_key != 0x45 => return 3551
+                when !data.extended => return 3552
+                else => ()
+
+    with Option.None:
+        event => return 3554
+        data => return 3553
 
     let raw_button_event = WindowEvent.RawMouseButtonChanged :: :: call
         id = 101
@@ -350,18 +352,19 @@ pub fn check_raw_mouse_batch_helpers() -> I32:
         action = InputAction.Release
     popped_raw_button_events.push :: AppEvent.Window :: pop_raw_button_event :: call :: method
     let popped_raw_button_batch = app_event_batch_from_events :: popped_raw_button_events :: call
-    select popped_raw_button_batch.pop_raw_mouse_button_changed_event_for :: 121 :: method:
-        when Option.Some(event) =>
-            select event.raw_mouse_button_data :: :: method:
-                when Option.Some(data) =>
-                    select data.button:
-                        when runa_app.MouseButton.Right => ()
-                        when _ => return 3569
-                    select data.action:
-                        when InputAction.Release => ()
-                        when _ => return 3570
-                when Option.None => return 3571
-        when Option.None => return 3572
+    select either:
+        when event: Option.Some(event) <- popped_raw_button_batch.pop_raw_mouse_button_changed_event_for :: 121 :: method
+        when data: Option.Some(data) <- event.raw_mouse_button_data :: :: method =>
+            select data.button:
+                when runa_app.MouseButton.Right => ()
+                when _ => return 3569
+            select data.action:
+                when InputAction.Release => ()
+                when _ => return 3570
+
+    with Option.None:
+        event => return 3572
+        data => return 3571
     let popped_raw_wheel_events = List[AppEvent] :: :: call
     let pop_raw_wheel_event = WindowEvent.RawMouseWheel :: :: call
         id = 122

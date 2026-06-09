@@ -131,23 +131,24 @@ pub fn check_vulkan_buffer_io_helpers(edit present_app: VulkanPresentApp) -> I32
             present_app.destroy_buffer :: host_visible_buffer :: method
         when Result.Err(_) => return 21
 
-    select present_app.host_coherent_buffer_plan :: byte_count, transfer_usage :: method:
-        when Result.Ok(coherent_plan) =>
-            select present_app.buffer_from_bytes :: byte_count, transfer_usage, coherent_plan.memory_type_index :: :: method, sample_bytes :: :: call :: method:
-                when Result.Ok(buffer_from_bytes) =>
-                    select present_app.buffer_bytes :: buffer_from_bytes :: method:
-                        when Result.Ok(roundtrip) =>
-                            select:
-                                when !byte_buffers_equal :: sample_bytes :: :: call, roundtrip :: call =>
-                                    present_app.destroy_buffer :: buffer_from_bytes :: method
-                                    return 22
-                                else => ()
-                        when Result.Err(_) =>
+    select either:
+        when coherent_plan: Result.Ok(coherent_plan) <- present_app.host_coherent_buffer_plan :: byte_count, transfer_usage :: method
+        when buffer_from_bytes: Result.Ok(buffer_from_bytes) <- present_app.buffer_from_bytes :: byte_count, transfer_usage, coherent_plan.memory_type_index :: :: method, sample_bytes :: :: call :: method =>
+            select present_app.buffer_bytes :: buffer_from_bytes :: method:
+                when Result.Ok(roundtrip) =>
+                    select:
+                        when !byte_buffers_equal :: sample_bytes :: :: call, roundtrip :: call =>
                             present_app.destroy_buffer :: buffer_from_bytes :: method
-                            return 23
+                            return 22
+                        else => ()
+                when Result.Err(_) =>
                     present_app.destroy_buffer :: buffer_from_bytes :: method
-                when Result.Err(_) => return 24
-        when Result.Err(_) => return 25
+                    return 23
+            present_app.destroy_buffer :: buffer_from_bytes :: method
+
+    with Result.Err(_):
+        coherent_plan => return 25
+        buffer_from_bytes => return 24
 
     select present_app.device_local_buffer_plan :: byte_count, transfer_usage :: method:
         when Result.Ok(device_plan) =>
@@ -168,21 +169,22 @@ pub fn check_vulkan_buffer_io_helpers(edit present_app: VulkanPresentApp) -> I32
                 when Result.Err(_) => return 28
             select present_app.buffer_empty :: byte_count, transfer_usage, device_memory_type_index :: method:
                 when Result.Ok(empty_buffer) =>
-                    select present_app.write_buffer :: empty_buffer, sample_bytes :: :: call :: method:
-                        when Result.Ok(_) =>
-                            select present_app.buffer_bytes :: empty_buffer :: method:
-                                when Result.Ok(roundtrip) =>
-                                    select:
-                                        when !byte_buffers_equal :: sample_bytes :: :: call, roundtrip :: call =>
-                                            present_app.destroy_buffer :: empty_buffer :: method
-                                            return 29
-                                        else => ()
-                                when Result.Err(_) =>
+                    select either:
+                        when write_complete: Result.Ok(_) <- present_app.write_buffer :: empty_buffer, sample_bytes :: :: call :: method
+                        when roundtrip: Result.Ok(roundtrip) <- present_app.buffer_bytes :: empty_buffer :: method =>
+                            select:
+                                when !byte_buffers_equal :: sample_bytes :: :: call, roundtrip :: call =>
                                     present_app.destroy_buffer :: empty_buffer :: method
-                                    return 30
-                        when Result.Err(_) =>
+                                    return 29
+                                else => ()
+
+                    with Result.Err(_):
+                        write_complete =>
                             present_app.destroy_buffer :: empty_buffer :: method
                             return 31
+                        roundtrip =>
+                            present_app.destroy_buffer :: empty_buffer :: method
+                            return 30
                     present_app.destroy_buffer :: empty_buffer :: method
                 when Result.Err(_) => return 32
         when Result.Err(_) => return 33
